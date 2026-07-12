@@ -115,6 +115,18 @@ export interface TaskSummary {
   pet?: { id: string; name: string } | null;
   assignee?: { id: string; displayName: string | null } | null;
 }
+export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'SKIPPED';
+export interface NotificationLogSummary {
+  id: string;
+  channel: 'DEVELOPMENT' | 'EXPO_PUSH' | 'FEISHU';
+  status: NotificationStatus;
+  attempt: number;
+  scheduledAt: string;
+  sentAt?: string | null;
+  errorCode?: string | null;
+  errorMessageSafe?: string | null;
+  task?: { id: string; title: string; scheduledAt: string } | null;
+}
 export type ManualRecordType =
   'FOOD' | 'WATER' | 'WEIGHT' | 'STOOL' | 'VOMIT' | 'MEDICATION' | 'LITTER';
 export interface RecordSummary {
@@ -749,6 +761,28 @@ export const authApi = {
       accessToken,
       familyId,
       input,
+    );
+  },
+  listNotificationLogs(
+    accessToken: string,
+    familyId: string,
+    status?: NotificationStatus,
+    cursor?: string,
+  ) {
+    const query = new URLSearchParams({ limit: '20' });
+    if (status) query.set('status', status);
+    if (cursor) query.set('cursor', cursor);
+    return authenticatedGet<{
+      items: NotificationLogSummary[];
+      page: { hasMore: boolean; nextCursor: string | null };
+    }>(`/notification-logs?${query.toString()}`, accessToken, familyId);
+  },
+  retryNotificationLog(accessToken: string, familyId: string, notificationLogId: string) {
+    return authenticatedPost<NotificationLogSummary>(
+      `/notification-logs/${notificationLogId}/retry`,
+      accessToken,
+      familyId,
+      {},
     );
   },
   getAccountDeletionStatus(accessToken: string) {

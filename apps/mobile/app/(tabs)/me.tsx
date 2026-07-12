@@ -152,6 +152,16 @@ export default function MeTab() {
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
               accessibilityRole="button"
+              onPress={() => router.push('/notification-logs')}
+              style={styles.rowPress}
+            >
+              <Text style={styles.rowTitle}>提醒发送记录</Text>
+              <Text style={styles.rowBody}>查看提醒状态与失败原因</Text>
+            </Pressable>
+          </Row>
+          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
+            <Pressable
+              accessibilityRole="button"
               onPress={() => router.push('/settings/account')}
               style={styles.rowPress}
             >

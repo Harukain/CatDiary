@@ -20,6 +20,7 @@ export const colors = {
   dangerDark: '#B14A3A',
   danger: '#D45B4A',
   dangerSoft: '#F9E3E0',
+  overlay: 'rgba(44, 38, 34, 0.35)',
 } as const;
 
 export const spacing = {
