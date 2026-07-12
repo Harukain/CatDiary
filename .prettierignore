@@ -1,0 +1,8 @@
+node_modules
+.turbo
+**/dist
+**/dist-*
+**/.expo
+output
+pnpm-lock.yaml
+prisma/schema.prisma

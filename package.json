@@ -1,0 +1,42 @@
+{
+  "name": "cat-diary",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.10.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "lint:eslint": "eslint . --max-warnings=0",
+    "test": "turbo run test",
+    "test:integration": "node scripts/run-integration.mjs",
+    "test:restore": "./scripts/verify-backup-restore.sh",
+    "test:monitoring": "./scripts/verify-monitoring.sh",
+    "test:mobile-config": "node scripts/verify-mobile-config.mjs",
+    "test:privacy-manifest": "./scripts/verify-ios-privacy-manifest.sh",
+    "eas:check": "node scripts/check-eas-readiness.mjs",
+    "eas": "pnpm --dir apps/mobile eas",
+    "queue:ops": "pnpm --filter @cat-diary/domain build && pnpm --filter @cat-diary/worker build && pnpm --filter @cat-diary/worker queue:ops",
+    "openapi:check": "node scripts/verify-openapi.mjs",
+    "openapi:update": "UPDATE_OPENAPI=1 node scripts/verify-openapi.mjs",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,json}\" \"packages/**/*.{ts,tsx,json}\" \"scripts/**/*.mjs\" \"*.{json,md,yml}\" \".github/**/*.yml\"",
+    "verify": "pnpm format:check && pnpm lint:eslint && pnpm db:validate && pnpm typecheck && pnpm test && pnpm build",
+    "db:generate": "prisma generate",
+    "db:validate": "DATABASE_URL=postgresql://catdiary:catdiary@localhost:5433/catdiary?schema=public prisma validate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.6.2",
+    "prisma": "^6.19.0",
+    "turbo": "^2.5.8",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0"
+  }
+}

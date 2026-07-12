@@ -1,0 +1,672 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FamilyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  LEFT
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_DELETION
+  DELETED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  UNKNOWN
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+enum RecordType {
+  FOOD
+  WATER
+  WEIGHT
+  STOOL
+  VOMIT
+  MEDICATION
+  VACCINE
+  DEWORMING
+  LITTER
+  PHOTO
+  HEALTH_NOTE
+}
+
+enum RecordStatus {
+  ACTIVE
+  REVERSED
+  DELETED
+}
+
+enum RecordSource {
+  MANUAL
+  TASK
+}
+
+enum HealthEventStatus {
+  ACTIVE
+  RECOVERED
+}
+
+enum HealthEventRelationType {
+  SYMPTOM
+  OBSERVATION
+  TREATMENT
+}
+
+enum MedicalRecordType {
+  VACCINE
+  DEWORMING
+  MEDICATION
+}
+
+enum PhotoStatus {
+  ACTIVE
+  DELETED
+}
+
+enum UploadPurpose {
+  PHOTO
+  PHOTO_THUMBNAIL
+  PET_AVATAR
+  RECORD_ATTACHMENT
+}
+
+enum ExportScope {
+  FAMILY
+  PERSONAL
+}
+
+enum ExportFormat {
+  JSON
+  CSV
+}
+
+enum ExportStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+}
+
+enum IdempotencyStatus {
+  PENDING
+  COMPLETED
+}
+
+enum NotificationChannelType {
+  DEVELOPMENT
+  EXPO_PUSH
+  FEISHU
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum PushProvider {
+  EXPO
+  APNS
+  TPNS
+}
+
+model User {
+  id                    String              @id @default(uuid()) @db.Uuid
+  phoneHash             String              @unique @map("phone_hash")
+  phoneEncrypted        String              @map("phone_encrypted")
+  displayName           String?             @map("display_name")
+  status                UserStatus          @default(ACTIVE)
+  deletionRequestedAt   DateTime?           @map("deletion_requested_at") @db.Timestamptz(3)
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt             DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  memberships           Membership[]
+  createdTasks          Task[]              @relation("TaskCreator")
+  assignedTasks         Task[]              @relation("TaskAssignee")
+  records               Record[]
+  sessions              DeviceSession[]
+  createdPets           Pet[]
+  sentInvites           FamilyInvite[]      @relation("InviteSender")
+  auditLogs             AuditLog[]
+  createdPlans          Plan[]              @relation("PlanCreator")
+  assignedPlans         Plan[]              @relation("PlanAssignee")
+  completedTasks        Task[]              @relation("TaskCompleter")
+  idempotencyRecords    IdempotencyRecord[]
+  notificationLogs      NotificationLog[]
+  pushTokens            DevicePushToken[]
+  createdHealthEvents   HealthEvent[]       @relation("HealthEventCreator")
+  createdMedicalRecords MedicalRecord[]     @relation("MedicalRecordCreator")
+  uploadIntents         UploadIntent[]
+  createdPhotos         Photo[]             @relation("PhotoCreator")
+  notificationPreferences NotificationPreference[]
+  accountAuditLogs       AccountAuditLog[]
+  exportJobs             ExportJob[]        @relation("ExportRequester")
+
+  @@map("users")
+}
+
+model DeviceSession {
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  refreshTokenHash String            @map("refresh_token_hash")
+  tokenFamilyId    String            @map("token_family_id") @db.Uuid
+  deviceId         String            @map("device_id")
+  platform         DevicePlatform    @default(UNKNOWN)
+  appVersion       String?           @map("app_version")
+  deviceName       String?           @map("device_name")
+  lastSeenAt       DateTime          @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt        DateTime          @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime?         @map("revoked_at") @db.Timestamptz(3)
+  revokeReason     String?           @map("revoke_reason")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushTokens       DevicePushToken[]
+
+  @@unique([userId, deviceId])
+  @@index([userId, revokedAt])
+  @@index([tokenFamilyId])
+  @@map("device_sessions")
+}
+
+model DevicePushToken {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  deviceSessionId String?        @map("device_session_id") @db.Uuid
+  token           String         @unique
+  provider        PushProvider   @default(EXPO)
+  platform        DevicePlatform @default(UNKNOWN)
+  active          Boolean        @default(true)
+  lastSeenAt      DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceSession   DeviceSession? @relation(fields: [deviceSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, active])
+  @@map("device_push_tokens")
+}
+
+model Family {
+  id                   String                @id @default(uuid()) @db.Uuid
+  name                 String
+  timezone             String                @default("Asia/Shanghai")
+  version              Int                   @default(1)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt            DateTime?             @map("deleted_at") @db.Timestamptz(3)
+  memberships          Membership[]
+  pets                 Pet[]
+  plans                Plan[]
+  tasks                Task[]
+  records              Record[]
+  invites              FamilyInvite[]
+  auditLogs            AuditLog[]
+  notificationChannels NotificationChannel[]
+  notificationLogs     NotificationLog[]
+  healthEvents         HealthEvent[]
+  medicalRecords       MedicalRecord[]
+  uploadIntents        UploadIntent[]
+  photos               Photo[]
+  notificationPreferences NotificationPreference[]
+  exportJobs             ExportJob[]
+
+  @@map("families")
+}
+
+model Membership {
+  id        String           @id @default(uuid()) @db.Uuid
+  familyId  String           @map("family_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  role      FamilyRole       @default(MEMBER)
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  family    Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+  @@index([userId, status])
+  @@map("memberships")
+}
+
+model FamilyInvite {
+  id          String     @id @default(uuid()) @db.Uuid
+  familyId    String     @map("family_id") @db.Uuid
+  phoneHash   String     @map("phone_hash")
+  tokenHash   String     @unique @map("token_hash")
+  role        FamilyRole @default(MEMBER)
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime?  @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime?  @map("revoked_at") @db.Timestamptz(3)
+  invitedById String     @map("invited_by_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  family      Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  invitedBy   User       @relation("InviteSender", fields: [invitedById], references: [id])
+
+  @@index([familyId, expiresAt])
+  @@index([phoneHash, expiresAt])
+  @@map("family_invites")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  familyId     String   @map("family_id") @db.Uuid
+  actorUserId  String   @map("actor_user_id") @db.Uuid
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String   @map("resource_id")
+  beforeSafe   Json?    @map("before_safe")
+  afterSafe    Json?    @map("after_safe")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  family       Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  actor        User     @relation(fields: [actorUserId], references: [id])
+
+  @@index([familyId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id           String            @id @default(uuid()) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  route        String
+  key          String
+  requestHash  String            @map("request_hash")
+  status       IdempotencyStatus @default(PENDING)
+  responseBody Json?             @map("response_body")
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, route, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model NotificationChannel {
+  id              String                  @id @default(uuid()) @db.Uuid
+  familyId        String                  @map("family_id") @db.Uuid
+  type            NotificationChannelType
+  encryptedSecret String?                 @map("encrypted_secret")
+  maskedHint      String?                 @map("masked_hint")
+  enabled         Boolean                 @default(true)
+  config          Json?
+  updatedById     String?                 @map("updated_by_id") @db.Uuid
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  family          Family                  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, type])
+  @@map("notification_channels")
+}
+
+model NotificationLog {
+  id                String                  @id @default(uuid()) @db.Uuid
+  jobKey            String                  @unique @map("job_key")
+  familyId          String                  @map("family_id") @db.Uuid
+  taskId            String?                 @map("task_id") @db.Uuid
+  userId            String?                 @map("user_id") @db.Uuid
+  channel           NotificationChannelType
+  status            NotificationStatus      @default(QUEUED)
+  providerMessageId String?                 @map("provider_message_id")
+  attempt           Int                     @default(0)
+  errorCode         String?                 @map("error_code")
+  errorMessageSafe  String?                 @map("error_message_safe")
+  scheduledAt       DateTime                @map("scheduled_at") @db.Timestamptz(3)
+  sentAt            DateTime?               @map("sent_at") @db.Timestamptz(3)
+  receiptCheckedAt  DateTime?               @map("receipt_checked_at") @db.Timestamptz(3)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  family            Family                  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  task              Task?                   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([familyId, createdAt(sort: Desc)])
+  @@index([status, scheduledAt])
+  @@map("notification_logs")
+}
+
+model NotificationPreference {
+  id                  String   @id @default(uuid()) @db.Uuid
+  familyId            String   @map("family_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  taskReminderEnabled Boolean  @default(true) @map("task_reminder_enabled")
+  pushEnabled         Boolean  @default(true) @map("push_enabled")
+  overdueEnabled      Boolean  @default(true) @map("overdue_enabled")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  family              Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+model AccountAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  safeData    Json?    @map("safe_data")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("account_audit_logs")
+}
+
+model ExportJob {
+  id                    String       @id @default(uuid()) @db.Uuid
+  familyId              String       @map("family_id") @db.Uuid
+  requestedById         String       @map("requested_by_id") @db.Uuid
+  scope                 ExportScope
+  format                ExportFormat
+  status                ExportStatus @default(QUEUED)
+  objectKey             String?      @map("object_key")
+  mimeType              String?      @map("mime_type")
+  byteSize              Int?         @map("byte_size")
+  checksum              String?
+  errorCode             String?      @map("error_code")
+  downloadTokenHash     String?      @map("download_token_hash")
+  downloadTokenExpiresAt DateTime?   @map("download_token_expires_at") @db.Timestamptz(3)
+  completedAt           DateTime?    @map("completed_at") @db.Timestamptz(3)
+  expiresAt             DateTime?    @map("expires_at") @db.Timestamptz(3)
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  family                Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  requestedBy           User         @relation("ExportRequester", fields: [requestedById], references: [id])
+
+  @@index([familyId, createdAt(sort: Desc)])
+  @@index([requestedById, createdAt(sort: Desc)])
+  @@index([status, expiresAt])
+  @@map("export_jobs")
+}
+
+model Pet {
+  id             String          @id @default(uuid()) @db.Uuid
+  familyId       String          @map("family_id") @db.Uuid
+  createdById    String          @map("created_by_id") @db.Uuid
+  name           String
+  sex            String?
+  birthDate      DateTime?       @map("birth_date") @db.Date
+  breed          String?
+  neutered       Boolean?
+  chipNumber     String?         @map("chip_number")
+  avatarKey      String?         @map("avatar_key")
+  version        Int             @default(1)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  family         Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  plans          Plan[]
+  tasks          Task[]
+  records        Record[]
+  healthEvents   HealthEvent[]
+  medicalRecords MedicalRecord[]
+  photos         PhotoPet[]
+
+  @@index([familyId, deletedAt])
+  @@map("pets")
+}
+
+model Plan {
+  id             String     @id @default(uuid()) @db.Uuid
+  familyId       String     @map("family_id") @db.Uuid
+  petId          String?    @map("pet_id") @db.Uuid
+  createdById    String     @map("created_by_id") @db.Uuid
+  assigneeId     String?    @map("assignee_id") @db.Uuid
+  title          String
+  detail         String?
+  recordType     RecordType @map("record_type")
+  recurrenceRule Json       @map("recurrence_rule")
+  overduePolicy  Json?      @map("overdue_policy")
+  timezone       String     @default("Asia/Shanghai")
+  startAt        DateTime   @map("start_at") @db.Timestamptz(3)
+  endAt          DateTime?  @map("end_at") @db.Timestamptz(3)
+  localTime      String     @map("local_time")
+  enabled        Boolean    @default(true)
+  version        Int        @default(1)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  family         Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  pet            Pet?       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  createdBy      User       @relation("PlanCreator", fields: [createdById], references: [id])
+  assignee       User?      @relation("PlanAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  tasks          Task[]
+
+  @@index([familyId, enabled])
+  @@map("plans")
+}
+
+model Task {
+  id               String            @id @default(uuid()) @db.Uuid
+  familyId         String            @map("family_id") @db.Uuid
+  petId            String?           @map("pet_id") @db.Uuid
+  planId           String?           @map("plan_id") @db.Uuid
+  createdById      String            @map("created_by_id") @db.Uuid
+  assigneeId       String?           @map("assignee_id") @db.Uuid
+  completedById    String?           @map("completed_by_id") @db.Uuid
+  title            String
+  detail           String?
+  type             RecordType
+  status           TaskStatus        @default(PENDING)
+  scheduledAt      DateTime          @map("scheduled_at") @db.Timestamptz(3)
+  completedAt      DateTime?         @map("completed_at") @db.Timestamptz(3)
+  result           Json?
+  note             String?
+  version          Int               @default(1)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(3)
+  family           Family            @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  pet              Pet?              @relation(fields: [petId], references: [id], onDelete: Cascade)
+  plan             Plan?             @relation(fields: [planId], references: [id], onDelete: SetNull)
+  createdBy        User              @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee         User?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy      User?             @relation("TaskCompleter", fields: [completedById], references: [id])
+  record           Record?
+  notificationLogs NotificationLog[]
+
+  @@unique([planId, scheduledAt])
+  @@index([familyId, status, scheduledAt])
+  @@map("tasks")
+}
+
+model Record {
+  id           String              @id @default(uuid()) @db.Uuid
+  clientId     String              @map("client_id")
+  familyId     String              @map("family_id") @db.Uuid
+  petId        String?             @map("pet_id") @db.Uuid
+  taskId       String?             @unique @map("task_id") @db.Uuid
+  authorId     String              @map("author_id") @db.Uuid
+  type         RecordType
+  title        String
+  source       RecordSource        @default(MANUAL)
+  status       RecordStatus        @default(ACTIVE)
+  abnormal     Boolean             @default(false)
+  occurredAt   DateTime            @map("occurred_at") @db.Timestamptz(3)
+  data         Json
+  note         String?
+  version      Int                 @default(1)
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  family       Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  pet          Pet?                @relation(fields: [petId], references: [id], onDelete: Cascade)
+  task         Task?               @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  author       User                @relation(fields: [authorId], references: [id])
+  healthEvents HealthEventRecord[]
+  photos       PhotoRecord[]
+
+  @@unique([familyId, clientId])
+  @@index([familyId, occurredAt(sort: Desc)])
+  @@index([petId, type, occurredAt(sort: Desc)])
+  @@map("records")
+}
+
+model HealthEvent {
+  id          String              @id @default(uuid()) @db.Uuid
+  familyId    String              @map("family_id") @db.Uuid
+  petId       String              @map("pet_id") @db.Uuid
+  title       String
+  status      HealthEventStatus   @default(ACTIVE)
+  startedAt   DateTime            @map("started_at") @db.Timestamptz(3)
+  recoveredAt DateTime?           @map("recovered_at") @db.Timestamptz(3)
+  summary     String?
+  version     Int                 @default(1)
+  createdById String              @map("created_by_id") @db.Uuid
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  family      Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  pet         Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  createdBy   User                @relation("HealthEventCreator", fields: [createdById], references: [id])
+  records     HealthEventRecord[]
+
+  @@index([familyId, status, startedAt(sort: Desc)])
+  @@index([petId, status, startedAt(sort: Desc)])
+  @@map("health_events")
+}
+
+model HealthEventRecord {
+  healthEventId String                  @map("health_event_id") @db.Uuid
+  recordId      String                  @map("record_id") @db.Uuid
+  relationType  HealthEventRelationType @default(OBSERVATION) @map("relation_type")
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  healthEvent   HealthEvent             @relation(fields: [healthEventId], references: [id], onDelete: Cascade)
+  record        Record                  @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@id([healthEventId, recordId])
+  @@index([recordId])
+  @@map("health_event_records")
+}
+
+model MedicalRecord {
+  id          String            @id @default(uuid()) @db.Uuid
+  familyId    String            @map("family_id") @db.Uuid
+  petId       String            @map("pet_id") @db.Uuid
+  type        MedicalRecordType
+  title       String
+  occurredAt  DateTime          @map("occurred_at") @db.Timestamptz(3)
+  brand       String?
+  batchNumber String?           @map("batch_number")
+  dose        String?
+  provider    String?
+  nextDueAt   DateTime?         @map("next_due_at") @db.Timestamptz(3)
+  reaction    String?
+  note        String?
+  createdById String            @map("created_by_id") @db.Uuid
+  version     Int               @default(1)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?         @map("deleted_at") @db.Timestamptz(3)
+  family      Family            @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  pet         Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("MedicalRecordCreator", fields: [createdById], references: [id])
+
+  @@index([familyId, occurredAt(sort: Desc)])
+  @@index([petId, type, occurredAt(sort: Desc)])
+  @@map("medical_records")
+}
+
+model UploadIntent {
+  id          String        @id @default(uuid()) @db.Uuid
+  familyId    String        @map("family_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  objectKey   String        @unique @map("object_key")
+  mimeType    String        @map("mime_type")
+  byteSize    Int           @map("byte_size")
+  purpose     UploadPurpose
+  tokenHash   String?       @map("token_hash")
+  expiresAt   DateTime      @map("expires_at") @db.Timestamptz(3)
+  completedAt DateTime?     @map("completed_at") @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  family      Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, expiresAt])
+  @@index([userId, expiresAt])
+  @@map("upload_intents")
+}
+
+model Photo {
+  id          String      @id @default(uuid()) @db.Uuid
+  familyId    String      @map("family_id") @db.Uuid
+  createdById String      @map("created_by_id") @db.Uuid
+  objectKey   String      @unique @map("object_key")
+  thumbnailObjectKey String? @unique @map("thumbnail_object_key")
+  mimeType    String      @map("mime_type")
+  byteSize    Int         @map("byte_size")
+  checksum    String
+  thumbnailMimeType String? @map("thumbnail_mime_type")
+  thumbnailByteSize Int? @map("thumbnail_byte_size")
+  thumbnailChecksum String? @map("thumbnail_checksum")
+  width       Int?
+  height      Int?
+  note        String?
+  status      PhotoStatus @default(ACTIVE)
+  version     Int         @default(1)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  family      Family      @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("PhotoCreator", fields: [createdById], references: [id])
+  pets        PhotoPet[]
+  records     PhotoRecord[]
+
+  @@index([familyId, status, createdAt(sort: Desc)])
+  @@map("photos")
+}
+
+model PhotoPet {
+  photoId  String   @map("photo_id") @db.Uuid
+  petId    String   @map("pet_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  photo    Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  pet      Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@id([photoId, petId])
+  @@index([petId, createdAt(sort: Desc)])
+  @@map("photo_pets")
+}
+
+model PhotoRecord {
+  photoId   String   @map("photo_id") @db.Uuid
+  recordId  String   @map("record_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@id([photoId, recordId])
+  @@index([recordId])
+  @@map("photo_records")
+}

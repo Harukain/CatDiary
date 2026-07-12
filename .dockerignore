@@ -1,0 +1,17 @@
+.git
+.github
+.turbo
+**/.turbo
+**/.expo
+**/node_modules
+**/dist
+**/coverage
+**/.DS_Store
+output
+tmp
+.env
+.env.*
+!.env.example
+apps/mobile
+docs
+openapi.json

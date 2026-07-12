@@ -1,0 +1,21 @@
+{
+  "name": "@cat-diary/domain",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.2",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2"
+  }
+}

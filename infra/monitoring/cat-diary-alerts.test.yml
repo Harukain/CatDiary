@@ -1,0 +1,110 @@
+rule_files:
+  - cat-diary-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: API target remains down
+    interval: 1m
+    input_series:
+      - series: 'up{job="cat-diary-api",instance="api:3000"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: CatDiaryTargetDown
+        exp_alerts:
+          - exp_labels:
+              instance: api:3000
+              job: cat-diary-api
+              severity: critical
+            exp_annotations:
+              summary: 'cat-diary-api is unavailable'
+              description: 'Prometheus has failed to scrape api:3000 for two minutes.'
+
+  - name: API error ratio remains above five percent
+    interval: 1m
+    input_series:
+      - series: 'cat_diary_http_requests_total{status="500"}'
+        values: '0+10x20'
+      - series: 'cat_diary_http_requests_total{status="200"}'
+        values: '0+90x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: CatDiaryApiHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: 'API 5xx rate is above 5%'
+              description: 'The API error ratio has remained above 5% for ten minutes.'
+
+  - name: API P95 remains above eight hundred milliseconds
+    interval: 1m
+    input_series:
+      - series: 'cat_diary_http_request_duration_seconds_bucket{le="0.5"}'
+        values: '0+0x20'
+      - series: 'cat_diary_http_request_duration_seconds_bucket{le="1"}'
+        values: '0+100x20'
+      - series: 'cat_diary_http_request_duration_seconds_bucket{le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: CatDiaryApiHighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: 'API P95 latency is above 800ms'
+              description: 'API P95 latency has exceeded the MVP write target for ten minutes.'
+
+  - name: Worker queue repeatedly fails
+    interval: 1m
+    input_series:
+      - series: 'cat_diary_worker_jobs_total{queue="notifications",name="notification-due",outcome="failed"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CatDiaryWorkerRepeatedFailures
+        exp_alerts:
+          - exp_labels:
+              queue: notifications
+              severity: critical
+            exp_annotations:
+              summary: 'Worker queue notifications is repeatedly failing'
+              description: 'At least three failed attempts were observed in ten minutes.'
+
+  - name: Worker waiting backlog remains high
+    interval: 1m
+    input_series:
+      - series: 'cat_diary_worker_queue_jobs{queue="exports",state="waiting"}'
+        values: '101x15'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: CatDiaryWorkerWaitingBacklog
+        exp_alerts:
+          - exp_labels:
+              queue: exports
+              severity: warning
+            exp_annotations:
+              summary: 'Worker queue exports has a waiting backlog'
+              description: 'More than 100 jobs have remained waiting for ten minutes.'
+
+  - name: Worker P95 remains above thirty seconds
+    interval: 1m
+    input_series:
+      - series: 'cat_diary_worker_job_duration_seconds_bucket{queue="exports",le="15"}'
+        values: '0+0x20'
+      - series: 'cat_diary_worker_job_duration_seconds_bucket{queue="exports",le="60"}'
+        values: '0+100x20'
+      - series: 'cat_diary_worker_job_duration_seconds_bucket{queue="exports",le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: CatDiaryWorkerHighLatency
+        exp_alerts:
+          - exp_labels:
+              queue: exports
+              severity: warning
+            exp_annotations:
+              summary: 'Worker queue exports P95 exceeds 30 seconds'
+              description: 'Worker processing latency has been elevated for ten minutes.'

@@ -1,0 +1,65 @@
+groups:
+  - name: cat-diary-availability
+    rules:
+      - alert: CatDiaryTargetDown
+        expr: up{job=~"cat-diary-(api|worker)"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.job }} is unavailable'
+          description: 'Prometheus has failed to scrape {{ $labels.instance }} for two minutes.'
+
+      - alert: CatDiaryApiHighErrorRate
+        expr: |
+          sum(rate(cat_diary_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(cat_diary_http_requests_total[5m])), 0.001) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'API 5xx rate is above 5%'
+          description: 'The API error ratio has remained above 5% for ten minutes.'
+
+      - alert: CatDiaryApiHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(cat_diary_http_request_duration_seconds_bucket[10m]))
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API P95 latency is above 800ms'
+          description: 'API P95 latency has exceeded the MVP write target for ten minutes.'
+
+  - name: cat-diary-worker
+    rules:
+      - alert: CatDiaryWorkerRepeatedFailures
+        expr: sum by (queue) (increase(cat_diary_worker_jobs_total{outcome="failed"}[10m])) >= 3
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Worker queue {{ $labels.queue }} is repeatedly failing'
+          description: 'At least three failed attempts were observed in ten minutes.'
+
+      - alert: CatDiaryWorkerWaitingBacklog
+        expr: sum by (queue) (cat_diary_worker_queue_jobs{state="waiting"}) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Worker queue {{ $labels.queue }} has a waiting backlog'
+          description: 'More than 100 jobs have remained waiting for ten minutes.'
+
+      - alert: CatDiaryWorkerHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, queue) (rate(cat_diary_worker_job_duration_seconds_bucket[10m]))
+          ) > 30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Worker queue {{ $labels.queue }} P95 exceeds 30 seconds'
+          description: 'Worker processing latency has been elevated for ten minutes.'

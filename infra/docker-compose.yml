@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: catdiary
+      POSTGRES_PASSWORD: catdiary
+      POSTGRES_DB: catdiary
+    ports:
+      - '5433:5432'
+    volumes:
+      - catdiary-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U catdiary -d catdiary']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - catdiary-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  catdiary-postgres:
+  catdiary-redis:
