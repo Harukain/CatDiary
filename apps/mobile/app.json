@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "猫伴日记",
-    "slug": "cat-diary",
+    "slug": "catdiary",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -28,7 +28,12 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "defaultTimezone": "Asia/Shanghai"
+      "defaultTimezone": "Asia/Shanghai",
+      "appEnvironment": "development",
+      "router": {},
+      "eas": {
+        "projectId": "29f29ec5-c4ab-4371-bf41-b5b72077e531"
+      }
     },
     "plugins": [
       [
@@ -63,6 +68,7 @@
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
-    }
+    },
+    "owner": "harukains-team"
   }
 }
