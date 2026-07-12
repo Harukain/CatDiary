@@ -67,7 +67,8 @@
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/29f29ec5-c4ab-4371-bf41-b5b72077e531"
     },
     "owner": "harukains-team"
   }
