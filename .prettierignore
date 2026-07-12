@@ -3,6 +3,7 @@ node_modules
 **/dist
 **/dist-*
 **/.expo
+apps/mobile/expo-env.d.ts
 output
 pnpm-lock.yaml
 prisma/schema.prisma

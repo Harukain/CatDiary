@@ -61,7 +61,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: '首页' }} />
       <Tabs.Screen name="tasks" options={{ title: '任务' }} />
-      <Tabs.Screen name="add" options={{ title: '＋' }} />
+      <Tabs.Screen name="add" options={{ title: '', tabBarLabel: '' }} />
       <Tabs.Screen name="records" options={{ title: '记录' }} />
       <Tabs.Screen name="me" options={{ title: '我的' }} />
     </Tabs>

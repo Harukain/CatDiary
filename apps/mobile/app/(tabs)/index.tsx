@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-import { authApi, type PetSummary } from '../../src/features/auth/auth-api';
+import { authApi, type PetSummary, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
   Body,
@@ -17,6 +18,7 @@ export default function HomeTab() {
   const router = useRouter();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
+  const [todayTasks, setTodayTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useFocusEffect(
@@ -25,9 +27,15 @@ export default function HomeTab() {
       let active = true;
       setLoading(true);
       setError('');
-      void authApi
-        .listPets(session.accessToken, activeFamily.id)
-        .then((data) => active && setPets(data))
+      void Promise.all([
+        authApi.listPets(session.accessToken, activeFamily.id),
+        authApi.listTasks(session.accessToken, activeFamily.id, 'today'),
+      ])
+        .then(([nextPets, nextTasks]) => {
+          if (!active) return;
+          setPets(nextPets);
+          setTodayTasks(nextTasks.items);
+        })
         .catch(() => active && setError('猫咪档案加载失败'))
         .finally(() => active && setLoading(false));
       return () => {
@@ -40,9 +48,59 @@ export default function HomeTab() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heading}>
-          <Text style={styles.eyebrow}>{activeFamily?.name ?? '尚未选择家庭'}</Text>
-          <Text style={styles.title}>今天也照顾好它们</Text>
-          <Text style={styles.date}>任务与异常会在这里优先显示</Text>
+          <Text style={styles.eyebrow}>
+            {formatToday()} · {activeFamily?.name ?? '尚未选择家庭'}
+          </Text>
+          <Text style={styles.title}>今天，先照顾好它们</Text>
+          <Text style={styles.date}>照顾任务和重要变化会优先出现在这里</Text>
+        </View>
+        <View style={styles.taskPanel}>
+          <View style={styles.taskPanelTop}>
+            <View style={styles.taskPanelTitleGroup}>
+              <View style={styles.taskIcon}>
+                <Ionicons name="sunny-outline" size={20} color={colors.warningDark} />
+              </View>
+              <View>
+                <Text style={styles.taskPanelEyebrow}>今日照顾</Text>
+                <Text style={styles.taskPanelTitle}>
+                  {loading
+                    ? '正在整理今天的安排'
+                    : todayTasks.length
+                      ? `有 ${todayTasks.length} 项需要留意`
+                      : '今天没有待办任务'}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="查看今日任务"
+              onPress={() => router.push('/(tabs)/tasks')}
+              style={({ pressed }) => [styles.taskPanelAction, pressed && styles.pressed]}
+            >
+              <Text style={styles.taskPanelActionText}>查看任务</Text>
+              <Ionicons name="arrow-forward" size={15} color={colors.warningDark} />
+            </Pressable>
+          </View>
+          {!loading && todayTasks.length ? (
+            <View style={styles.taskPreviewList}>
+              {todayTasks.slice(0, 2).map((task) => (
+                <View key={task.id} style={styles.taskPreview}>
+                  <View style={styles.taskDot} />
+                  <View style={styles.taskPreviewBody}>
+                    <Text numberOfLines={1} style={styles.taskPreviewTitle}>
+                      {task.title}
+                    </Text>
+                    <Text style={styles.taskPreviewMeta}>
+                      {task.pet?.name ?? '公共任务'} · {formatTime(task.scheduledAt)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              {todayTasks.length > 2 ? (
+                <Text style={styles.moreTasks}>还有 {todayTasks.length - 2} 项任务</Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         <Card>
           <Title>猫咪档案</Title>
@@ -76,19 +134,6 @@ export default function HomeTab() {
             </>
           )}
         </Card>
-        <View style={styles.banner}>
-          <View>
-            <Text style={styles.bannerTitle}>今日任务</Text>
-            <Text style={styles.bannerBody}>任务模块正在进入下一阶段开发</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/(tabs)/tasks')}
-            style={styles.bannerAction}
-          >
-            <Text style={styles.bannerActionText}>查看</Text>
-          </Pressable>
-        </View>
       </ScrollView>
     </Screen>
   );
@@ -100,6 +145,43 @@ const styles = StyleSheet.create({
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '600' },
   title: { ...typography.h1, color: colors.ink },
   date: { ...typography.secondary, color: colors.textSecondary },
+  taskPanel: {
+    borderRadius: radii.banner,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  taskPanelTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  taskPanelTitleGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  taskIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  taskPanelEyebrow: { ...typography.caption, color: colors.warningDark, fontWeight: '600' },
+  taskPanelTitle: { ...typography.h3, color: colors.ink, marginTop: 2 },
+  taskPanelAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  taskPanelActionText: { ...typography.caption, color: colors.warningDark, fontWeight: '600' },
+  taskPreviewList: {
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#F4DDAF',
+    paddingTop: spacing.md,
+  },
+  taskPreview: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  taskDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warningDark },
+  taskPreviewBody: { flex: 1 },
+  taskPreviewTitle: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
+  taskPreviewMeta: { ...typography.caption, color: colors.warningDark, marginTop: 1 },
+  moreTasks: { ...typography.caption, color: colors.warningDark, paddingLeft: spacing.md },
   petList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   petChip: { minWidth: 72, alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   avatar: {
@@ -112,17 +194,21 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 18, fontWeight: '700', color: colors.brand },
   petName: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
-  banner: {
-    minHeight: 84,
-    borderRadius: radii.banner,
-    backgroundColor: colors.warningSoft,
-    padding: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  bannerTitle: { ...typography.h3, color: colors.ink },
-  bannerBody: { ...typography.caption, color: colors.warningDark, marginTop: spacing.xs },
-  bannerAction: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  bannerActionText: { fontSize: 13, fontWeight: '600', color: colors.warningDark },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 });
+
+function formatToday() {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(new Date());
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value));
+}

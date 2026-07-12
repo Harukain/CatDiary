@@ -39,8 +39,8 @@ export function BrandHeader({
   );
 }
 
-export function Card({ children }: PropsWithChildren) {
-  return <View style={styles.card}>{children}</View>;
+export function Card({ children, elevated = false }: PropsWithChildren<{ elevated?: boolean }>) {
+  return <View style={[styles.card, elevated && styles.cardElevated]}>{children}</View>;
 }
 export function Title({ children }: PropsWithChildren) {
   return <Text style={styles.h2}>{children}</Text>;
@@ -190,6 +190,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     padding: spacing.xl,
     gap: spacing.md,
+  },
+  cardElevated: {
     ...shadows.card,
   },
   field: { gap: spacing.sm, marginTop: spacing.sm },

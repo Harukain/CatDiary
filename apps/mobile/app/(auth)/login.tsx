@@ -85,7 +85,7 @@ export default function LoginRoute() {
       >
         <BrandHeader subtitle="把每一次照顾，变成安心可追溯的日常" />
         <View style={styles.spacer} />
-        <Card>
+        <Card elevated>
           <Title>{step === 'phone' ? '手机号登录' : '输入验证码'}</Title>
           <Body>
             {step === 'phone'
