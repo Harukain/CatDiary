@@ -95,8 +95,16 @@ export interface PlanSummary {
   id: string;
   petId: string | null;
   title: string;
+  detail?: string | null;
   recordType: PlanType;
+  startAt?: string;
   localTime: string;
+  recurrenceRule?: {
+    frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+    interval?: number;
+    weekdays?: number[];
+    dayOfMonth?: number;
+  };
   enabled: boolean;
   version: number;
   generatedTaskCount?: number;
@@ -388,6 +396,54 @@ export const authApi = {
     return authenticatedPost<PlanSummary>('/plans', accessToken, familyId, {
       ...input,
       timezone: 'Asia/Shanghai',
+    });
+  },
+  listPlans(accessToken: string, familyId: string, enabled?: boolean) {
+    const query = enabled === undefined ? '' : `?enabled=${enabled}`;
+    return authenticatedGet<PlanSummary[]>(`/plans${query}`, accessToken, familyId);
+  },
+  getPlan(accessToken: string, familyId: string, planId: string) {
+    return authenticatedGet<PlanSummary>(`/plans/${planId}`, accessToken, familyId);
+  },
+  updatePlan(
+    accessToken: string,
+    familyId: string,
+    planId: string,
+    input: {
+      petId?: string | null;
+      type?: PlanType;
+      title?: string;
+      detail?: string;
+      startAt?: string;
+      localTime?: string;
+      recurrenceRule?: {
+        frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+        interval?: number;
+        weekdays?: number[];
+        dayOfMonth?: number;
+      };
+      version: number;
+      futureTaskPolicy: 'keep' | 'regenerate';
+    },
+  ) {
+    return authenticatedPatch<PlanSummary>(`/plans/${planId}`, accessToken, familyId, {
+      ...input,
+      timezone: 'Asia/Shanghai',
+    });
+  },
+  pausePlan(accessToken: string, familyId: string, planId: string, version: number) {
+    return authenticatedPost<PlanSummary>(`/plans/${planId}/pause`, accessToken, familyId, {
+      version,
+    });
+  },
+  resumePlan(accessToken: string, familyId: string, planId: string, version: number) {
+    return authenticatedPost<PlanSummary>(`/plans/${planId}/resume`, accessToken, familyId, {
+      version,
+    });
+  },
+  deletePlan(accessToken: string, familyId: string, planId: string, version: number) {
+    return authenticatedDelete(`/plans/${planId}`, accessToken, familyId, {
+      'If-Match': String(version),
     });
   },
   listTasks(

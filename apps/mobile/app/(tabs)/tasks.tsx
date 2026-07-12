@@ -154,13 +154,22 @@ export default function TasksTab() {
             <Text style={styles.subtitle}>未来事项与历史结果清楚分开</Text>
           </View>
           {canManagePlans ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/plans/new')}
-              style={styles.newButton}
-            >
-              <Text style={styles.newButtonText}>新建计划</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/plans')}
+                style={styles.newButton}
+              >
+                <Text style={styles.newButtonText}>管理计划</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/plans/new')}
+                style={styles.newButton}
+              >
+                <Text style={styles.newButtonText}>新建</Text>
+              </Pressable>
+            </View>
           ) : null}
         </View>
         <View style={styles.segment}>
@@ -325,6 +334,7 @@ function emptyBody(scope: Scope) {
 const styles = StyleSheet.create({
   content: { gap: spacing.xxl, paddingBottom: 104 },
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   newButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },

@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
   AuthApiError,
   type PetSummary,
+  type PlanSummary,
   type PlanType,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -17,6 +26,7 @@ import {
   Field,
   PrimaryButton,
   Screen,
+  TextButton,
   Title,
 } from '../../src/shared/ui/primitives';
 
@@ -35,6 +45,7 @@ const frequencies = [
 
 export default function NewPlanRoute() {
   const router = useRouter();
+  const { planId } = useLocalSearchParams<{ planId?: string }>();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
@@ -43,6 +54,8 @@ export default function NewPlanRoute() {
   const [detail, setDetail] = useState('');
   const [localTime, setLocalTime] = useState(defaultTime());
   const [frequency, setFrequency] = useState<'once' | 'daily' | 'weekly' | 'monthly'>('once');
+  const [existingPlan, setExistingPlan] = useState<PlanSummary>();
+  const [futureTaskPolicy, setFutureTaskPolicy] = useState<'keep' | 'regenerate'>('keep');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,15 +63,27 @@ export default function NewPlanRoute() {
 
   useEffect(() => {
     if (!session || !activeFamily) return;
-    void authApi
-      .listPets(session.accessToken, activeFamily.id)
-      .then((data) => {
+    void Promise.all([
+      authApi.listPets(session.accessToken, activeFamily.id),
+      planId
+        ? authApi.getPlan(session.accessToken, activeFamily.id, planId)
+        : Promise.resolve(undefined),
+    ])
+      .then(([data, plan]) => {
         setPets(data);
-        setPetId(data[0]?.id ?? null);
+        if (plan) {
+          setExistingPlan(plan);
+          setPetId(plan.petId);
+          setType(plan.recordType);
+          setTitle(plan.title);
+          setDetail(plan.detail ?? '');
+          setLocalTime(plan.localTime);
+          setFrequency(plan.recurrenceRule?.frequency ?? 'once');
+        } else setPetId(data[0]?.id ?? null);
       })
-      .catch(() => setError('猫咪档案加载失败'))
+      .catch(() => setError(planId ? '照顾计划加载失败' : '猫咪档案加载失败'))
       .finally(() => setLoading(false));
-  }, [activeFamily, session]);
+  }, [activeFamily, planId, session]);
 
   const valid = useMemo(
     () =>
@@ -74,26 +99,68 @@ export default function NewPlanRoute() {
     const now = new Date();
     const weekday = now.getDay() === 0 ? 7 : now.getDay();
     try {
-      await authApi.createPlan(session.accessToken, activeFamily.id, {
-        petId: type === 'LITTER' ? petId : petId!,
-        type,
-        title: title.trim(),
-        detail: detail.trim() || undefined,
-        startAt: now.toISOString(),
-        localTime,
-        recurrenceRule:
-          frequency === 'weekly'
-            ? { frequency, weekdays: [weekday] }
-            : frequency === 'monthly'
-              ? { frequency, dayOfMonth: now.getDate() }
-              : { frequency },
-      });
-      router.replace('/(tabs)/tasks');
+      const recurrenceRule =
+        frequency === 'weekly'
+          ? { frequency, weekdays: [weekday] }
+          : frequency === 'monthly'
+            ? { frequency, dayOfMonth: now.getDate() }
+            : { frequency };
+      if (existingPlan) {
+        await authApi.updatePlan(session.accessToken, activeFamily.id, existingPlan.id, {
+          petId: type === 'LITTER' ? petId : petId!,
+          type,
+          title: title.trim(),
+          detail: detail.trim(),
+          startAt: existingPlan.startAt ?? now.toISOString(),
+          localTime,
+          recurrenceRule,
+          version: existingPlan.version,
+          futureTaskPolicy,
+        });
+        router.replace('/plans');
+      } else {
+        await authApi.createPlan(session.accessToken, activeFamily.id, {
+          petId: type === 'LITTER' ? petId : petId!,
+          type,
+          title: title.trim(),
+          detail: detail.trim() || undefined,
+          startAt: now.toISOString(),
+          localTime,
+          recurrenceRule,
+        });
+        router.replace('/(tabs)/tasks');
+      }
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '计划创建失败');
     } finally {
       setBusy(false);
     }
+  }
+  function confirmDelete() {
+    if (!existingPlan || !session || !activeFamily) return;
+    Alert.alert('删除照顾计划？', '未来待完成任务会被取消；已经发生的记录不会删除。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认删除',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          setError('');
+          try {
+            await authApi.deletePlan(
+              session.accessToken,
+              activeFamily.id,
+              existingPlan.id,
+              existingPlan.version,
+            );
+            router.replace('/plans');
+          } catch (cause) {
+            setError(cause instanceof AuthApiError ? cause.message : '计划删除失败');
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   }
 
   return (
@@ -107,7 +174,7 @@ export default function NewPlanRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>新建照顾计划</Text>
+        <Text style={styles.navTitle}>{existingPlan ? '编辑照顾计划' : '新建照顾计划'}</Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -214,8 +281,59 @@ export default function NewPlanRoute() {
                 ))}
               </View>
             </View>
+            {existingPlan ? (
+              <View style={styles.field}>
+                <Text style={styles.label}>保存后的未来任务</Text>
+                <View style={styles.grid}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: futureTaskPolicy === 'keep' }}
+                    onPress={() => setFutureTaskPolicy('keep')}
+                    style={[styles.choice, futureTaskPolicy === 'keep' && styles.choiceActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        futureTaskPolicy === 'keep' && styles.choiceTextActive,
+                      ]}
+                    >
+                      保留已有任务
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: futureTaskPolicy === 'regenerate' }}
+                    onPress={() => setFutureTaskPolicy('regenerate')}
+                    style={[
+                      styles.choice,
+                      futureTaskPolicy === 'regenerate' && styles.choiceActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        futureTaskPolicy === 'regenerate' && styles.choiceTextActive,
+                      ]}
+                    >
+                      重新生成未来任务
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.policyHint}>
+                  仅当修改时间或重复规则时需要重新生成；已完成的历史不会受影响。
+                </Text>
+              </View>
+            ) : null}
             {error ? <ErrorText>{error}</ErrorText> : null}
-            <PrimaryButton label="保存并生成任务" busy={busy} disabled={!valid} onPress={submit} />
+            <PrimaryButton
+              label={existingPlan ? '保存计划' : '保存并生成任务'}
+              busy={busy}
+              disabled={!valid}
+              onPress={submit}
+            />
+            {existingPlan ? (
+              <TextButton label="删除照顾计划" danger disabled={busy} onPress={confirmDelete} />
+            ) : null}
           </Card>
         )}
       </ScrollView>
@@ -261,4 +379,5 @@ const styles = StyleSheet.create({
   petChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   petChipText: { fontSize: 13, color: colors.textSecondary },
   petChipTextActive: { color: colors.surface, fontWeight: '600' },
+  policyHint: { ...typography.caption, color: colors.textSecondary },
 });
