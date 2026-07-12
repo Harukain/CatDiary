@@ -38,7 +38,21 @@ pnpm eas build --profile development --platform ios
 pnpm eas build --profile development --platform android
 ```
 
-仓库通过 `pnpm dlx` 固定使用 `eas-cli@20.5.1`，不把 EAS 的易变工具链加入应用依赖，也不要使用未固定的全局 CLI。首次登录/绑定前执行 `pnpm eas:check`；它会检查 Git 根与初始提交、三个 EAS profile、CLI、Expo 登录和项目绑定，但不会创建项目或触发构建。当前仓库尚未初始化 Git，且本机 Expo CLI 尚未登录，这两步需要项目所有者确认账号与初始提交后执行。
+仓库通过 `pnpm dlx` 固定使用 `eas-cli@20.5.1`，不把 EAS 的易变工具链加入应用依赖，也不要使用未固定的全局 CLI。首次登录/绑定前执行 `pnpm eas:check`；它会检查 Git 根与初始提交、三个 EAS profile、CLI、Expo 登录和项目绑定，但不会创建项目或触发构建。
+
+### 真机连接本地 API
+
+Development Build 的 Android 仅在开发环境允许局域网 HTTP；iOS Development Build 也允许开发 API。将手机和开发机接入同一 Wi-Fi，使用开发机局域网 IPv4（不要使用 `localhost` 或 Android 模拟器专用的 `10.0.2.2`）启动服务：
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+pnpm --filter @cat-diary/api start
+pnpm --filter @cat-diary/worker start
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+  pnpm --filter @cat-diary/mobile dev
+```
+
+在手机的 Development Build 中选择该 Metro 开发服务器；首次验收前用手机浏览器访问 `http://开发机局域网IP:3000/api/v1/health/live`，确认 API 连通。Preview/Production 不允许此方式，必须使用正式 HTTPS API。
 
 - [ ] iPhone 真机安装并完成登录、建档、任务、记录、相册主流程
 - [ ] Android 真机安装并完成相同主流程

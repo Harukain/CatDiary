@@ -29,7 +29,7 @@ Production 显式阻断：
 
 由于本地 SQLite 包含健康记录缓存、任务缓存和待同步操作，且待上传照片暂存在 App 私有目录，Production Manifest 固定 `android:allowBackup="false"`，禁止系统云备份或设备迁移复制这些数据。服务端数据仍通过账号登录重新获取。
 
-Manifest 中 `tools:node="remove"` 的条目表示在最终合并时删除，不视为有效权限。Development Client 可以使用开发悬浮层，但该权限不进入 Preview/Production。
+Development Build 仅允许 `android:usesCleartextTraffic="true"`，用于在同一局域网访问开发机 API；Preview/Production 保持关闭，只能访问 HTTPS 服务。Manifest 中 `tools:node="remove"` 的条目表示在最终合并时删除，不视为有效权限。Development Client 可以使用开发悬浮层，但该权限不进入 Preview/Production。
 
 ## 验收门禁
 

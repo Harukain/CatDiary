@@ -43,6 +43,18 @@ const development = expoConfig({
 });
 if (development.status !== 0 || development.config.extra.apiUrl !== undefined)
   throw new Error(`Development config is invalid: ${development.stderr}`);
+const developmentIntrospection = expoConfig(
+  { APP_ENV: 'development', EXPO_PUBLIC_API_URL: '', EAS_PROJECT_ID: '' },
+  'introspect',
+);
+if (developmentIntrospection.status !== 0) throw new Error(developmentIntrospection.stderr);
+const developmentAndroidApplication =
+  developmentIntrospection.config._internal.modResults.android.manifest.manifest.application?.[0]
+    ?.$ ?? {};
+if (developmentAndroidApplication['android:usesCleartextTraffic'] !== 'true')
+  throw new Error(
+    'Development Android builds must allow a LAN HTTP API for physical-device testing',
+  );
 
 expectFailure(
   { APP_ENV: 'preview', EXPO_PUBLIC_API_URL: '', EAS_PROJECT_ID: projectId },
@@ -163,6 +175,7 @@ const checks = {
     (permission) => !activeAndroidPermissions.includes(permission),
   ),
   androidBackupDisabled: androidApplication['android:allowBackup'] === 'false',
+  androidProductionCleartextDisabled: androidApplication['android:usesCleartextTraffic'] !== 'true',
   privacyTrackingDisabled:
     privacyManifest?.NSPrivacyTracking === false &&
     privacyManifest.NSPrivacyTrackingDomains?.length === 0,

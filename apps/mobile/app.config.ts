@@ -65,6 +65,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ...(environment === 'development' ? [] : ['android.permission.SYSTEM_ALERT_WINDOW']),
       ],
     },
+    plugins: [
+      ...(config.plugins ?? []),
+      [
+        'expo-build-properties',
+        { android: { usesCleartextTraffic: environment === 'development' } },
+      ],
+    ],
     extra: {
       ...config.extra,
       appEnvironment: environment,
