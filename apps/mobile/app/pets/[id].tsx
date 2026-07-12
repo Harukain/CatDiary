@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, AuthApiError, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { isValidBirthDate } from '../../src/features/pets/pet-form';
 import {
   Body,
   Card,
@@ -20,6 +21,7 @@ import {
   Field,
   PrimaryButton,
   Screen,
+  SuccessText,
   TextButton,
   Title,
 } from '../../src/shared/ui/primitives';
@@ -45,6 +47,7 @@ export default function PetDetailRoute() {
   const [neutered, setNeutered] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
     void authApi
@@ -66,6 +69,7 @@ export default function PetDetailRoute() {
     if (!session || !activeFamily || !pet || !name.trim() || busy) return;
     setBusy(true);
     setError('');
+    setSuccess('');
     try {
       const updated = await authApi.updatePet(session.accessToken, activeFamily.id, pet.id, {
         name: name.trim(),
@@ -86,6 +90,7 @@ export default function PetDetailRoute() {
         chipNumber: chipNumber.trim() || null,
         neutered,
       });
+      setSuccess('猫咪档案已保存。');
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '保存失败');
     } finally {
@@ -120,7 +125,10 @@ export default function PetDetailRoute() {
       breed.trim() !== (pet.breed ?? '') ||
       chipNumber.trim() !== (pet.chipNumber ?? '') ||
       neutered !== (pet.neutered ?? null));
-  const birthValid = !birthDate || /^\d{4}-\d{2}-\d{2}$/.test(birthDate);
+  const birthValid = !birthDate || isValidBirthDate(birthDate);
+  useEffect(() => {
+    if (changed) setSuccess('');
+  }, [changed]);
 
   return (
     <Screen>
@@ -153,6 +161,7 @@ export default function PetDetailRoute() {
                   onChangeText={(value) => {
                     setName(value);
                     setError('');
+                    setSuccess('');
                   }}
                 />
                 <View style={styles.field}>
@@ -184,8 +193,11 @@ export default function PetDetailRoute() {
                   value={birthDate}
                   placeholder="YYYY-MM-DD"
                   maxLength={10}
-                  error={!birthValid ? '请使用 YYYY-MM-DD 格式' : undefined}
-                  onChangeText={setBirthDate}
+                  error={!birthValid ? '请输入有效且不晚于今天的 YYYY-MM-DD 日期' : undefined}
+                  onChangeText={(value) => {
+                    setBirthDate(value);
+                    setSuccess('');
+                  }}
                 />
                 <Field
                   label="品种"
@@ -231,6 +243,7 @@ export default function PetDetailRoute() {
                   disabled={!name.trim() || !birthValid || !changed}
                   onPress={save}
                 />
+                {success ? <SuccessText>{success}</SuccessText> : null}
                 <TextButton
                   label="查看猫咪相册"
                   disabled={busy}

@@ -55,6 +55,13 @@ export function ErrorText({ children }: PropsWithChildren) {
     </Text>
   );
 }
+export function SuccessText({ children }: PropsWithChildren) {
+  return (
+    <Text accessibilityRole="alert" style={styles.success}>
+      {children}
+    </Text>
+  );
+}
 
 export function Field({
   label,
@@ -208,6 +215,7 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: colors.danger },
   error: { ...typography.caption, color: colors.dangerDark },
+  success: { ...typography.caption, color: colors.successDark },
   button: {
     minHeight: 48,
     borderRadius: radii.pill,

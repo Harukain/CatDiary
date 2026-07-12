@@ -66,7 +66,7 @@
 
 ## 已验证
 
-- Android Development Build 真机（USB 转发）：首页真实家庭与猫咪档案加载、底部导航、任务页空状态均通过；应用进程日志未发现 JavaScript 或原生崩溃。任务详情的完成、跳过、撤销仍待在有任务数据的真机场景验证。
+- Android Development Build 真机（USB 转发）：首页真实家庭与猫咪档案加载、底部导航、任务页空状态及猫咪档案详情展示均通过；应用进程日志未发现 JavaScript 或原生崩溃。任务详情的完成、跳过、撤销仍待在有任务数据的真机场景验证。
 - 最新发布门禁：Prettier、ESLint、7/7 workspace TypeScript、构建，以及 12 组真实 API/Worker 集成脚本全部通过。
 - OpenAPI 62 路径契约快照、Prometheus 指标鉴权和 API 查询/写入 P95 性能冒烟已纳入集成门禁。
 - Worker 可观测性已完成：独立存活/就绪端点实际检查 PostgreSQL 与 BullMQ，Prometheus 提供三条队列各状态积压、任务成功/失败次数和处理耗时；生产容器健康检查已由“进程存在”升级为真实 readiness。
