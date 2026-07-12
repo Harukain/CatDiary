@@ -217,7 +217,12 @@ export default function TasksTab() {
                 <Text style={[styles.time, scope === 'overdue' && styles.danger]}>
                   {formatTime(task.scheduledAt)}
                 </Text>
-                <View style={styles.taskBody}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`查看${task.title}详情`}
+                  onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}
+                  style={({ pressed }) => [styles.taskBody, pressed && styles.taskBodyPressed]}
+                >
                   <Text
                     style={[
                       styles.taskTitle,
@@ -229,7 +234,7 @@ export default function TasksTab() {
                   <Text style={styles.meta}>
                     {task.pet?.name ?? '公共任务'} · {typeLabel(task.type)}
                   </Text>
-                </View>
+                </Pressable>
                 {actionId === task.id ? (
                   <ActivityIndicator color={colors.brand} />
                 ) : task.status === 'COMPLETED' || task.status === 'SKIPPED' ? (
@@ -358,7 +363,8 @@ const styles = StyleSheet.create({
   dotSuccess: { backgroundColor: colors.success },
   time: { width: 42, fontSize: 12, color: colors.ink, fontVariant: ['tabular-nums'] },
   danger: { color: colors.dangerDark },
-  taskBody: { flex: 1 },
+  taskBody: { flex: 1, minHeight: 44, justifyContent: 'center' },
+  taskBodyPressed: { opacity: 0.72 },
   taskTitle: { ...typography.h3, color: colors.ink },
   strike: { textDecorationLine: 'line-through' },
   meta: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },

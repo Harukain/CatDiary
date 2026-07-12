@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radii.input,
   },
-  dangerRow: { backgroundColor: '#FBE4D9' },
+  dangerRow: { backgroundColor: colors.dangerSoft },
   switchCopy: { flex: 1 },
   hint: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   locked: {

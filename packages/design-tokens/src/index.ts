@@ -10,6 +10,7 @@ export const colors = {
   textSecondary: '#98897E',
   textTertiary: '#C0B4AA',
   navInactive: '#8C8078',
+  navActive: '#F5B79B',
   successDark: '#6E8A70',
   success: '#8FAE91',
   successSoft: '#E4EBE2',

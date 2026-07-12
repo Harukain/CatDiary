@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { colors } from '@cat-diary/design-tokens';
 import { authApi } from '../auth/auth-api';
 
 export async function registerForPushNotifications(accessToken: string) {
@@ -11,7 +12,7 @@ export async function registerForPushNotifications(accessToken: string) {
       name: '照顾提醒',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#E0714C',
+      lightColor: colors.brand,
     });
   }
   const current = await Notifications.getPermissionsAsync();

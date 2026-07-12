@@ -247,7 +247,7 @@ function relationLabel(relation: string) {
 const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: 70 },
   status: { ...typography.caption, color: colors.dangerDark, fontWeight: '700' },
-  recovered: { color: '#54796A' },
+  recovered: { color: colors.successDark },
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   meta: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.sm },
   readonly: {
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#FBE4D9',
+    backgroundColor: colors.dangerSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,10 +1,19 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { photoSource } from '../../src/features/photos/photo-source';
 import {
   Body,
   Card,
@@ -103,7 +112,20 @@ export default function HomeTab() {
           ) : null}
         </View>
         <Card>
-          <Title>猫咪档案</Title>
+          <View style={styles.profileHeader}>
+            <Title>猫咪档案</Title>
+            {pets.length ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="管理猫咪档案"
+                onPress={() => router.push('/pets')}
+                style={({ pressed }) => [styles.managePets, pressed && styles.pressed]}
+              >
+                <Text style={styles.managePetsText}>管理</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.brand} />
+              </Pressable>
+            ) : null}
+          </View>
           {loading ? (
             <ActivityIndicator color={colors.brand} />
           ) : error ? (
@@ -114,12 +136,25 @@ export default function HomeTab() {
                 <Pressable
                   key={pet.id}
                   accessibilityRole="button"
+                  accessibilityLabel={`查看${pet.name}的档案`}
                   onPress={() => router.push({ pathname: '/pets/[id]', params: { id: pet.id } })}
-                  style={styles.petChip}
+                  style={({ pressed }) => [styles.petChip, pressed && styles.pressed]}
                 >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{pet.name.slice(0, 1)}</Text>
-                  </View>
+                  {pet.avatarUrl && session && activeFamily ? (
+                    <Image
+                      accessibilityLabel={`${pet.name}的头像`}
+                      source={photoSource(
+                        { downloadUrl: pet.avatarUrl },
+                        session.accessToken,
+                        activeFamily.id,
+                      )}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{pet.name.slice(0, 1)}</Text>
+                    </View>
+                  )}
                   <Text style={styles.petName}>{pet.name}</Text>
                 </Pressable>
               ))}
@@ -173,7 +208,7 @@ const styles = StyleSheet.create({
   taskPreviewList: {
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#F4DDAF',
+    borderTopColor: colors.border,
     paddingTop: spacing.md,
   },
   taskPreview: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -182,6 +217,15 @@ const styles = StyleSheet.create({
   taskPreviewTitle: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
   taskPreviewMeta: { ...typography.caption, color: colors.warningDark, marginTop: 1 },
   moreTasks: { ...typography.caption, color: colors.warningDark, paddingLeft: spacing.md },
+  profileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  managePets: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  managePetsText: { ...typography.caption, color: colors.brand, fontWeight: '600' },
   petList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   petChip: { minWidth: 72, alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   avatar: {
@@ -193,6 +237,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   avatarText: { fontSize: 18, fontWeight: '700', color: colors.brand },
+  avatarImage: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandSoft },
   petName: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
   pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 });

@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger },
-  recoveredDot: { backgroundColor: '#54796A' },
+  recoveredDot: { backgroundColor: colors.successDark },
   eventBody: { flex: 1, gap: spacing.xs },
   pet: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   eventTitle: { ...typography.h3, color: colors.ink },

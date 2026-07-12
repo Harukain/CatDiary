@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, AuthApiError, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { Body, Card, ErrorText, Screen, TextButton, Title } from '../../src/shared/ui/primitives';
+import {
+  enqueueOfflineOperation,
+  isNetworkFailure,
+  removeCachedTask,
+} from '../../src/features/offline/offline-queue';
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -12,8 +25,10 @@ export default function TaskDetailScreen() {
   const { session, activeFamily } = useSession();
   const [task, setTask] = useState<TaskSummary>();
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!id || !session || !activeFamily) return;
     setError('');
     void authApi
@@ -23,6 +38,99 @@ export default function TaskDetailScreen() {
         setError(cause instanceof AuthApiError ? cause.message : '任务详情加载失败'),
       );
   }, [activeFamily, id, session]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  function requestComplete() {
+    if (!task) return;
+    if (isMedical(task)) {
+      Alert.alert(
+        '确认完成医疗任务',
+        `请确认「${task.title}」已经按实际情况执行，完成后会生成医疗记录。`,
+        [
+          { text: '取消', style: 'cancel' },
+          { text: '确认完成', onPress: () => void complete(true) },
+        ],
+      );
+      return;
+    }
+    void complete(false);
+  }
+
+  async function complete(medicalConfirmed: boolean) {
+    if (!task || !session || !activeFamily) return;
+    setActionBusy(true);
+    setError('');
+    setNotice('');
+    const operation = authApi.createCompleteOperation(activeFamily.id, task, medicalConfirmed);
+    try {
+      await authApi.sendTaskOperation(session.accessToken, operation);
+      load();
+    } catch (cause) {
+      if (isNetworkFailure(cause)) {
+        await enqueueOfflineOperation(operation);
+        await removeCachedTask(task.id);
+        setTask({ ...task, status: 'COMPLETED', completedAt: new Date().toISOString() });
+        setNotice('网络不可用，完成操作已保存并将在恢复后同步。');
+      } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  function requestSkip() {
+    if (!task) return;
+    Alert.alert('跳过这次任务', '只会跳过本次任务，不会暂停长期计划。', [
+      { text: '取消', style: 'cancel' },
+      { text: '确认跳过', onPress: () => void skip() },
+    ]);
+  }
+
+  async function skip() {
+    if (!task || !session || !activeFamily) return;
+    setActionBusy(true);
+    setError('');
+    setNotice('');
+    const operation = authApi.createSkipOperation(activeFamily.id, task);
+    try {
+      await authApi.sendTaskOperation(session.accessToken, operation);
+      load();
+    } catch (cause) {
+      if (isNetworkFailure(cause)) {
+        await enqueueOfflineOperation(operation);
+        await removeCachedTask(task.id);
+        setTask({ ...task, status: 'SKIPPED' });
+        setNotice('网络不可用，跳过操作已保存并将在恢复后同步。');
+      } else setError(cause instanceof AuthApiError ? cause.message : '跳过失败');
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function undo() {
+    if (!task || !session || !activeFamily) return;
+    setActionBusy(true);
+    setError('');
+    setNotice('');
+    const operation = authApi.createUndoOperation(activeFamily.id, task);
+    try {
+      await authApi.sendTaskOperation(session.accessToken, operation);
+      load();
+    } catch (cause) {
+      if (isNetworkFailure(cause)) {
+        await enqueueOfflineOperation(operation);
+        await removeCachedTask(task.id);
+        setTask({ ...task, status: 'PENDING', completedAt: null });
+        setNotice('网络不可用，撤销操作已保存并将在恢复后同步。');
+      } else setError(cause instanceof AuthApiError ? cause.message : '撤销失败');
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   if (!task && !error)
     return (
@@ -65,19 +173,48 @@ export default function TaskDetailScreen() {
           ) : null}
         </Card>
         <Card>
-          <Title>{task.status === 'PENDING' ? '处理任务' : '查看任务记录'}</Title>
+          <Title>{task.status === 'PENDING' ? '处理任务' : '任务结果'}</Title>
           <Body>
             {task.status === 'PENDING'
-              ? '进入任务列表完成或跳过；疫苗、驱虫和用药仍会要求二次确认。'
-              : '如需撤销完成或跳过结果，请进入任务列表操作。'}
+              ? isMedical(task)
+                ? '医疗任务完成前需要再次确认实际执行情况。'
+                : '完成会记录实际时间与执行人；跳过只影响本次任务。'
+              : canUndo(task)
+                ? '如需更正结果，可以撤销后重新处理本次任务。'
+                : '该任务已取消，不能再继续处理。'}
           </Body>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.replace('/(tabs)/tasks')}
-            style={styles.primary}
-          >
-            <Text style={styles.primaryText}>前往任务列表</Text>
-          </Pressable>
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+          {actionBusy ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : task.status === 'PENDING' ? (
+            <View style={styles.actions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={requestSkip}
+                style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+              >
+                <Text style={styles.secondaryText}>跳过本次</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={requestComplete}
+                style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+              >
+                <Text style={styles.primaryText}>完成任务</Text>
+              </Pressable>
+            </View>
+          ) : canUndo(task) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void undo()}
+              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+            >
+              <Text style={styles.secondaryText}>撤销本次结果</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.inactiveHint}>无需进行操作</Text>
+          )}
         </Card>
         <TextButton label="返回" onPress={() => router.back()} />
       </ScrollView>
@@ -113,6 +250,12 @@ function statusStyle(status: TaskSummary['status']) {
       ? styles.completed
       : styles.inactive;
 }
+function isMedical(task: TaskSummary) {
+  return task.type === 'VACCINE' || task.type === 'DEWORMING' || task.type === 'MEDICATION';
+}
+function canUndo(task: TaskSummary) {
+  return task.status === 'COMPLETED' || task.status === 'SKIPPED';
+}
 
 const styles = StyleSheet.create({
   content: { gap: spacing.xxl, paddingBottom: spacing.xxxl },
@@ -127,13 +270,27 @@ const styles = StyleSheet.create({
   info: { gap: spacing.xs, paddingTop: spacing.md },
   label: { ...typography.secondary, color: colors.textSecondary },
   value: { ...typography.body, color: colors.ink },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   primary: {
+    flex: 1,
     minHeight: 48,
     borderRadius: radii.input,
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.md,
   },
   primaryText: { color: colors.surface, fontWeight: '700' },
+  secondary: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radii.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryText: { color: colors.ink, fontWeight: '600' },
+  notice: { ...typography.caption, color: colors.warningDark },
+  inactiveHint: { ...typography.caption, color: colors.textTertiary },
+  pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
 });

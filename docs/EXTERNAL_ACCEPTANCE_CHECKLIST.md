@@ -54,6 +54,36 @@ EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
 
 在手机的 Development Build 中选择该 Metro 开发服务器；首次验收前用手机浏览器访问 `http://开发机局域网IP:3000/api/v1/health/live`，确认 API 连通。Preview/Production 不允许此方式，必须使用正式 HTTPS API。
 
+### Android USB 稳定调试（推荐用于局域网不稳定时）
+
+保持 USB 调试已授权。该模式下，Metro 仍通过开发机局域网 IP 传输代码包，而 API 通过 ADB 转发到开发机本机，避免手机 Wi-Fi、热点隔离或 VPN 影响数据请求：
+
+```bash
+# 终端一：基础服务
+docker compose -f infra/docker-compose.yml up -d
+pnpm --filter @cat-diary/api start
+pnpm --filter @cat-diary/worker start
+
+# 终端二：使 App API 请求走 USB 本机转发
+EXPO_PUBLIC_API_URL='http://127.0.0.1:3000/api/v1' \
+  pnpm --filter @cat-diary/mobile exec expo start --dev-client --lan --clear --port 8081
+
+# 终端三：每次重新插线、重启 ADB 或重装 App 后重新执行
+adb reverse tcp:8081 tcp:8081
+adb reverse tcp:3000 tcp:3000
+adb devices -l
+```
+
+在设备上打开 Development Build 后，通过 Metro 的开发链接载入项目；若启动器没有自动选择项目，可使用以下深链，其中 `开发机局域网IP` 替换为 Metro 输出的 IPv4 地址：
+
+```bash
+adb shell am start -a android.intent.action.VIEW \
+  -d 'exp+catdiary://expo-development-client/?url=http%3A%2F%2F开发机局域网IP%3A8081' \
+  com.haruka.catdiary
+```
+
+此方式只适用于已 USB 连接的 Android Development Build，拔线后必须切回同 Wi-Fi 局域网 API；不得用于 Preview、Production 或真实用户环境。
+
 - [ ] iPhone 真机安装并完成登录、建档、任务、记录、相册主流程
 - [ ] Android 真机安装并完成相同主流程
 - [ ] 相机、相册、通知权限的首次拒绝与再次开启路径正确
