@@ -631,7 +631,7 @@ export const authApi = {
     familyId: string,
     input: {
       clientId: string;
-      petId: string;
+      petId: string | null;
       type: ManualRecordType;
       title: string;
       occurredAt: string;
@@ -648,7 +648,7 @@ export const authApi = {
     familyId: string,
     input: {
       clientId: string;
-      petId: string;
+      petId: string | null;
       type: ManualRecordType;
       title: string;
       occurredAt: string;

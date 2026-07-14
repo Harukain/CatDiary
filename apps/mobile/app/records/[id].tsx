@@ -30,7 +30,9 @@ import {
   datePart,
   fieldConfig,
   initialRecordForm,
+  isRecordDraftReady,
   parseOccurredAt,
+  recordOwnerLabel,
   recordTitle,
   stoolOptions,
   timePart,
@@ -174,19 +176,20 @@ export default function RecordDetailScreen() {
     permissions?.edit.reason ?? '此记录类型需要在对应的猫咪档案中维护，当前页面仅提供查看。';
   const showSeparateDeleteReason =
     !permissions?.delete.allowed && permissions?.delete.reason !== readOnlyReason;
+  const canSave = type ? isRecordDraftReady(type, form, record.petId) : false;
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View>
           <Text style={styles.eyebrow}>
-            {typeLabels[record.type] ?? record.type} · {record.pet?.name ?? '家庭'}
+            {typeLabels[record.type] ?? record.type} · {recordOwnerLabel(record)}
           </Text>
           <Text style={styles.title}>{record.title}</Text>
           <Text style={styles.time}>
             {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
           </Text>
         </View>
-        {record.abnormal ? (
+        {record.abnormal && record.petId ? (
           <View style={styles.healthAction}>
             <Text style={styles.healthActionTitle}>持续观察这个异常</Text>
             <Text style={styles.healthActionBody}>
@@ -201,6 +204,13 @@ export default function RecordDetailScreen() {
                 })
               }
             />
+          </View>
+        ) : record.abnormal ? (
+          <View style={styles.healthAction}>
+            <Text style={styles.healthActionTitle}>公共猫砂盆异常观察</Text>
+            <Text style={styles.healthActionBody}>
+              这条记录暂未确认具体猫咪，不能直接建立单猫健康事件。确认归属后请新增对应症状记录。
+            </Text>
           </View>
         ) : null}
         <Card>
@@ -281,7 +291,7 @@ export default function RecordDetailScreen() {
                 placeholder="补充观察或反应"
               />
               {error ? <ErrorText>{error}</ErrorText> : null}
-              <PrimaryButton label="保存修改" busy={busy} onPress={save} />
+              <PrimaryButton label="保存修改" busy={busy} disabled={!canSave} onPress={save} />
             </>
           ) : (
             <>

@@ -29,7 +29,7 @@ import { RecordsService } from './records.service';
 const id = z.string().uuid();
 const base = z.object({
   clientId: z.string().uuid(),
-  petId: id,
+  petId: id.nullable().optional(),
   type: z.nativeEnum(RecordType),
   title: z.string().trim().min(1).max(100),
   occurredAt: z.string().datetime(),
@@ -38,7 +38,7 @@ const base = z.object({
   note: z.string().max(500).optional(),
 });
 const patch = z.object({
-  petId: id.optional(),
+  petId: id.nullable().optional(),
   title: z.string().trim().min(1).max(100).optional(),
   occurredAt: z.string().datetime().optional(),
   abnormal: z.boolean().optional(),
@@ -81,7 +81,11 @@ export class RecordsController {
     @Headers('idempotency-key') key?: string,
   ) {
     const input = parseWith(base, body);
-    const validated = { ...input, data: parseRecordData(input.type, input.data) };
+    const validated = {
+      ...input,
+      petId: input.petId ?? null,
+      data: parseRecordData(input.type, input.data),
+    };
     return this.idempotency.execute(user.sub, 'POST /records', key, validated, () =>
       this.records.create(family.familyId, user.sub, validated),
     );

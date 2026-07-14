@@ -121,6 +121,48 @@ const invalidStool = await request('/records', {
     data: { condition: 'INVALID', count: 1, blood: false },
   }),
 });
+const publicLitterClientId = crypto.randomUUID();
+const publicLitter = await request('/records', {
+  method: 'POST',
+  headers: { ...familyHeaders, 'Idempotency-Key': publicLitterClientId },
+  body: JSON.stringify({
+    clientId: publicLitterClientId,
+    petId: null,
+    type: 'LITTER',
+    title: '公共猫砂盆观察',
+    occurredAt: new Date().toISOString(),
+    abnormal: false,
+    data: { boxId: '客厅猫砂盆', observation: '已清理' },
+  }),
+});
+const missingPetClientId = crypto.randomUUID();
+const missingPet = await request('/records', {
+  method: 'POST',
+  headers: { ...familyHeaders, 'Idempotency-Key': missingPetClientId },
+  body: JSON.stringify({
+    clientId: missingPetClientId,
+    petId: null,
+    type: 'WEIGHT',
+    title: '缺少猫咪的体重记录',
+    occurredAt: new Date().toISOString(),
+    abnormal: false,
+    data: { weightKg: 4.1, method: 'SCALE' },
+  }),
+});
+const emptyLitterClientId = crypto.randomUUID();
+const emptyLitter = await request('/records', {
+  method: 'POST',
+  headers: { ...familyHeaders, 'Idempotency-Key': emptyLitterClientId },
+  body: JSON.stringify({
+    clientId: emptyLitterClientId,
+    petId: null,
+    type: 'LITTER',
+    title: '空猫砂盆记录',
+    occurredAt: new Date().toISOString(),
+    abnormal: false,
+    data: {},
+  }),
+});
 if (
   first.status !== 201 ||
   replay.body.id !== first.body.id ||
@@ -137,7 +179,11 @@ if (
   editedStool.body.data.condition !== 'NORMAL' ||
   editedStool.body.data.blood !== false ||
   editedStool.body.abnormal !== false ||
-  invalidStool.status !== 400
+  invalidStool.status !== 400 ||
+  publicLitter.status !== 201 ||
+  publicLitter.body.petId !== null ||
+  missingPet.status !== 422 ||
+  emptyLitter.status !== 400
 ) {
   throw new Error(
     JSON.stringify(
@@ -152,6 +198,9 @@ if (
         stool,
         editedStool,
         invalidStool,
+        publicLitter,
+        missingPet,
+        emptyLitter,
       },
       null,
       2,
@@ -168,5 +217,8 @@ console.log(
     stoolFields: true,
     occurrenceEdited: true,
     invalidStoolRejected: invalidStool.status,
+    publicLitterScope: publicLitter.body.petId,
+    missingPetRejected: missingPet.status,
+    emptyLitterRejected: emptyLitter.status,
   }),
 );

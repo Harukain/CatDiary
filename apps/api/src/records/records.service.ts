@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface RecordCreateInput {
   clientId: string;
-  petId: string;
+  petId: string | null;
   type: RecordType;
   title: string;
   occurredAt: string;
@@ -82,7 +82,7 @@ export class RecordsService {
   }
 
   async create(familyId: string, userId: string, input: RecordCreateInput) {
-    await this.requirePet(familyId, input.petId);
+    await this.requirePetScope(familyId, input.type, input.petId);
     const occurredAt = new Date(input.occurredAt);
     if (occurredAt.getTime() > Date.now() + 5 * 60_000)
       throw new AppException(
@@ -95,7 +95,7 @@ export class RecordsService {
       create: {
         familyId,
         authorId: userId,
-        petId: input.petId,
+        petId: input.petId ?? null,
         clientId: input.clientId,
         type: input.type,
         title: input.title.trim(),
@@ -121,7 +121,7 @@ export class RecordsService {
   ) {
     const current = await this.get(familyId, id);
     this.requireMutationPermission(current, userId, role, 'edit');
-    if (input.petId) await this.requirePet(familyId, input.petId);
+    if (input.petId !== undefined) await this.requirePetScope(familyId, current.type, input.petId);
     if (input.occurredAt && new Date(input.occurredAt).getTime() > Date.now() + 5 * 60_000)
       throw new AppException(
         'FUTURE_OCCURRED_AT',
@@ -131,7 +131,7 @@ export class RecordsService {
     const result = await this.prisma.record.updateMany({
       where: { id, familyId, version: input.version, status: RecordStatus.ACTIVE, deletedAt: null },
       data: {
-        ...(input.petId ? { petId: input.petId } : {}),
+        ...(input.petId !== undefined ? { petId: input.petId } : {}),
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
         ...(input.occurredAt ? { occurredAt: new Date(input.occurredAt) } : {}),
         ...(input.abnormal !== undefined ? { abnormal: input.abnormal } : {}),
@@ -186,6 +186,15 @@ export class RecordsService {
     });
     await this.audit(familyId, userId, 'record.restore', id, { type: current.type });
     return restored;
+  }
+
+  private async requirePetScope(familyId: string, type: RecordType, petId: string | null) {
+    if (petId) {
+      await this.requirePet(familyId, petId);
+      return;
+    }
+    if (type !== RecordType.LITTER)
+      throw new AppException('PET_REQUIRED', '该记录必须选择猫咪', HttpStatus.UNPROCESSABLE_ENTITY);
   }
 
   private async requirePet(familyId: string, petId: string) {

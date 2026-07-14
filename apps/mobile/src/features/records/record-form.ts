@@ -120,6 +120,7 @@ export function buildRecordData(
       if (!second) throw new Error('请填写剂量');
       return { drugName: first, dose: second };
     default:
+      if (!first && !second) throw new Error('请填写猫砂盆或观察内容');
       return { boxId: first || undefined, observation: second || undefined };
   }
 }
@@ -162,6 +163,25 @@ export function initialRecordForm(record: RecordSummary): RecordFormValue {
 }
 export function recordTitle(type: ManualRecordType, first: string) {
   return `${recordTypes.find((item) => item.value === type)?.label ?? '日常'}记录${type === 'MEDICATION' || type === 'FOOD' ? ` · ${first.trim()}` : ''}`;
+}
+export function recordRequiresPet(type: ManualRecordType) {
+  return type !== 'LITTER';
+}
+export function isRecordDraftReady(
+  type: ManualRecordType,
+  value: RecordFormValue,
+  petId: string | null,
+) {
+  if (recordRequiresPet(type) && !petId) return false;
+  const first = value.first.trim();
+  const second = value.second.trim();
+  if (type === 'FOOD' || type === 'MEDICATION') return Boolean(first && second);
+  if (type === 'LITTER') return Boolean(first || second);
+  return Boolean(first);
+}
+export function recordOwnerLabel(record: Pick<RecordSummary, 'pet' | 'type'>) {
+  if (record.pet?.name) return record.pet.name;
+  return record.type === 'LITTER' ? '公共猫砂盆' : '家庭';
 }
 export function datePart(value: Date | string = new Date()) {
   const date = new Date(value);

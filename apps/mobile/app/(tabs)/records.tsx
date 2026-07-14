@@ -14,6 +14,7 @@ import {
   getOfflineOperationCount,
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
+import { recordOwnerLabel } from '../../src/features/records/record-form';
 
 const labels: Record<string, string> = {
   FOOD: '饮食',
@@ -202,7 +203,7 @@ function RecordItem({ record, onPress }: { record: RecordSummary; onPress(): voi
         </View>
         <Text style={styles.recordTitle}>{record.title}</Text>
         <Text style={styles.recordMeta}>
-          {record.pet?.name ?? '家庭'} · {summary(record)}
+          {recordOwnerLabel(record)} · {summary(record)}
         </Text>
         {record.note ? <Text style={styles.note}>{record.note}</Text> : null}
         {record.abnormal ? <Text style={styles.abnormal}>已标记异常</Text> : null}
@@ -217,6 +218,7 @@ function summary(record: RecordSummary) {
   if (record.type === 'WATER') return `${d.amountMl} ml`;
   if (record.type === 'STOOL' || record.type === 'VOMIT') return `${d.count} 次`;
   if (record.type === 'MEDICATION') return `${d.drugName} ${d.dose}`;
+  if (record.type === 'LITTER') return String(d.observation ?? d.boxId ?? '已记录');
   return String(d.observation ?? '已记录');
 }
 function Insights({ records }: { records: RecordSummary[] }) {

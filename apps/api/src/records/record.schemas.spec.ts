@@ -21,4 +21,11 @@ describe('record payload validation', () => {
       parseRecordData(RecordType.MEDICATION, { drugName: '药品', dose: '1 片' }),
     ).toMatchObject({ dose: '1 片' });
   });
+
+  it('requires litter records to include a box or observation', () => {
+    expect(() => parseRecordData(RecordType.LITTER, {})).toThrow();
+    expect(parseRecordData(RecordType.LITTER, { observation: '已清理' })).toEqual({
+      observation: '已清理',
+    });
+  });
 });

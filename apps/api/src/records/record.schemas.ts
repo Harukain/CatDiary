@@ -64,7 +64,10 @@ export const recordDataSchemas = {
       boxId: z.string().trim().max(60).optional(),
       observation: z.string().trim().max(300).optional(),
     })
-    .strict(),
+    .strict()
+    .refine((value) => Boolean(value.boxId?.trim() || value.observation?.trim()), {
+      message: '请填写猫砂盆或观察内容',
+    }),
   [RecordType.PHOTO]: z.object({ photoIds: z.array(z.string().uuid()).min(1).max(9) }).strict(),
   [RecordType.HEALTH_NOTE]: z.object({ symptom: z.string().trim().min(1).max(200) }).strict(),
 } satisfies Record<RecordType, z.ZodType>;

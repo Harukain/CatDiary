@@ -7,6 +7,8 @@ function record(
     authorId: string;
     source: RecordSource;
     type: RecordType;
+    petId: string | null;
+    pet: { id: string; name: string } | null;
   }> = {},
 ) {
   return {
@@ -38,6 +40,7 @@ function fixture(current = record()) {
   const prisma = {
     record: {
       findFirst: vi.fn().mockResolvedValue(current),
+      upsert: vi.fn().mockResolvedValue(current),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     pet: { count: vi.fn().mockResolvedValue(1) },
@@ -47,6 +50,75 @@ function fixture(current = record()) {
 }
 
 const updateInput = { version: 1, title: '更新后的记录' };
+const createInput = {
+  clientId: 'client-id',
+  petId: 'pet-id' as string | null,
+  type: RecordType.WEIGHT,
+  title: '体重记录',
+  occurredAt: '2026-07-14T00:00:00.000Z',
+  abnormal: false,
+  data: { weightKg: 4.25, method: 'SCALE' },
+};
+
+describe('RecordsService pet scope', () => {
+  it('allows a manual litter observation to use the public litter box scope', async () => {
+    const { service, prisma } = fixture(
+      record({ type: RecordType.LITTER, petId: null, pet: null }),
+    );
+
+    await service.create('family-id', 'member-a', {
+      ...createInput,
+      petId: null,
+      type: RecordType.LITTER,
+      title: '铲屎记录',
+      data: { observation: '已清理' },
+    });
+
+    expect(prisma.pet.count).not.toHaveBeenCalled();
+    expect(prisma.record.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ petId: null, type: RecordType.LITTER }),
+      }),
+    );
+  });
+
+  it('rejects a non-litter manual record without a concrete pet', async () => {
+    const { service, prisma } = fixture();
+
+    await expect(
+      service.create('family-id', 'member-a', { ...createInput, petId: null }),
+    ).rejects.toMatchObject({ code: 'PET_REQUIRED', status: 422 });
+    expect(prisma.record.upsert).not.toHaveBeenCalled();
+  });
+
+  it('lets an owner move a litter record back to public litter box scope', async () => {
+    const { service, prisma } = fixture(record({ type: RecordType.LITTER }));
+
+    await service.update('family-id', 'owner-id', FamilyRole.OWNER, 'record-id', {
+      version: 1,
+      petId: null,
+    });
+
+    expect(prisma.pet.count).not.toHaveBeenCalled();
+    expect(prisma.record.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ petId: null }),
+      }),
+    );
+  });
+
+  it('does not let a non-litter record lose its pet scope', async () => {
+    const { service, prisma } = fixture();
+
+    await expect(
+      service.update('family-id', 'member-a', FamilyRole.MEMBER, 'record-id', {
+        version: 1,
+        petId: null,
+      }),
+    ).rejects.toMatchObject({ code: 'PET_REQUIRED', status: 422 });
+    expect(prisma.record.updateMany).not.toHaveBeenCalled();
+  });
+});
 
 describe('RecordsService mutation permissions', () => {
   it('rejects direct edits of task-generated records even for an owner', async () => {

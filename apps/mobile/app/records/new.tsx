@@ -23,7 +23,9 @@ import {
   buildRecordData,
   datePart,
   fieldConfig,
+  isRecordDraftReady,
   parseOccurredAt,
+  recordRequiresPet,
   recordTitle,
   recordTypes,
   stoolOptions,
@@ -36,7 +38,7 @@ export default function NewRecordScreen() {
   const router = useRouter();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
-  const [petId, setPetId] = useState('');
+  const [petId, setPetId] = useState<string | null>(null);
   const [type, setType] = useState<ManualRecordType>('FOOD');
   const [form, setForm] = useState<RecordFormValue>({ first: '', second: '', blood: false });
   const [occurredDate, setOccurredDate] = useState(datePart());
@@ -51,7 +53,7 @@ export default function NewRecordScreen() {
       .listPets(session.accessToken, activeFamily.id)
       .then((items) => {
         setPets(items);
-        setPetId(items[0]?.id ?? '');
+        setPetId(items[0]?.id ?? null);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : '猫咪加载失败'));
   }, [activeFamily, session]);
@@ -63,10 +65,17 @@ export default function NewRecordScreen() {
     });
     setError('');
   }, [type]);
+  useEffect(() => {
+    if (type !== 'LITTER' && !petId) setPetId(pets[0]?.id ?? null);
+  }, [petId, pets, type]);
   const fields = useMemo(() => fieldConfig(type), [type]);
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
+  const canSubmit = isRecordDraftReady(type, form, petId);
   async function submit() {
-    if (!session || !activeFamily || !petId) return setError('请选择猫咪');
+    if (!session || !activeFamily) return setError('登录状态已失效，请重新登录');
+    if (recordRequiresPet(type) && !petId) return setError('请选择猫咪');
+    if (!canSubmit)
+      return setError(type === 'LITTER' ? '请填写猫砂盆或观察内容' : '请完整填写必填内容');
     let data: Record<string, unknown>;
     let occurredAt: string;
     try {
@@ -77,7 +86,7 @@ export default function NewRecordScreen() {
     }
     const input = {
       clientId: uuid(),
-      petId,
+      petId: type === 'LITTER' ? petId : petId!,
       type,
       title: recordTitle(type, form.first),
       occurredAt,
@@ -118,8 +127,14 @@ export default function NewRecordScreen() {
             <Text style={styles.subtitle}>记录实际发生的情况，不会生成待办任务</Text>
           </View>
           <Card>
-            <Text style={styles.section}>选择猫咪</Text>
+            <Text style={styles.section}>{type === 'LITTER' ? '选择归属' : '选择猫咪'}</Text>
+            {type === 'LITTER' ? (
+              <Text style={styles.sectionHint}>不确定是哪只猫时，选择公共猫砂盆。</Text>
+            ) : null}
             <View style={styles.chips}>
+              {type === 'LITTER' ? (
+                <Chip active={petId === null} label="公共猫砂盆" onPress={() => setPetId(null)} />
+              ) : null}
               {pets.map((pet) => (
                 <Chip
                   key={pet.id}
@@ -216,12 +231,7 @@ export default function NewRecordScreen() {
               onChange={setAbnormal}
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
-            <PrimaryButton
-              label="保存记录"
-              busy={busy}
-              disabled={!petId || !form.first.trim()}
-              onPress={submit}
-            />
+            <PrimaryButton label="保存记录" busy={busy} disabled={!canSubmit} onPress={submit} />
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -279,6 +289,7 @@ const styles = StyleSheet.create({
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   section: { ...typography.h3, color: colors.ink, marginTop: spacing.sm },
+  sectionHint: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.ink },
   optionBlock: { gap: spacing.sm, marginTop: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
