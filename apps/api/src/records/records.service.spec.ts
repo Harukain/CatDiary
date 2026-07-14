@@ -9,6 +9,7 @@ function record(
     type: RecordType;
     petId: string | null;
     pet: { id: string; name: string } | null;
+    data: Record<string, unknown>;
   }> = {},
 ) {
   return {
@@ -44,8 +45,16 @@ function fixture(current = record()) {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     pet: { count: vi.fn().mockResolvedValue(1) },
+    photo: { count: vi.fn().mockResolvedValue(1) },
+    photoRecord: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     auditLog: { create: vi.fn().mockResolvedValue({ id: 'audit-id' }) },
   };
+  Object.assign(prisma, {
+    $transaction: vi.fn(async (callback: (client: typeof prisma) => unknown) => callback(prisma)),
+  });
   return { service: new RecordsService(prisma as never), prisma };
 }
 
@@ -88,6 +97,47 @@ describe('RecordsService pet scope', () => {
     await expect(
       service.create('family-id', 'member-a', { ...createInput, petId: null }),
     ).rejects.toMatchObject({ code: 'PET_REQUIRED', status: 422 });
+    expect(prisma.record.upsert).not.toHaveBeenCalled();
+  });
+
+  it('links photo records to active photos bound to the record pet', async () => {
+    const photoRecord = record({
+      type: RecordType.PHOTO,
+      data: { photoIds: ['11111111-1111-4111-8111-111111111111'] },
+    });
+    const { service, prisma } = fixture(photoRecord);
+
+    await service.create('family-id', 'member-a', {
+      ...createInput,
+      type: RecordType.PHOTO,
+      title: '照片记录',
+      data: { photoIds: ['11111111-1111-4111-8111-111111111111'] },
+    });
+
+    expect(prisma.photo.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        familyId: 'family-id',
+        pets: { some: { petId: 'pet-id' } },
+      }),
+    });
+    expect(prisma.photoRecord.createMany).toHaveBeenCalledWith({
+      data: [{ photoId: '11111111-1111-4111-8111-111111111111', recordId: 'record-id' }],
+      skipDuplicates: true,
+    });
+  });
+
+  it('rejects photo records when photos are not bound to the selected pet', async () => {
+    const { service, prisma } = fixture();
+    prisma.photo.count.mockResolvedValue(0);
+
+    await expect(
+      service.create('family-id', 'member-a', {
+        ...createInput,
+        type: RecordType.PHOTO,
+        title: '照片记录',
+        data: { photoIds: ['11111111-1111-4111-8111-111111111111'] },
+      }),
+    ).rejects.toMatchObject({ code: 'PHOTO_RECORD_SCOPE_INVALID', status: 422 });
     expect(prisma.record.upsert).not.toHaveBeenCalled();
   });
 

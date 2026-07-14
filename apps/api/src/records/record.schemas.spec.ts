@@ -28,4 +28,13 @@ describe('record payload validation', () => {
       observation: '已清理',
     });
   });
+
+  it('requires photo records to contain unique photo ids', () => {
+    const photoId = '11111111-1111-4111-8111-111111111111';
+
+    expect(parseRecordData(RecordType.PHOTO, { photoIds: [photoId] })).toEqual({
+      photoIds: [photoId],
+    });
+    expect(() => parseRecordData(RecordType.PHOTO, { photoIds: [photoId, photoId] })).toThrow();
+  });
 });

@@ -1,5 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { FamilyRole, Prisma, RecordSource, RecordStatus, RecordType } from '@prisma/client';
+import {
+  FamilyRole,
+  PhotoStatus,
+  Prisma,
+  RecordSource,
+  RecordStatus,
+  RecordType,
+} from '@prisma/client';
 import { AppException } from '../common/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -83,6 +90,9 @@ export class RecordsService {
 
   async create(familyId: string, userId: string, input: RecordCreateInput) {
     await this.requirePetScope(familyId, input.type, input.petId);
+    const photoIds = input.type === RecordType.PHOTO ? this.photoIdsFromData(input.data) : [];
+    if (input.type === RecordType.PHOTO)
+      await this.requirePhotoScope(familyId, input.petId, photoIds);
     const occurredAt = new Date(input.occurredAt);
     if (occurredAt.getTime() > Date.now() + 5 * 60_000)
       throw new AppException(
@@ -90,22 +100,26 @@ export class RecordsService {
         '发生时间不能晚于当前时间',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
-    return this.prisma.record.upsert({
-      where: { familyId_clientId: { familyId, clientId: input.clientId } },
-      create: {
-        familyId,
-        authorId: userId,
-        petId: input.petId ?? null,
-        clientId: input.clientId,
-        type: input.type,
-        title: input.title.trim(),
-        occurredAt,
-        abnormal: input.abnormal,
-        data: input.data as Prisma.InputJsonValue,
-        note: input.note?.trim() || null,
-      },
-      update: {},
-      select: this.selection,
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.record.upsert({
+        where: { familyId_clientId: { familyId, clientId: input.clientId } },
+        create: {
+          familyId,
+          authorId: userId,
+          petId: input.petId ?? null,
+          clientId: input.clientId,
+          type: input.type,
+          title: input.title.trim(),
+          occurredAt,
+          abnormal: input.abnormal,
+          data: input.data as Prisma.InputJsonValue,
+          note: input.note?.trim() || null,
+        },
+        update: {},
+        select: this.selection,
+      });
+      if (input.type === RecordType.PHOTO) await this.replacePhotoLinks(tx, created.id, photoIds);
+      return created;
     });
   }
 
@@ -195,6 +209,59 @@ export class RecordsService {
     }
     if (type !== RecordType.LITTER)
       throw new AppException('PET_REQUIRED', '该记录必须选择猫咪', HttpStatus.UNPROCESSABLE_ENTITY);
+  }
+
+  private photoIdsFromData(data: unknown) {
+    const photoIds =
+      data && typeof data === 'object' && Array.isArray((data as { photoIds?: unknown }).photoIds)
+        ? (data as { photoIds: unknown[] }).photoIds
+        : null;
+    if (!photoIds?.length)
+      throw new AppException(
+        'PHOTO_IDS_REQUIRED',
+        '照片记录必须包含照片',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    const values = photoIds.map(String);
+    if (new Set(values).size !== values.length)
+      throw new AppException(
+        'PHOTO_IDS_DUPLICATED',
+        '照片不能重复',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    return values;
+  }
+
+  private async requirePhotoScope(familyId: string, petId: string | null, photoIds: string[]) {
+    if (!petId)
+      throw new AppException('PET_REQUIRED', '该记录必须选择猫咪', HttpStatus.UNPROCESSABLE_ENTITY);
+    const count = await this.prisma.photo.count({
+      where: {
+        id: { in: photoIds },
+        familyId,
+        status: PhotoStatus.ACTIVE,
+        deletedAt: null,
+        pets: { some: { petId } },
+      },
+    });
+    if (count !== photoIds.length)
+      throw new AppException(
+        'PHOTO_RECORD_SCOPE_INVALID',
+        '照片不存在或未绑定当前猫咪',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+  }
+
+  private async replacePhotoLinks(
+    tx: Prisma.TransactionClient,
+    recordId: string,
+    photoIds: string[],
+  ) {
+    await tx.photoRecord.deleteMany({ where: { recordId } });
+    await tx.photoRecord.createMany({
+      data: photoIds.map((photoId) => ({ photoId, recordId })),
+      skipDuplicates: true,
+    });
   }
 
   private async requirePet(familyId: string, petId: string) {

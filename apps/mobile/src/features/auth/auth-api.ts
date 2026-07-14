@@ -152,6 +152,7 @@ export interface NotificationLogSummary {
 }
 export type ManualRecordType =
   'FOOD' | 'WATER' | 'WEIGHT' | 'STOOL' | 'VOMIT' | 'MEDICATION' | 'LITTER';
+export type CreatableRecordType = ManualRecordType | 'PHOTO';
 export interface RecordSummary {
   id: string;
   clientId: string;
@@ -632,7 +633,7 @@ export const authApi = {
     input: {
       clientId: string;
       petId: string | null;
-      type: ManualRecordType;
+      type: CreatableRecordType;
       title: string;
       occurredAt: string;
       abnormal: boolean;
@@ -649,7 +650,7 @@ export const authApi = {
     input: {
       clientId: string;
       petId: string | null;
-      type: ManualRecordType;
+      type: CreatableRecordType;
       title: string;
       occurredAt: string;
       abnormal: boolean;

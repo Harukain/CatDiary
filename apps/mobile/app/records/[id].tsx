@@ -51,6 +51,7 @@ const typeLabels: Record<string, string> = {
   VACCINE: '疫苗',
   DEWORMING: '驱虫',
   LITTER: '铲屎',
+  PHOTO: '照片',
 };
 const manualTypes = new Set<string>([
   'FOOD',
@@ -296,12 +297,10 @@ export default function RecordDetailScreen() {
           ) : (
             <>
               <Text style={styles.sectionTitle}>记录内容</Text>
-              {Object.entries(record.data).map(([key, value]) => (
-                <View key={key} style={styles.dataRow}>
-                  <Text style={styles.dataLabel}>{key}</Text>
-                  <Text style={styles.dataValue}>
-                    {typeof value === 'boolean' ? (value ? '是' : '否') : String(value)}
-                  </Text>
+              {recordDataRows(record).map((row) => (
+                <View key={row.label} style={styles.dataRow}>
+                  <Text style={styles.dataLabel}>{row.label}</Text>
+                  <Text style={styles.dataValue}>{row.value}</Text>
                 </View>
               ))}
               {record.note ? (
@@ -339,6 +338,16 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
+}
+function recordDataRows(record: RecordSummary) {
+  if (record.type === 'PHOTO') {
+    const count = Array.isArray(record.data.photoIds) ? record.data.photoIds.length : 0;
+    return [{ label: '照片数量', value: count ? `${count} 张` : '照片记录' }];
+  }
+  return Object.entries(record.data).map(([label, value]) => ({
+    label,
+    value: typeof value === 'boolean' ? (value ? '是' : '否') : String(value),
+  }));
 }
 function SwitchRow({
   title,

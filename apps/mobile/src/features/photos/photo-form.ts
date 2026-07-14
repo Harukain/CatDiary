@@ -26,6 +26,28 @@ export function samePhotoPetSelection(left: string[], right: string[]) {
   return left.every((petId) => rightSet.has(petId));
 }
 
+export function buildPhotoRecordInput(input: {
+  clientId: string;
+  petIds: string[];
+  photoIds: string[];
+  note: string;
+  occurredAt: string;
+}) {
+  const petId = input.petIds[0];
+  const photoIds = unique(input.photoIds);
+  if (!petId || !photoIds.length) return null;
+  return {
+    clientId: input.clientId,
+    petId,
+    type: 'PHOTO' as const,
+    title: photoIds.length === 1 ? '照片记录' : `照片记录 · ${photoIds.length} 张`,
+    occurredAt: input.occurredAt,
+    abnormal: false,
+    data: { photoIds },
+    note: input.note.trim() || undefined,
+  };
+}
+
 function unique(values: string[]) {
   return Array.from(new Set(values));
 }

@@ -68,7 +68,15 @@ export const recordDataSchemas = {
     .refine((value) => Boolean(value.boxId?.trim() || value.observation?.trim()), {
       message: '请填写猫砂盆或观察内容',
     }),
-  [RecordType.PHOTO]: z.object({ photoIds: z.array(z.string().uuid()).min(1).max(9) }).strict(),
+  [RecordType.PHOTO]: z
+    .object({
+      photoIds: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(9)
+        .refine((values) => new Set(values).size === values.length, '照片不能重复'),
+    })
+    .strict(),
   [RecordType.HEALTH_NOTE]: z.object({ symptom: z.string().trim().min(1).max(200) }).strict(),
 } satisfies Record<RecordType, z.ZodType>;
 

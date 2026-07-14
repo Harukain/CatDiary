@@ -26,6 +26,7 @@ const labels: Record<string, string> = {
   VACCINE: '疫苗',
   DEWORMING: '驱虫',
   LITTER: '铲屎',
+  PHOTO: '照片',
 };
 
 export default function RecordsTab() {
@@ -219,6 +220,10 @@ function summary(record: RecordSummary) {
   if (record.type === 'STOOL' || record.type === 'VOMIT') return `${d.count} 次`;
   if (record.type === 'MEDICATION') return `${d.drugName} ${d.dose}`;
   if (record.type === 'LITTER') return String(d.observation ?? d.boxId ?? '已记录');
+  if (record.type === 'PHOTO') {
+    const count = Array.isArray(d.photoIds) ? d.photoIds.length : 0;
+    return count ? `${count} 张照片` : '照片记录';
+  }
   return String(d.observation ?? '已记录');
 }
 function Insights({ records }: { records: RecordSummary[] }) {

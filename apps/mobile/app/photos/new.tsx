@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-import { authApi, type PetSummary } from '../../src/features/auth/auth-api';
+import { authApi, type PetSummary, type PhotoSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import {
+  enqueueOfflineOperation,
+  isNetworkFailure,
+} from '../../src/features/offline/offline-queue';
 import {
   discardPhotoUpload,
   enqueuePhotoUpload,
@@ -14,7 +18,10 @@ import {
   processPhotoUpload,
   type PhotoUploadQueueItem,
 } from '../../src/features/photos/photo-upload-queue';
-import { resolveInitialPhotoPetIds } from '../../src/features/photos/photo-form';
+import {
+  buildPhotoRecordInput,
+  resolveInitialPhotoPetIds,
+} from '../../src/features/photos/photo-form';
 import {
   ErrorText,
   Field,
@@ -32,6 +39,7 @@ type UploadItem = {
   state: 'READY' | 'UPLOADING' | 'DONE' | 'FAILED';
   progress: number;
   error?: string;
+  photo?: PhotoSummary;
   queued?: PhotoUploadQueueItem;
 };
 
@@ -115,7 +123,7 @@ export default function NewPhotoRoute() {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
   async function uploadOne(item: UploadItem) {
-    if (!session || !activeFamily) return false;
+    if (!session || !activeFamily) return null;
     try {
       update(item.id, { state: 'UPLOADING', progress: 10, error: undefined });
       let queued = item.queued;
@@ -145,17 +153,17 @@ export default function NewPhotoRoute() {
         });
         update(item.id, { queued, uri: queued.fileUri, progress: 20 });
       }
-      await processPhotoUpload(session.accessToken, queued, (progress) =>
+      const photo = await processPhotoUpload(session.accessToken, queued, (progress) =>
         update(item.id, { progress }),
       );
-      update(item.id, { state: 'DONE', progress: 100 });
-      return true;
+      update(item.id, { state: 'DONE', progress: 100, photo });
+      return photo;
     } catch (cause) {
       update(item.id, {
         state: 'FAILED',
         error: cause instanceof Error ? cause.message : '上传失败',
       });
-      return false;
+      return null;
     }
   }
   async function removeItem(item: UploadItem) {
@@ -167,12 +175,41 @@ export default function NewPhotoRoute() {
     setBusy(true);
     setError('');
     const pending = items.filter((item) => item.state !== 'DONE');
-    const results = [];
+    const results: Array<PhotoSummary | null> = [];
     for (const item of pending) results.push(await uploadOne(item));
-    setBusy(false);
-    if (results.length && results.every(Boolean))
+    const uploadedPhotos = [
+      ...items.flatMap((item) => (item.photo ? [item.photo] : [])),
+      ...results.filter((photo): photo is PhotoSummary => Boolean(photo)),
+    ];
+    if (results.length && results.every(Boolean) && uploadedPhotos.length) {
+      const recordInput = buildPhotoRecordInput({
+        clientId: uuid(),
+        petIds,
+        photoIds: uploadedPhotos.map((photo) => photo.id),
+        note,
+        occurredAt: new Date().toISOString(),
+      });
+      if (recordInput && session && activeFamily) {
+        const operation = authApi.createRecordOperation(activeFamily.id, recordInput);
+        try {
+          await authApi.createRecord(session.accessToken, activeFamily.id, recordInput);
+        } catch (cause) {
+          if (isNetworkFailure(cause)) {
+            await enqueueOfflineOperation(operation);
+            Alert.alert('照片已上传', '记录已保存到本机，联网后会进入时间线。');
+          } else {
+            setError(cause instanceof Error ? cause.message : '照片已上传，但记录时间线生成失败');
+            setBusy(false);
+            return;
+          }
+        }
+      }
+      setBusy(false);
       router.replace({ pathname: '/photos', params: petIds[0] ? { petId: petIds[0] } : undefined });
-    else setError('部分照片没有上传成功，可以点击重试失败项。');
+    } else {
+      setBusy(false);
+      setError('部分照片没有上传成功，可以点击重试失败项。');
+    }
   }
   function togglePet(id: string) {
     setPetIds((current) =>
@@ -285,6 +322,12 @@ export default function NewPhotoRoute() {
 function paramValue(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = (Math.random() * 16) | 0;
+    return (char === 'x' ? value : (value & 3) | 8).toString(16);
+  });
 }
 function PickerButton({
   icon,

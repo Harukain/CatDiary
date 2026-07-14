@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPhotoRecordInput,
   resolveInitialPhotoPetIds,
   resolvePhotoFilterPetId,
   samePhotoPetSelection,
@@ -33,5 +34,47 @@ describe('photo form pet context rules', () => {
   it('compares pet selections as sets', () => {
     expect(samePhotoPetSelection(['pet-a', 'pet-b'], ['pet-b', 'pet-a'])).toBe(true);
     expect(samePhotoPetSelection(['pet-a'], ['pet-a', 'pet-b'])).toBe(false);
+  });
+
+  it('builds a timeline record for uploaded photos using the primary selected pet', () => {
+    expect(
+      buildPhotoRecordInput({
+        clientId: 'client-id',
+        petIds: ['pet-b', 'pet-a'],
+        photoIds: ['photo-a', 'photo-b', 'photo-a'],
+        note: '  阳台晒太阳  ',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+      }),
+    ).toEqual({
+      clientId: 'client-id',
+      petId: 'pet-b',
+      type: 'PHOTO',
+      title: '照片记录 · 2 张',
+      occurredAt: '2026-07-15T00:00:00.000Z',
+      abnormal: false,
+      data: { photoIds: ['photo-a', 'photo-b'] },
+      note: '阳台晒太阳',
+    });
+  });
+
+  it('does not build a photo timeline record without a pet or photo', () => {
+    expect(
+      buildPhotoRecordInput({
+        clientId: 'client-id',
+        petIds: [],
+        photoIds: ['photo-a'],
+        note: '',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+      }),
+    ).toBeNull();
+    expect(
+      buildPhotoRecordInput({
+        clientId: 'client-id',
+        petIds: ['pet-a'],
+        photoIds: [],
+        note: '',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+      }),
+    ).toBeNull();
   });
 });
