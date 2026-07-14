@@ -28,6 +28,7 @@ export interface RecordFormValue {
   second: string;
   blood: boolean;
 }
+type PetOption = { id: string; name: string };
 
 export function fieldConfig(type: ManualRecordType) {
   switch (type) {
@@ -182,6 +183,21 @@ export function isRecordDraftReady(
 export function recordOwnerLabel(record: Pick<RecordSummary, 'pet' | 'type'>) {
   if (record.pet?.name) return record.pet.name;
   return record.type === 'LITTER' ? '公共猫砂盆' : '家庭';
+}
+export function resolveInitialRecordPetId(
+  pets: Array<Pick<PetOption, 'id'>>,
+  requestedPetId?: string | null,
+) {
+  if (requestedPetId && pets.some((pet) => pet.id === requestedPetId)) return requestedPetId;
+  return pets[0]?.id ?? null;
+}
+export function recordDraftOwnerLabel(
+  type: ManualRecordType,
+  pets: PetOption[],
+  petId: string | null,
+) {
+  if (type === 'LITTER' && !petId) return '公共猫砂盆';
+  return pets.find((pet) => pet.id === petId)?.name ?? '未选择猫咪';
 }
 export function datePart(value: Date | string = new Date()) {
   const date = new Date(value);

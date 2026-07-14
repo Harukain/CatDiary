@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type ManualRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -25,9 +25,11 @@ import {
   fieldConfig,
   isRecordDraftReady,
   parseOccurredAt,
+  recordDraftOwnerLabel,
   recordRequiresPet,
   recordTitle,
   recordTypes,
+  resolveInitialRecordPetId,
   stoolOptions,
   timePart,
   vomitOptions,
@@ -36,6 +38,7 @@ import {
 
 export default function NewRecordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
@@ -47,16 +50,20 @@ export default function NewRecordScreen() {
   const [abnormal, setAbnormal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const routePetId = useMemo(
+    () => paramValue(params.petId) ?? paramValue(params.pet),
+    [params.pet, params.petId],
+  );
   useEffect(() => {
     if (!session || !activeFamily) return;
     void authApi
       .listPets(session.accessToken, activeFamily.id)
       .then((items) => {
         setPets(items);
-        setPetId(items[0]?.id ?? null);
+        setPetId(resolveInitialRecordPetId(items, routePetId));
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : '猫咪加载失败'));
-  }, [activeFamily, session]);
+  }, [activeFamily, routePetId, session]);
   useEffect(() => {
     setForm({
       first: '',
@@ -71,6 +78,7 @@ export default function NewRecordScreen() {
   const fields = useMemo(() => fieldConfig(type), [type]);
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
   const canSubmit = isRecordDraftReady(type, form, petId);
+  const ownerLabel = useMemo(() => recordDraftOwnerLabel(type, pets, petId), [petId, pets, type]);
   async function submit() {
     if (!session || !activeFamily) return setError('登录状态已失效，请重新登录');
     if (recordRequiresPet(type) && !petId) return setError('请选择猫咪');
@@ -143,6 +151,10 @@ export default function NewRecordScreen() {
                   onPress={() => setPetId(pet.id)}
                 />
               ))}
+            </View>
+            <View style={styles.ownerNotice}>
+              <Text style={styles.ownerNoticeLabel}>提交归属</Text>
+              <Text style={styles.ownerNoticeValue}>{ownerLabel}</Text>
             </View>
             <Text style={styles.section}>记录类型</Text>
             <View style={styles.chips}>
@@ -283,6 +295,10 @@ function uuid() {
     return (char === 'x' ? value : (value & 3) | 8).toString(16);
   });
 }
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { gap: spacing.xl, paddingBottom: 80 },
@@ -293,6 +309,19 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.ink },
   optionBlock: { gap: spacing.sm, marginTop: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  ownerNotice: {
+    minHeight: 48,
+    borderRadius: radii.input,
+    backgroundColor: colors.brandSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  ownerNoticeLabel: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  ownerNoticeValue: { ...typography.secondary, color: colors.ink, fontWeight: '700' },
   chip: {
     borderRadius: radii.pill,
     borderWidth: 1,

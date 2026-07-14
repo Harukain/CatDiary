@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRecordData,
   isRecordDraftReady,
+  recordDraftOwnerLabel,
   recordOwnerLabel,
   recordRequiresPet,
+  resolveInitialRecordPetId,
   type RecordFormValue,
 } from './record-form';
 
@@ -33,5 +35,19 @@ describe('record form rules', () => {
     expect(recordOwnerLabel({ type: 'LITTER', pet: null })).toBe('公共猫砂盆');
     expect(recordOwnerLabel({ type: 'FOOD', pet: null })).toBe('家庭');
     expect(recordOwnerLabel({ type: 'LITTER', pet: { id: 'pet-id', name: '福宝' } })).toBe('福宝');
+  });
+
+  it('prefills record ownership from a valid route pet and falls back safely', () => {
+    const pets = [
+      { id: 'pet-a', name: '福宝' },
+      { id: 'pet-b', name: '年糕' },
+    ];
+
+    expect(resolveInitialRecordPetId(pets, 'pet-b')).toBe('pet-b');
+    expect(resolveInitialRecordPetId(pets, 'missing')).toBe('pet-a');
+    expect(resolveInitialRecordPetId([], 'pet-b')).toBeNull();
+    expect(recordDraftOwnerLabel('FOOD', pets, 'pet-b')).toBe('年糕');
+    expect(recordDraftOwnerLabel('FOOD', pets, null)).toBe('未选择猫咪');
+    expect(recordDraftOwnerLabel('LITTER', pets, null)).toBe('公共猫砂盆');
   });
 });

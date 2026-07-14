@@ -236,6 +236,16 @@ export default function PetDetailRoute() {
               <View style={styles.quickActions}>
                 <Pressable
                   accessibilityRole="button"
+                  onPress={() =>
+                    router.push({ pathname: '/records/new', params: { petId: pet.id } })
+                  }
+                  style={styles.quickAction}
+                >
+                  <Ionicons name="create-outline" size={18} color={colors.brand} />
+                  <Text style={styles.quickActionText}>记录</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
                   onPress={() => router.push({ pathname: '/photos', params: { petId: pet.id } })}
                   style={styles.quickAction}
                 >
