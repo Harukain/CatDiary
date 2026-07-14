@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type MedicalRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { isMedicalRecordDraftDirty } from '../../src/features/medical/medical-form';
 import {
   Card,
   ErrorText,
@@ -20,11 +22,14 @@ const types: Array<{ value: MedicalRecordType; label: string }> = [
 export default function NewMedicalRecordScreen() {
   const router = useRouter();
   const { session, activeFamily } = useSession();
+  const initialOccurredDate = useRef(today()).current;
+  const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState('');
+  const [initialPetId, setInitialPetId] = useState('');
   const [type, setType] = useState<MedicalRecordType>('VACCINE');
   const [title, setTitle] = useState('');
-  const [occurredDate, setOccurredDate] = useState(today());
+  const [occurredDate, setOccurredDate] = useState(initialOccurredDate);
   const [nextDate, setNextDate] = useState('');
   const [brand, setBrand] = useState('');
   const [batch, setBatch] = useState('');
@@ -38,9 +43,68 @@ export default function NewMedicalRecordScreen() {
     if (!session || !activeFamily) return;
     void authApi.listPets(session.accessToken, activeFamily.id).then((items) => {
       setPets(items);
-      setPetId(items[0]?.id ?? '');
+      const nextPetId = items[0]?.id ?? '';
+      setPetId(nextPetId);
+      setInitialPetId(nextPetId);
     });
   }, [activeFamily, session]);
+  const isDirty = useMemo(
+    () =>
+      isMedicalRecordDraftDirty(
+        {
+          petId,
+          type,
+          title,
+          occurredDate,
+          nextDate,
+          brand,
+          batch,
+          dose,
+          provider,
+          reaction,
+          note,
+        },
+        { petId: initialPetId, type: 'VACCINE', occurredDate: initialOccurredDate },
+      ),
+    [
+      batch,
+      brand,
+      dose,
+      initialOccurredDate,
+      initialPetId,
+      nextDate,
+      note,
+      occurredDate,
+      petId,
+      provider,
+      reaction,
+      title,
+      type,
+    ],
+  );
+  const requestClose = useCallback(() => {
+    if (busy) return;
+    if (!isDirty || allowLeave.current) return router.back();
+    Alert.alert('放弃未保存的医疗档案？', '当前填写的医疗信息尚未保存，离开后需要重新填写。', [
+      { text: '继续填写', style: 'cancel' },
+      {
+        text: '放弃',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, isDirty, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isDirty || allowLeave.current) return false;
+      requestClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily || !petId) return setError('请选择猫咪');
     let occurredAt: string;
@@ -70,6 +134,7 @@ export default function NewMedicalRecordScreen() {
         note: note.trim() || undefined,
       });
       Alert.alert('已保存', '医疗档案已加入猫咪记录');
+      allowLeave.current = true;
       router.back();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '保存失败');
@@ -80,9 +145,24 @@ export default function NewMedicalRecordScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View>
-          <Text style={styles.eyebrow}>管理员维护</Text>
-          <Text style={styles.title}>新增医疗档案</Text>
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="关闭新增医疗档案"
+            disabled={busy}
+            onPress={requestClose}
+            style={({ pressed }) => [
+              styles.navButton,
+              busy && styles.navButtonDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="close" size={23} color={colors.ink} />
+          </Pressable>
+          <View style={styles.navCopy}>
+            <Text style={styles.eyebrow}>管理员维护</Text>
+            <Text style={styles.title}>新增医疗档案</Text>
+          </View>
         </View>
         <Card>
           <Text style={styles.section}>猫咪</Text>
@@ -164,7 +244,7 @@ export default function NewMedicalRecordScreen() {
             onPress={submit}
           />
         </Card>
-        <TextButton label="取消" onPress={() => router.back()} />
+        <TextButton label="取消" disabled={busy} onPress={requestClose} />
       </ScrollView>
     </Screen>
   );
@@ -190,6 +270,10 @@ function parseDate(value: string, todayAsNow = false) {
 }
 const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: 70 },
+  nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  navButtonDisabled: { opacity: 0.45 },
+  navCopy: { flex: 1 },
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   section: { ...typography.h3, color: colors.ink, marginTop: spacing.sm },
@@ -204,4 +288,5 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.surface },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
