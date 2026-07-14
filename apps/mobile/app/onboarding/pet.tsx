@@ -21,6 +21,20 @@ export default function CreateFirstPetRoute() {
   const [error, setError] = useState('');
   if (!session) return <Redirect href="/(auth)/login" />;
   if (!activeFamily) return <Redirect href="/onboarding/family" />;
+  const canManage = activeFamily.role === 'OWNER' || activeFamily.role === 'ADMIN';
+
+  if (!canManage) {
+    return (
+      <Screen>
+        <BrandHeader title="添加猫咪" subtitle={`当前家庭：${activeFamily.name}`} />
+        <Card>
+          <Title>需要管理员权限</Title>
+          <Body>只有家庭创建者或管理员可以添加猫咪档案。</Body>
+          <TextButton label="返回猫咪档案" onPress={() => router.replace('/pets')} />
+        </Card>
+      </Screen>
+    );
+  }
 
   async function submit() {
     if (!name.trim() || busy) return;

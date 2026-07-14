@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FamilyRole } from '@prisma/client';
 import { z } from 'zod';
+import { isValidCalendarDate } from '@cat-diary/domain';
 import { petNameSchema } from '@cat-diary/validation';
 import { AccessTokenGuard } from '../auth/access-token.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -29,12 +30,7 @@ const idSchema = z.string().uuid();
 const birthDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine(
-    (value) =>
-      !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) &&
-      new Date(`${value}T00:00:00.000Z`) <= new Date(),
-    '出生日期不能晚于今天',
-  );
+  .refine(isValidCalendarDate, '请输入真实的出生日期');
 const petFields = {
   name: petNameSchema,
   sex: z.enum(['MALE', 'FEMALE', 'UNKNOWN']).optional(),
@@ -90,10 +86,11 @@ export class PetsController {
   @FamilyRoles(FamilyRole.OWNER, FamilyRole.ADMIN)
   remove(
     @CurrentFamily() family: FamilyContext,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id') id: string,
     @Headers('if-match') versionHeader?: string,
   ) {
     const version = parseWith(z.coerce.number().int().positive(), versionHeader);
-    return this.pets.remove(family.familyId, parseWith(idSchema, id), version);
+    return this.pets.remove(family.familyId, user.sub, parseWith(idSchema, id), version);
   }
 }

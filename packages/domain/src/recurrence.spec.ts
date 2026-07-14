@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOfflineFailure, generateOccurrences } from './index';
+import {
+  classifyOfflineFailure,
+  generateOccurrences,
+  isCalendarDateOnOrBefore,
+  isValidCalendarDate,
+} from './index';
 
 describe('generateOccurrences', () => {
   it('generates daily occurrences in the plan timezone', () => {
@@ -66,5 +71,21 @@ describe('classifyOfflineFailure', () => {
   it('marks invalid operations as failed so they do not loop forever', () => {
     expect(classifyOfflineFailure('VALIDATION_ERROR')).toBe('FAILED');
     expect(classifyOfflineFailure('RECORD_NOT_FOUND')).toBe('FAILED');
+  });
+});
+
+describe('calendar date validation', () => {
+  it('validates leap days without JavaScript date normalization', () => {
+    expect(isValidCalendarDate('2024-02-29')).toBe(true);
+    expect(isValidCalendarDate('2026-02-29')).toBe(false);
+    expect(isValidCalendarDate('2026-13-01')).toBe(false);
+  });
+
+  it('compares dates in the family timezone at a UTC day boundary', () => {
+    const instant = new Date('2026-07-12T16:05:00.000Z');
+
+    expect(isCalendarDateOnOrBefore('2026-07-13', instant, 'Asia/Shanghai')).toBe(true);
+    expect(isCalendarDateOnOrBefore('2026-07-13', instant, 'UTC')).toBe(false);
+    expect(isCalendarDateOnOrBefore('2026-07-13', instant, 'Invalid/Timezone')).toBe(false);
   });
 });

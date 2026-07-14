@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { redisConnectionFromUrl } from '@cat-diary/domain';
 import { generateTasksAndReminders } from './task-generator.js';
-import { sendNotification } from './notification-sender.js';
 import { cleanupPhotoObjects, photoStorageConfigFromEnvironment } from './photo-cleanup.js';
 import { processAccountDeletions } from './account-cleanup.js';
 import {
@@ -13,6 +12,7 @@ import {
 import { validateWorkerEnvironment } from './environment.js';
 import { processExpoReceipt } from './expo-receipt.js';
 import { createOperationsServer, WorkerMetrics } from './operations-server.js';
+import { deliverNotificationDue } from './notification-delivery.js';
 
 const environment = validateWorkerEnvironment(process.env);
 const connection = redisConnectionFromUrl(environment.REDIS_URL);
@@ -65,27 +65,18 @@ async function bootstrap() {
       if (job.name === 'expo-receipt') return processExpoReceipt(prisma, job.data);
       if (job.name !== 'notification-due') return { ignored: true };
       const jobKey = job.id ?? `unknown-${job.data.id}`;
-      const delivery = await sendNotification(prisma, job.data);
-      const log = await prisma.notificationLog.findUnique({
-        where: { jobKey },
-        select: { id: true },
+      const result = await deliverNotificationDue(prisma, {
+        jobKey,
+        attemptsMade: job.attemptsMade,
+        data: job.data,
       });
-      await prisma.notificationLog.updateMany({
-        where: { jobKey, status: { in: ['QUEUED', 'FAILED'] } },
-        data: {
-          status: 'SENT',
-          attempt: job.attemptsMade + 1,
-          sentAt: new Date(),
-          providerMessageId: delivery.providerMessageId,
-          errorCode: null,
-          errorMessageSafe: null,
-        },
-      });
-      if (delivery.channel === 'EXPO_PUSH' && delivery.providerMessageId && log) {
+      if (result.skipped) return result;
+      const { delivery } = result;
+      if (delivery.channel === 'EXPO_PUSH' && delivery.providerMessageId) {
         await notificationQueue.add(
           'expo-receipt',
           {
-            notificationLogId: log.id,
+            notificationLogId: result.notificationLogId,
             receiptId: delivery.providerMessageId,
             pushTokenId: job.data.pushTokenId,
           },

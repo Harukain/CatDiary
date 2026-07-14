@@ -2,6 +2,27 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateTasksAndReminders } from './task-generator.js';
 
 describe('generateTasksAndReminders feature switch', () => {
+  it('扫描计划时排除已软删除猫咪，但保留公共计划', async () => {
+    const now = new Date('2026-07-12T00:00:00Z');
+    const prisma = {
+      idempotencyRecord: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      plan: { findMany: vi.fn().mockResolvedValue([]) },
+      task: { findMany: vi.fn() },
+    };
+
+    await generateTasksAndReminders(prisma as never, { add: vi.fn() } as never, now, {
+      notificationsEnabled: false,
+    });
+
+    expect(prisma.plan.findMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        enabled: true,
+        deletedAt: null,
+        AND: expect.arrayContaining([{ OR: [{ petId: null }, { pet: { deletedAt: null } }] }]),
+      }),
+    });
+  });
+
   it('continues task generation but does not read or enqueue reminders when disabled', async () => {
     const prisma = {
       idempotencyRecord: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },

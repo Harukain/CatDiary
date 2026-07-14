@@ -21,7 +21,10 @@ export async function generateTasksAndReminders(
       enabled: true,
       deletedAt: null,
       startAt: { lte: horizon },
-      OR: [{ endAt: null }, { endAt: { gte: now } }],
+      AND: [
+        { OR: [{ endAt: null }, { endAt: { gte: now } }] },
+        { OR: [{ petId: null }, { pet: { deletedAt: null } }] },
+      ],
     },
   });
   let generated = 0;

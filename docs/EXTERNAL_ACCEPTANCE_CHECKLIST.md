@@ -4,8 +4,9 @@
 
 ## 1. 需要确认的非敏感信息
 
-- [ ] Expo/EAS 组织或用户名：`待确认`
-- [ ] EAS Project ID：执行 `eas init` 后填写
+- [x] Expo/EAS 组织：`harukains-team`
+- [x] EAS 项目：`@harukains-team/catdiary`
+- [x] EAS Project ID：`29f29ec5-c4ab-4371-bf41-b5b72077e531`
 - [ ] Preview API HTTPS 地址：`待确认`
 - [ ] Production API HTTPS 地址：`待确认`
 - [ ] 腾讯云地域：`待确认`
@@ -29,16 +30,19 @@
 
 ## 3. EAS Development Build
 
-在仓库根目录执行：
+项目已完成 EAS 绑定。需要生成新 Development Build 时，在仓库根目录执行：
 
 ```bash
-pnpm eas login
-pnpm eas init
 pnpm eas build --profile development --platform ios
 pnpm eas build --profile development --platform android
 ```
 
-仓库通过 `pnpm dlx` 固定使用 `eas-cli@20.5.1`，不把 EAS 的易变工具链加入应用依赖，也不要使用未固定的全局 CLI。首次登录/绑定前执行 `pnpm eas:check`；它会检查 Git 根与初始提交、三个 EAS profile、CLI、Expo 登录和项目绑定，但不会创建项目或触发构建。
+仓库通过 `pnpm dlx` 固定使用 `eas-cli@20.5.1`，不把 EAS 的易变工具链加入应用依赖，也不要使用未固定的全局 CLI。构建前执行 `pnpm eas:check`；它会检查 Git 根与初始提交、三个 EAS profile、Expo 登录和项目绑定，但不会触发构建。只有主动更换 EAS 项目时才重新执行 `pnpm eas init`。
+
+- [x] Android Development Build 已生成并可安装
+- [x] iOS Development Build 已生成，Apple Distribution Certificate、Provisioning Profile、测试设备和 APNs Key 已配置
+- [ ] 当前代码批次已在 Android 真机完成回归
+- [ ] 当前代码批次已在 iPhone 真机完成回归
 
 ### 真机连接本地 API
 
@@ -56,7 +60,7 @@ EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
 
 ### Android USB 稳定调试（推荐用于局域网不稳定时）
 
-保持 USB 调试已授权。该模式下，Metro 仍通过开发机局域网 IP 传输代码包，而 API 通过 ADB 转发到开发机本机，避免手机 Wi-Fi、热点隔离或 VPN 影响数据请求：
+保持 USB 调试已授权。该模式下，Metro 与 API 都通过 ADB 转发到开发机本机，避免手机 Wi-Fi、热点隔离或 VPN 影响数据请求：
 
 ```bash
 # 终端一：基础服务
@@ -74,11 +78,11 @@ adb reverse tcp:3000 tcp:3000
 adb devices -l
 ```
 
-在设备上打开 Development Build 后，通过 Metro 的开发链接载入项目；若启动器没有自动选择项目，可使用以下深链，其中 `开发机局域网IP` 替换为 Metro 输出的 IPv4 地址：
+在设备上打开 Development Build 后，通过 Metro 的开发链接载入项目；若启动器没有自动选择项目，可使用以下深链：
 
 ```bash
 adb shell am start -a android.intent.action.VIEW \
-  -d 'exp+catdiary://expo-development-client/?url=http%3A%2F%2F开发机局域网IP%3A8081' \
+  -d 'exp+catdiary://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081' \
   com.haruka.catdiary
 ```
 

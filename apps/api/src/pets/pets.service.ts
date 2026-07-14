@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { MAX_PETS_PER_FAMILY } from '@cat-diary/domain';
+import { isCalendarDateOnOrBefore, MAX_PETS_PER_FAMILY } from '@cat-diary/domain';
 import { AppException } from '../common/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { PhotosService } from '../photos/photos.service';
@@ -40,6 +40,7 @@ export class PetsService {
   }
 
   async create(familyId: string, userId: string, input: PetInput) {
+    await this.assertBirthDate(familyId, input.birthDate);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return await this.prisma.$transaction(
@@ -73,6 +74,7 @@ export class PetsService {
   }
 
   async update(familyId: string, id: string, input: Partial<PetInput> & { version: number }) {
+    await this.assertBirthDate(familyId, input.birthDate);
     const result = await this.prisma.pet.updateMany({
       where: { id, familyId, version: input.version, deletedAt: null },
       data: { ...this.mutableData(input), version: { increment: 1 } },
@@ -88,13 +90,48 @@ export class PetsService {
     return this.get(familyId, id);
   }
 
-  async remove(familyId: string, id: string, version: number) {
-    const result = await this.prisma.pet.updateMany({
-      where: { id, familyId, version, deletedAt: null },
-      data: { deletedAt: new Date(), version: { increment: 1 } },
-    });
-    if (!result.count)
-      throw new AppException('VERSION_CONFLICT', '猫咪档案不存在或已被修改', HttpStatus.CONFLICT);
+  async remove(familyId: string, actorUserId: string, id: string, version: number) {
+    const deletedAt = new Date();
+    await this.prisma.$transaction(
+      async (tx) => {
+        const pet = await tx.pet.updateMany({
+          where: { id, familyId, version, deletedAt: null },
+          data: { deletedAt, version: { increment: 1 } },
+        });
+        if (!pet.count)
+          throw new AppException(
+            'VERSION_CONFLICT',
+            '猫咪档案不存在或已被修改',
+            HttpStatus.CONFLICT,
+          );
+
+        const plans = await tx.plan.updateMany({
+          where: { familyId, petId: id, enabled: true, deletedAt: null },
+          data: { enabled: false, version: { increment: 1 } },
+        });
+        const tasks = await tx.task.updateMany({
+          where: { familyId, petId: id, status: 'PENDING', deletedAt: null },
+          data: { status: 'CANCELLED', version: { increment: 1 } },
+        });
+        await tx.auditLog.create({
+          data: {
+            familyId,
+            actorUserId,
+            action: 'pet.delete',
+            resourceType: 'pet',
+            resourceId: id,
+            beforeSafe: { deletedAt: null, version },
+            afterSafe: {
+              deletedAt: deletedAt.toISOString(),
+              version: version + 1,
+              plansDisabled: plans.count,
+              tasksCancelled: tasks.count,
+            },
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   private createData(
@@ -103,6 +140,21 @@ export class PetsService {
     input: PetInput,
   ): Prisma.PetUncheckedCreateInput {
     return { familyId, createdById: userId, ...this.mutableData(input), name: input.name.trim() };
+  }
+
+  private async assertBirthDate(familyId: string, birthDate: string | null | undefined) {
+    if (!birthDate) return;
+    const family = await this.prisma.family.findUniqueOrThrow({
+      where: { id: familyId },
+      select: { timezone: true },
+    });
+    if (!isCalendarDateOnOrBefore(birthDate, new Date(), family.timezone)) {
+      throw new AppException(
+        'BIRTH_DATE_IN_FUTURE',
+        '出生日期不能晚于家庭时区的今天',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
   }
 
   private async withAvatar<T extends { avatarKey: string | null }>(familyId: string, pet: T) {

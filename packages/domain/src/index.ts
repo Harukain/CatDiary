@@ -122,6 +122,22 @@ export function getLocalDayBounds(timezone: string, instant = new Date()) {
   };
 }
 
+export function isValidCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = DateTime.fromISO(value, { zone: 'UTC' });
+  return date.isValid && date.toISODate() === value;
+}
+
+export function isCalendarDateOnOrBefore(
+  value: string,
+  instant = new Date(),
+  timezone = DEFAULT_TIMEZONE,
+) {
+  if (!isValidCalendarDate(value)) return false;
+  const local = DateTime.fromJSDate(instant, { zone: timezone });
+  return local.isValid && value <= local.toISODate()!;
+}
+
 function matchesRecurrence(candidate: DateTime, start: DateTime, rule: RecurrenceRule) {
   if (rule.frequency === 'once') return candidate.hasSame(start, 'day');
   const interval = Math.max(1, rule.interval ?? 1);

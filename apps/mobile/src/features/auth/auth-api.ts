@@ -94,13 +94,14 @@ export type PlanType =
 export interface PlanSummary {
   id: string;
   petId: string | null;
+  assigneeId?: string | null;
   title: string;
   detail?: string | null;
   recordType: PlanType;
   startAt?: string;
   localTime: string;
   recurrenceRule?: {
-    frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+    frequency: 'once' | 'daily' | 'weekly' | 'monthly' | 'intervalMonths';
     interval?: number;
     weekdays?: number[];
     dayOfMonth?: number;
@@ -123,6 +124,12 @@ export interface TaskSummary {
   pet?: { id: string; name: string } | null;
   assignee?: { id: string; displayName: string | null } | null;
 }
+export type TaskMutationResult =
+  | TaskSummary
+  | {
+      task: TaskSummary;
+      record: unknown;
+    };
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'SKIPPED';
 export interface NotificationLogSummary {
   id: string;
@@ -380,13 +387,14 @@ export const authApi = {
     familyId: string,
     input: {
       petId?: string | null;
+      assigneeId?: string | null;
       type: PlanType;
       title: string;
       detail?: string;
       startAt: string;
       localTime: string;
       recurrenceRule: {
-        frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+        frequency: 'once' | 'daily' | 'weekly' | 'monthly' | 'intervalMonths';
         interval?: number;
         weekdays?: number[];
         dayOfMonth?: number;
@@ -411,13 +419,14 @@ export const authApi = {
     planId: string,
     input: {
       petId?: string | null;
+      assigneeId?: string | null;
       type?: PlanType;
       title?: string;
       detail?: string;
       startAt?: string;
       localTime?: string;
       recurrenceRule?: {
-        frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+        frequency: 'once' | 'daily' | 'weekly' | 'monthly' | 'intervalMonths';
         interval?: number;
         weekdays?: number[];
         dayOfMonth?: number;
@@ -482,7 +491,7 @@ export const authApi = {
     });
   },
   sendTaskOperation(accessToken: string, operation: OfflineTaskOperation) {
-    return authenticatedPost<unknown>(
+    return authenticatedPost<TaskMutationResult>(
       operation.path,
       accessToken,
       operation.familyId,

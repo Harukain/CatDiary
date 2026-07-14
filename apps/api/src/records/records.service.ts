@@ -120,18 +120,7 @@ export class RecordsService {
     },
   ) {
     const current = await this.get(familyId, id);
-    if (current.source === RecordSource.TASK)
-      throw new AppException(
-        'TASK_RECORD_IMMUTABLE',
-        '任务生成的记录请通过任务撤销后重新完成',
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    if (current.authorId !== userId && role === FamilyRole.MEMBER)
-      throw new AppException(
-        'RECORD_EDIT_FORBIDDEN',
-        '只能编辑自己创建的记录',
-        HttpStatus.FORBIDDEN,
-      );
+    this.requireMutationPermission(current, userId, role, 'edit');
     if (input.petId) await this.requirePet(familyId, input.petId);
     if (input.occurredAt && new Date(input.occurredAt).getTime() > Date.now() + 5 * 60_000)
       throw new AppException(
@@ -164,12 +153,7 @@ export class RecordsService {
 
   async remove(familyId: string, userId: string, role: FamilyRole, id: string, version: number) {
     const current = await this.get(familyId, id);
-    if (current.authorId !== userId && role === FamilyRole.MEMBER)
-      throw new AppException(
-        'RECORD_DELETE_FORBIDDEN',
-        '只能删除自己创建的记录',
-        HttpStatus.FORBIDDEN,
-      );
+    this.requireMutationPermission(current, userId, role, 'delete');
     const now = new Date();
     const result = await this.prisma.record.updateMany({
       where: { id, familyId, version, status: RecordStatus.ACTIVE, deletedAt: null },
@@ -207,6 +191,42 @@ export class RecordsService {
   private async requirePet(familyId: string, petId: string) {
     if (!(await this.prisma.pet.count({ where: { id: petId, familyId, deletedAt: null } })))
       throw new AppException('PET_NOT_FOUND', '猫咪档案不存在', HttpStatus.NOT_FOUND);
+  }
+
+  private requireMutationPermission(
+    record: { authorId: string; source: RecordSource; type: RecordType },
+    userId: string,
+    role: FamilyRole,
+    action: 'edit' | 'delete',
+  ) {
+    if (record.source === RecordSource.TASK)
+      throw new AppException(
+        'TASK_RECORD_IMMUTABLE',
+        '任务生成的记录请通过任务撤销后重新完成',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+
+    if (role === FamilyRole.OWNER || role === FamilyRole.ADMIN) return;
+
+    if (this.isMedicalRecord(record.type))
+      throw new AppException(
+        action === 'edit' ? 'MEDICAL_RECORD_EDIT_FORBIDDEN' : 'MEDICAL_RECORD_DELETE_FORBIDDEN',
+        action === 'edit' ? '医疗类记录仅家庭管理员可修改' : '医疗类记录仅家庭管理员可删除',
+        HttpStatus.FORBIDDEN,
+      );
+
+    if (record.authorId !== userId)
+      throw new AppException(
+        action === 'edit' ? 'RECORD_EDIT_FORBIDDEN' : 'RECORD_DELETE_FORBIDDEN',
+        action === 'edit' ? '只能编辑自己创建的普通记录' : '只能删除自己创建的普通记录',
+        HttpStatus.FORBIDDEN,
+      );
+  }
+
+  private isMedicalRecord(type: RecordType) {
+    return (
+      type === RecordType.MEDICATION || type === RecordType.VACCINE || type === RecordType.DEWORMING
+    );
   }
 
   private audit(

@@ -22,6 +22,12 @@ import {
   isNetworkFailure,
   removeCachedTask,
 } from '../../src/features/offline/offline-queue';
+import {
+  optimisticCompletedTask,
+  optimisticPendingTask,
+  taskFromMutationResult,
+} from '../../src/features/tasks/task-mutation';
+import { TaskUndoBanner } from '../../src/features/tasks/task-undo-banner';
 
 const scopes = [
   { value: 'today', label: '今天' },
@@ -40,6 +46,8 @@ export default function TasksTab() {
   const [actionId, setActionId] = useState('');
   const [error, setError] = useState('');
   const [offlineNotice, setOfflineNotice] = useState('');
+  const [undoableTask, setUndoableTask] = useState<TaskSummary>();
+  const dismissUndo = useCallback(() => setUndoableTask(undefined), []);
 
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
@@ -86,14 +94,16 @@ export default function TasksTab() {
     setError('');
     const operation = authApi.createCompleteOperation(activeFamily.id, task, medicalConfirmed);
     try {
-      await authApi.sendTaskOperation(session.accessToken, operation);
+      const result = await authApi.sendTaskOperation(session.accessToken, operation);
       await load();
+      if (!medicalConfirmed) setUndoableTask(taskFromMutationResult(result, task));
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
         await removeCachedTask(task.id);
         setTasks((current) => current.filter((item) => item.id !== task.id));
         setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
+        if (!medicalConfirmed) setUndoableTask(optimisticCompletedTask(task));
       } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
     } finally {
       setActionId('');
@@ -124,21 +134,29 @@ export default function TasksTab() {
       setActionId('');
     }
   }
-  async function undo(task: TaskSummary) {
+  async function undo(task: TaskSummary, quickUndo = false) {
     if (!session || !activeFamily) return;
     setActionId(task.id);
     setError('');
     const operation = authApi.createUndoOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
+      if (quickUndo) dismissUndo();
       await load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
         await removeCachedTask(task.id);
-        setTasks((current) => current.filter((item) => item.id !== task.id));
+        if (quickUndo) {
+          const pendingTask = optimisticPendingTask(task);
+          setTasks((current) => [pendingTask, ...current.filter((item) => item.id !== task.id)]);
+          dismissUndo();
+        } else setTasks((current) => current.filter((item) => item.id !== task.id));
         setOfflineNotice('网络不可用，撤销操作已保存并将在恢复后同步');
-      } else setError(cause instanceof AuthApiError ? cause.message : '撤销失败');
+      } else {
+        if (quickUndo) dismissUndo();
+        setError(cause instanceof AuthApiError ? cause.message : '撤销失败');
+      }
     } finally {
       setActionId('');
     }
@@ -199,6 +217,14 @@ export default function TasksTab() {
               {offlineNotice.includes('冲突') ? ' · 点击处理' : ''}
             </Text>
           </Pressable>
+        ) : null}
+        {undoableTask ? (
+          <TaskUndoBanner
+            task={undoableTask}
+            busy={actionId === undoableTask.id}
+            onUndo={() => void undo(undoableTask, true)}
+            onDismiss={dismissUndo}
+          />
         ) : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {loading ? (

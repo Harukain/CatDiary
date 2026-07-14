@@ -37,6 +37,7 @@ import {
   vomitOptions,
   type RecordFormValue,
 } from '../../src/features/records/record-form';
+import { getRecordActionPermissions } from '../../src/features/records/record-permissions';
 
 const typeLabels: Record<string, string> = {
   FOOD: '饮食',
@@ -88,8 +89,15 @@ export default function RecordDetailScreen() {
   const type = record && manualTypes.has(record.type) ? (record.type as ManualRecordType) : null;
   const fields = useMemo(() => (type ? fieldConfig(type) : null), [type]);
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
+  const permissions = record
+    ? getRecordActionPermissions(record, session?.user.id, activeFamily?.role)
+    : null;
   async function save() {
     if (!record || !session || !activeFamily || !type) return;
+    if (!permissions?.edit.allowed) {
+      setError(permissions?.edit.reason ?? '你当前无权修改这条记录');
+      return;
+    }
     let data: Record<string, unknown>;
     let occurredAt: string;
     try {
@@ -121,6 +129,10 @@ export default function RecordDetailScreen() {
   }
   function remove() {
     if (!record || !session || !activeFamily) return;
+    if (!permissions?.delete.allowed) {
+      setError(permissions?.delete.reason ?? '你当前无权删除这条记录');
+      return;
+    }
     Alert.alert('删除这条记录？', '删除后将进入 30 天恢复期，家庭管理员可以恢复。', [
       { text: '取消', style: 'cancel' },
       {
@@ -157,7 +169,11 @@ export default function RecordDetailScreen() {
         <TextButton label="返回" onPress={() => router.back()} />
       </Screen>
     );
-  const editable = record.source === 'MANUAL' && !!type;
+  const editable = !!permissions?.edit.allowed && !!type;
+  const readOnlyReason =
+    permissions?.edit.reason ?? '此记录类型需要在对应的猫咪档案中维护，当前页面仅提供查看。';
+  const showSeparateDeleteReason =
+    !permissions?.delete.allowed && permissions?.delete.reason !== readOnlyReason;
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -278,20 +294,33 @@ export default function RecordDetailScreen() {
                   </Text>
                 </View>
               ))}
-              <View style={styles.locked}>
-                <Text style={styles.lockedText}>
-                  任务生成的记录不可直接改写。如需修正，请撤销对应任务并重新完成。
-                </Text>
-              </View>
+              {record.note ? (
+                <View style={styles.noteBlock}>
+                  <Text style={styles.dataLabel}>备注</Text>
+                  <Text style={styles.noteText}>{record.note}</Text>
+                </View>
+              ) : null}
+              <PermissionNotice title="只读记录" body={readOnlyReason} />
             </>
           )}
         </Card>
-        {editable ? (
+        {permissions?.delete.allowed ? (
           <TextButton label="删除这条记录" danger disabled={busy} onPress={remove} />
+        ) : null}
+        {showSeparateDeleteReason && permissions?.delete.reason ? (
+          <PermissionNotice title="删除权限" body={permissions.delete.reason} />
         ) : null}
         <TextButton label="返回时间线" onPress={() => router.back()} />
       </ScrollView>
     </Screen>
+  );
+}
+function PermissionNotice({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={styles.locked}>
+      <Text style={styles.lockedTitle}>{title}</Text>
+      <Text style={styles.lockedText}>{body}</Text>
+    </View>
   );
 }
 function Chip({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
@@ -360,6 +389,8 @@ const styles = StyleSheet.create({
   },
   dataLabel: { ...typography.secondary, color: colors.textSecondary },
   dataValue: { ...typography.body, color: colors.ink, fontWeight: '600' },
+  noteBlock: { gap: spacing.xs, paddingTop: spacing.md },
+  noteText: { ...typography.body, color: colors.ink },
   healthAction: { padding: spacing.xl, borderRadius: radii.card, backgroundColor: colors.ink },
   healthActionTitle: { ...typography.h2, color: colors.surface },
   healthActionBody: {
@@ -386,5 +417,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
     marginTop: spacing.md,
   },
+  lockedTitle: { ...typography.h3, color: colors.ink, marginBottom: spacing.xs },
   lockedText: { ...typography.caption, color: colors.warningDark },
 });

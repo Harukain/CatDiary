@@ -125,7 +125,9 @@ export default function PetDetailRoute() {
       breed.trim() !== (pet.breed ?? '') ||
       chipNumber.trim() !== (pet.chipNumber ?? '') ||
       neutered !== (pet.neutered ?? null));
-  const birthValid = !birthDate || isValidBirthDate(birthDate);
+  const birthValid =
+    !birthDate ||
+    isValidBirthDate(birthDate, new Date(), activeFamily?.timezone ?? 'Asia/Shanghai');
   useEffect(() => {
     if (changed) setSuccess('');
   }, [changed]);

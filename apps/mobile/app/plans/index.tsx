@@ -96,14 +96,18 @@ export default function PlansRoute() {
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <Text style={styles.navTitle}>照顾计划</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="新建照顾计划"
-          onPress={() => router.push('/plans/new')}
-          style={styles.newButton}
-        >
-          <Ionicons name="add" size={21} color={colors.brand} />
-        </Pressable>
+        {canManage ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="新建照顾计划"
+            onPress={() => router.push('/plans/new')}
+            style={styles.newButton}
+          >
+            <Ionicons name="add" size={21} color={colors.brand} />
+          </Pressable>
+        ) : (
+          <View style={styles.newButton} />
+        )}
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View>
@@ -131,8 +135,9 @@ export default function PlansRoute() {
               <Card key={plan.id}>
                 <View style={styles.planTop}>
                   <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`编辑${plan.title}`}
+                    accessibilityRole={canManage ? 'button' : undefined}
+                    accessibilityLabel={canManage ? `编辑${plan.title}` : undefined}
+                    disabled={!canManage}
                     onPress={() =>
                       router.push({ pathname: '/plans/new', params: { planId: plan.id } })
                     }
@@ -243,6 +248,7 @@ function recurrenceLabel(plan: PlanSummary) {
   if (!rule || rule.frequency === 'once') return '仅提醒一次';
   if (rule.frequency === 'daily') return '每天重复';
   if (rule.frequency === 'weekly') return '每周重复';
+  if (rule.frequency === 'intervalMonths') return `每 ${rule.interval ?? 3} 个月重复`;
   return '每月重复';
 }
 

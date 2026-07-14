@@ -1,6 +1,17 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import {
+  AccessibilityInfo,
+  findNodeHandle,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 
 const actions = [
@@ -15,6 +26,7 @@ const actions = [
     title: '新建照顾计划',
     detail: '疫苗、驱虫、用药或铲屎提醒',
     path: '/plans/new' as const,
+    requiresManagement: true,
   },
   {
     icon: 'camera-outline' as const,
@@ -27,48 +39,88 @@ const actions = [
     title: '添加猫咪档案',
     detail: '创建新猫咪，家庭最多 5 只',
     path: '/onboarding/pet' as const,
+    requiresManagement: true,
   },
 ];
 
-export function QuickAddSheet({ visible, onClose }: { visible: boolean; onClose(): void }) {
+export function QuickAddSheet({
+  visible,
+  canManage,
+  onClose,
+}: {
+  visible: boolean;
+  canManage: boolean;
+  onClose(restoreFocus?: boolean): void;
+}) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const titleRef = useRef<Text>(null);
+  const navigatingRef = useRef(false);
+  useEffect(() => {
+    if (visible) navigatingRef.current = false;
+  }, [visible]);
+  const focusTitle = useCallback(() => {
+    requestAnimationFrame(() => {
+      const node = findNodeHandle(titleRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    });
+  }, []);
   function navigate(path: (typeof actions)[number]['path']) {
-    onClose();
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    onClose(false);
     router.push(path);
   }
+  const visibleActions = canManage
+    ? actions
+    : actions.filter((action) => !('requiresManagement' in action));
   return (
     <Modal
       animationType="slide"
       transparent
       visible={visible}
-      onRequestClose={onClose}
+      onRequestClose={() => onClose()}
+      onShow={focusTitle}
       statusBarTranslucent
     >
       <View accessibilityViewIsModal style={styles.modal}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="关闭快速新增"
-          onPress={onClose}
+          onPress={() => onClose()}
           style={styles.backdrop}
         />
-        <View style={styles.sheet}>
+        <View
+          style={[
+            styles.sheet,
+            { paddingBottom: Math.max(spacing.huge, insets.bottom + spacing.lg) },
+          ]}
+        >
           <View style={styles.handle} />
           <View style={styles.heading}>
-            <View>
-              <Text style={styles.title}>快速新增</Text>
+            <View style={styles.headingCopy}>
+              <Text
+                ref={titleRef}
+                accessible
+                accessibilityRole="header"
+                accessibilityLabel="快速新增。记录已经发生的事，或安排接下来的照顾"
+                style={styles.title}
+              >
+                快速新增
+              </Text>
               <Text style={styles.subtitle}>记录已经发生的事，或安排接下来的照顾</Text>
             </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="关闭"
-              onPress={onClose}
+              onPress={() => onClose()}
               style={({ pressed }) => [styles.close, pressed && styles.pressed]}
             >
               <Ionicons name="close" size={20} color={colors.ink} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.actions} showsVerticalScrollIndicator={false}>
-            {actions.map((action) => (
+            {visibleActions.map((action) => (
               <Pressable
                 key={action.title}
                 accessibilityRole="button"
@@ -101,7 +153,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.navigation,
     backgroundColor: colors.page,
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.huge,
   },
   handle: {
     alignSelf: 'center',
@@ -118,6 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
+  headingCopy: { flex: 1 },
   title: { ...typography.h2, color: colors.ink },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

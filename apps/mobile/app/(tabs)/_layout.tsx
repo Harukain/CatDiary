@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
+import { AccessibilityInfo, findNodeHandle, Pressable, type View } from 'react-native';
 import { colors, radii } from '@cat-diary/design-tokens';
 import { useSession } from '../../src/features/auth/session-provider';
 import { QuickAddSheet } from '../../src/features/quick-add/quick-add-sheet';
@@ -14,8 +15,32 @@ const icons = {
 };
 
 export default function TabsLayout() {
-  const { restoring, session } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [quickAddVisible, setQuickAddVisible] = useState(false);
+  const addTabButtonRef = useRef<View>(null);
+  const restoreFocusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+
+  const openQuickAdd = useCallback(() => {
+    if (restoreFocusTimer.current) clearTimeout(restoreFocusTimer.current);
+    setQuickAddVisible(true);
+  }, []);
+  const closeQuickAdd = useCallback((restoreFocus = true) => {
+    setQuickAddVisible(false);
+    if (!restoreFocus) return;
+    if (restoreFocusTimer.current) clearTimeout(restoreFocusTimer.current);
+    restoreFocusTimer.current = setTimeout(() => {
+      const node = findNodeHandle(addTabButtonRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    }, 320);
+  }, []);
+  useEffect(
+    () => () => {
+      if (restoreFocusTimer.current) clearTimeout(restoreFocusTimer.current);
+    },
+    [],
+  );
+
   if (!restoring && !session) return <Redirect href="/(auth)/login" />;
   return (
     <>
@@ -70,15 +95,27 @@ export default function TabsLayout() {
           listeners={{
             tabPress: (event) => {
               event.preventDefault();
-              setQuickAddVisible(true);
+              openQuickAdd();
             },
           }}
-          options={{ title: '', tabBarLabel: '' }}
+          options={{
+            title: '',
+            tabBarLabel: '',
+            tabBarAccessibilityLabel: '快速新增',
+            tabBarButton: ({ href: _href, ...props }) => (
+              <Pressable
+                {...(props as ComponentProps<typeof Pressable>)}
+                ref={addTabButtonRef}
+                accessibilityRole="button"
+                accessibilityLabel="快速新增"
+              />
+            ),
+          }}
         />
         <Tabs.Screen name="records" options={{ title: '记录' }} />
         <Tabs.Screen name="me" options={{ title: '我的' }} />
       </Tabs>
-      <QuickAddSheet visible={quickAddVisible} onClose={() => setQuickAddVisible(false)} />
+      <QuickAddSheet visible={quickAddVisible} canManage={canManage} onClose={closeQuickAdd} />
     </>
   );
 }

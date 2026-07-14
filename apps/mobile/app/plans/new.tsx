@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
   AuthApiError,
+  type MemberSummary,
   type PetSummary,
   type PlanSummary,
   type PlanType,
@@ -41,49 +43,94 @@ const frequencies = [
   { value: 'daily', label: '每天' },
   { value: 'weekly', label: '每周' },
   { value: 'monthly', label: '每月' },
+  { value: 'intervalMonths', label: '每 3 个月' },
 ] as const;
+type Frequency = (typeof frequencies)[number]['value'];
 
 export default function NewPlanRoute() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
+  const [members, setMembers] = useState<MemberSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [type, setType] = useState<PlanType>('VACCINE');
   const [title, setTitle] = useState('疫苗接种');
   const [detail, setDetail] = useState('');
   const [localTime, setLocalTime] = useState(defaultTime());
-  const [frequency, setFrequency] = useState<'once' | 'daily' | 'weekly' | 'monthly'>('once');
+  const initialLocalTime = useRef(localTime).current;
+  const [frequency, setFrequency] = useState<Frequency>('once');
   const [existingPlan, setExistingPlan] = useState<PlanSummary>();
   const [futureTaskPolicy, setFutureTaskPolicy] = useState<'keep' | 'regenerate'>('keep');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
+  const [initialSnapshot, setInitialSnapshot] = useState('');
+  const allowLeave = useRef(false);
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
 
   useEffect(() => {
     if (!session || !activeFamily) return;
+    setLoading(true);
+    setLoadError('');
+    setError('');
+    setInitialSnapshot('');
+    allowLeave.current = false;
+    if (planId) setExistingPlan(undefined);
     void Promise.all([
       authApi.listPets(session.accessToken, activeFamily.id),
+      authApi.listMembers(session.accessToken, activeFamily.id),
       planId
         ? authApi.getPlan(session.accessToken, activeFamily.id, planId)
         : Promise.resolve(undefined),
     ])
-      .then(([data, plan]) => {
+      .then(([data, nextMembers, plan]) => {
         setPets(data);
+        setMembers(nextMembers);
         if (plan) {
           setExistingPlan(plan);
           setPetId(plan.petId);
+          setAssigneeId(plan.assigneeId ?? null);
           setType(plan.recordType);
           setTitle(plan.title);
           setDetail(plan.detail ?? '');
           setLocalTime(plan.localTime);
           setFrequency(plan.recurrenceRule?.frequency ?? 'once');
-        } else setPetId(data[0]?.id ?? null);
+          setInitialSnapshot(
+            formSnapshot({
+              petId: plan.petId,
+              assigneeId: plan.assigneeId ?? null,
+              type: plan.recordType,
+              title: plan.title,
+              detail: plan.detail ?? '',
+              localTime: plan.localTime,
+              frequency: plan.recurrenceRule?.frequency ?? 'once',
+              futureTaskPolicy: 'keep',
+            }),
+          );
+        } else {
+          const firstPetId = data[0]?.id ?? null;
+          setPetId(firstPetId);
+          setInitialSnapshot(
+            formSnapshot({
+              petId: firstPetId,
+              assigneeId: null,
+              type: 'VACCINE',
+              title: '疫苗接种',
+              detail: '',
+              localTime: initialLocalTime,
+              frequency: 'once',
+              futureTaskPolicy: 'keep',
+            }),
+          );
+        }
       })
-      .catch(() => setError(planId ? '照顾计划加载失败' : '猫咪档案加载失败'))
+      .catch(() => setLoadError(planId ? '照顾计划加载失败' : '建档信息加载失败'))
       .finally(() => setLoading(false));
-  }, [activeFamily, planId, session]);
+  }, [activeFamily, initialLocalTime, planId, reloadKey, session]);
 
   const valid = useMemo(
     () =>
@@ -92,6 +139,26 @@ export default function NewPlanRoute() {
       (type === 'LITTER' || !!petId),
     [localTime, petId, title, type],
   );
+  const currentSnapshot = formSnapshot({
+    petId,
+    assigneeId,
+    type,
+    title,
+    detail,
+    localTime,
+    frequency,
+    futureTaskPolicy,
+  });
+  const isDirty = !!initialSnapshot && currentSnapshot !== initialSnapshot;
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isDirty || allowLeave.current) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  });
   async function submit() {
     if (!session || !activeFamily || !valid || busy) return;
     setBusy(true);
@@ -104,10 +171,13 @@ export default function NewPlanRoute() {
           ? { frequency, weekdays: [weekday] }
           : frequency === 'monthly'
             ? { frequency, dayOfMonth: now.getDate() }
-            : { frequency };
+            : frequency === 'intervalMonths'
+              ? { frequency, interval: 3, dayOfMonth: now.getDate() }
+              : { frequency };
       if (existingPlan) {
         await authApi.updatePlan(session.accessToken, activeFamily.id, existingPlan.id, {
           petId: type === 'LITTER' ? petId : petId!,
+          assigneeId,
           type,
           title: title.trim(),
           detail: detail.trim(),
@@ -117,10 +187,12 @@ export default function NewPlanRoute() {
           version: existingPlan.version,
           futureTaskPolicy,
         });
-        router.replace('/plans');
+        allowLeave.current = true;
+        returnToPlans();
       } else {
         await authApi.createPlan(session.accessToken, activeFamily.id, {
           petId: type === 'LITTER' ? petId : petId!,
+          assigneeId,
           type,
           title: title.trim(),
           detail: detail.trim() || undefined,
@@ -128,6 +200,7 @@ export default function NewPlanRoute() {
           localTime,
           recurrenceRule,
         });
+        allowLeave.current = true;
         router.replace('/(tabs)/tasks');
       }
     } catch (cause) {
@@ -153,7 +226,8 @@ export default function NewPlanRoute() {
               existingPlan.id,
               existingPlan.version,
             );
-            router.replace('/plans');
+            allowLeave.current = true;
+            returnToPlans();
           } catch (cause) {
             setError(cause instanceof AuthApiError ? cause.message : '计划删除失败');
             setBusy(false);
@@ -162,19 +236,41 @@ export default function NewPlanRoute() {
       },
     ]);
   }
+  function returnToPlans() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/plans');
+  }
+  function requestReturn() {
+    if (!isDirty || allowLeave.current) {
+      returnToPlans();
+      return;
+    }
+    Alert.alert('放弃未保存的修改？', '当前填写内容尚未保存，离开后需要重新填写。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          returnToPlans();
+        },
+      },
+    ]);
+  }
 
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="返回"
-          onPress={() => router.back()}
+          onPress={requestReturn}
           style={styles.back}
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>{existingPlan ? '编辑照顾计划' : '新建照顾计划'}</Text>
+        <Text style={styles.navTitle}>{planId ? '编辑照顾计划' : '新建照顾计划'}</Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -185,6 +281,13 @@ export default function NewPlanRoute() {
           </Card>
         ) : loading ? (
           <ActivityIndicator color={colors.brand} />
+        ) : loadError ? (
+          <Card>
+            <Title>{planId ? '计划无法打开' : '建档信息加载失败'}</Title>
+            <ErrorText>{loadError}</ErrorText>
+            <PrimaryButton label="重新加载" onPress={() => setReloadKey((value) => value + 1)} />
+            <TextButton label="返回" onPress={returnToPlans} />
+          </Card>
         ) : (
           <Card>
             <Title>要提醒什么？</Title>
@@ -205,6 +308,45 @@ export default function NewPlanRoute() {
                   </Text>
                 </Pressable>
               ))}
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>负责人</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.petRow}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: assigneeId === null }}
+                  onPress={() => setAssigneeId(null)}
+                  style={[styles.petChip, assigneeId === null && styles.petChipActive]}
+                >
+                  <Text
+                    style={[styles.petChipText, assigneeId === null && styles.petChipTextActive]}
+                  >
+                    家庭成员共同负责
+                  </Text>
+                </Pressable>
+                {members.map((member) => (
+                  <Pressable
+                    key={member.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: assigneeId === member.user.id }}
+                    onPress={() => setAssigneeId(member.user.id)}
+                    style={[styles.petChip, assigneeId === member.user.id && styles.petChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.petChipText,
+                        assigneeId === member.user.id && styles.petChipTextActive,
+                      ]}
+                    >
+                      {member.user.displayName ?? '家庭成员'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
             <View style={styles.field}>
               <Text style={styles.label}>归属猫咪</Text>
@@ -344,6 +486,18 @@ export default function NewPlanRoute() {
 function defaultTime() {
   const date = new Date(Date.now() + 60 * 60 * 1000);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+function formSnapshot(input: {
+  petId: string | null;
+  assigneeId: string | null;
+  type: PlanType;
+  title: string;
+  detail: string;
+  localTime: string;
+  frequency: Frequency;
+  futureTaskPolicy: 'keep' | 'regenerate';
+}) {
+  return JSON.stringify(input);
 }
 const styles = StyleSheet.create({
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

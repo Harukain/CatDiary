@@ -15,4 +15,15 @@ describe('isValidBirthDate', () => {
     expect(isValidBirthDate('2026-07-14', now)).toBe(false);
     expect(isValidBirthDate('2026/07/13', now)).toBe(false);
   });
+
+  it('compares against the family calendar day instead of the CI machine timezone', () => {
+    const instant = new Date('2026-07-12T16:05:00.000Z');
+
+    expect(isValidBirthDate('2026-07-13', instant, 'Asia/Shanghai')).toBe(true);
+    expect(isValidBirthDate('2026-07-13', instant, 'UTC')).toBe(false);
+  });
+
+  it('rejects an invalid family timezone instead of accepting a future date', () => {
+    expect(isValidBirthDate('2026-07-13', now, 'Invalid/Timezone')).toBe(false);
+  });
 });

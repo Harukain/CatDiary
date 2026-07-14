@@ -17,7 +17,7 @@ import {
   type NotificationStatus,
 } from '../src/features/auth/auth-api';
 import { useSession } from '../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, TextButton, Title } from '../src/shared/ui/primitives';
+import { Body, Card, ErrorText, Screen, Title } from '../src/shared/ui/primitives';
 
 const filters: Array<{ label: string; value?: NotificationStatus }> = [
   { label: '全部' },
