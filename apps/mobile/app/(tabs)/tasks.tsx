@@ -10,7 +10,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-import { authApi, AuthApiError, type TaskSummary } from '../../src/features/auth/auth-api';
+import {
+  authApi,
+  AuthApiError,
+  type CompleteTaskInput,
+  type TaskSummary,
+} from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { Body, Card, ErrorText, Screen, Title } from '../../src/shared/ui/primitives';
 import {
@@ -28,6 +33,8 @@ import {
   taskFromMutationResult,
 } from '../../src/features/tasks/task-mutation';
 import { TaskUndoBanner } from '../../src/features/tasks/task-undo-banner';
+import { TaskCompletionSheet } from '../../src/features/tasks/task-completion-sheet';
+import { isMedicalTask } from '../../src/features/tasks/task-completion';
 
 const scopes = [
   { value: 'today', label: '今天' },
@@ -47,6 +54,7 @@ export default function TasksTab() {
   const [error, setError] = useState('');
   const [offlineNotice, setOfflineNotice] = useState('');
   const [undoableTask, setUndoableTask] = useState<TaskSummary>();
+  const [completingTask, setCompletingTask] = useState<TaskSummary>();
   const dismissUndo = useCallback(() => setUndoableTask(undefined), []);
 
   const load = useCallback(async () => {
@@ -77,33 +85,25 @@ export default function TasksTab() {
   );
 
   function requestComplete(task: TaskSummary) {
-    if (isMedical(task)) {
-      Alert.alert(
-        '确认完成医疗任务',
-        `请确认「${task.title}」已经按实际情况执行，完成后会生成医疗记录。`,
-        [
-          { text: '取消', style: 'cancel' },
-          { text: '确认完成', onPress: () => void complete(task, true) },
-        ],
-      );
-    } else void complete(task, false);
+    setCompletingTask(task);
   }
-  async function complete(task: TaskSummary, medicalConfirmed: boolean) {
+  async function complete(task: TaskSummary, input: CompleteTaskInput) {
     if (!session || !activeFamily) return;
+    setCompletingTask(undefined);
     setActionId(task.id);
     setError('');
-    const operation = authApi.createCompleteOperation(activeFamily.id, task, medicalConfirmed);
+    const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
       const result = await authApi.sendTaskOperation(session.accessToken, operation);
       await load();
-      if (!medicalConfirmed) setUndoableTask(taskFromMutationResult(result, task));
+      if (!isMedicalTask(task)) setUndoableTask(taskFromMutationResult(result, task));
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
         await removeCachedTask(task.id);
         setTasks((current) => current.filter((item) => item.id !== task.id));
         setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
-        if (!medicalConfirmed) setUndoableTask(optimisticCompletedTask(task));
+        if (!isMedicalTask(task)) setUndoableTask(optimisticCompletedTask(task, input.actualAt));
       } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
     } finally {
       setActionId('');
@@ -319,13 +319,17 @@ export default function TasksTab() {
           </Card>
         )}
       </ScrollView>
+      <TaskCompletionSheet
+        task={completingTask}
+        visible={!!completingTask}
+        busy={!!completingTask && actionId === completingTask.id}
+        onCancel={() => setCompletingTask(undefined)}
+        onSubmit={(input) => completingTask && void complete(completingTask, input)}
+      />
     </Screen>
   );
 }
 
-function isMedical(task: TaskSummary) {
-  return task.type === 'VACCINE' || task.type === 'DEWORMING' || task.type === 'MEDICATION';
-}
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('zh-CN', {
     hour: '2-digit',

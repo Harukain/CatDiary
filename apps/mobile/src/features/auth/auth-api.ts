@@ -120,9 +120,17 @@ export interface TaskSummary {
   status: 'PENDING' | 'COMPLETED' | 'SKIPPED' | 'CANCELLED';
   scheduledAt: string;
   completedAt?: string | null;
+  result?: Record<string, unknown> | null;
+  note?: string | null;
   version: number;
   pet?: { id: string; name: string } | null;
   assignee?: { id: string; displayName: string | null } | null;
+}
+export interface CompleteTaskInput {
+  actualAt: string;
+  result: Record<string, unknown>;
+  note?: string;
+  medicalConfirmed?: boolean;
 }
 export type TaskMutationResult =
   | TaskSummary
@@ -471,13 +479,16 @@ export const authApi = {
   createCompleteOperation(
     familyId: string,
     task: TaskSummary,
-    medicalConfirmed = false,
+    input?: CompleteTaskInput,
   ): OfflineTaskOperation {
+    const actualAt = input?.actualAt ?? new Date().toISOString();
+    const note = input?.note?.trim();
     return createTaskOperation(familyId, `/tasks/${task.id}/complete`, 'complete', task.id, {
-      actualAt: new Date().toISOString(),
-      result: {},
+      actualAt,
+      result: input?.result ?? {},
       version: task.version,
-      medicalConfirmed,
+      ...(note ? { note } : {}),
+      medicalConfirmed: input?.medicalConfirmed ?? false,
     });
   },
   createSkipOperation(familyId: string, task: TaskSummary): OfflineTaskOperation {

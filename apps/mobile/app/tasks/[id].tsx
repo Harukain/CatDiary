@@ -10,7 +10,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-import { authApi, AuthApiError, type TaskSummary } from '../../src/features/auth/auth-api';
+import {
+  authApi,
+  AuthApiError,
+  type CompleteTaskInput,
+  type TaskSummary,
+} from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { Body, Card, ErrorText, Screen, TextButton, Title } from '../../src/shared/ui/primitives';
 import {
@@ -18,6 +23,11 @@ import {
   isNetworkFailure,
   removeCachedTask,
 } from '../../src/features/offline/offline-queue';
+import { TaskCompletionSheet } from '../../src/features/tasks/task-completion-sheet';
+import {
+  formatTaskCompletionResult,
+  isMedicalTask,
+} from '../../src/features/tasks/task-completion';
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,6 +37,7 @@ export default function TaskDetailScreen() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
+  const [completionVisible, setCompletionVisible] = useState(false);
 
   const load = useCallback(() => {
     if (!id || !session || !activeFamily) return;
@@ -47,26 +58,16 @@ export default function TaskDetailScreen() {
 
   function requestComplete() {
     if (!task) return;
-    if (isMedical(task)) {
-      Alert.alert(
-        '确认完成医疗任务',
-        `请确认「${task.title}」已经按实际情况执行，完成后会生成医疗记录。`,
-        [
-          { text: '取消', style: 'cancel' },
-          { text: '确认完成', onPress: () => void complete(true) },
-        ],
-      );
-      return;
-    }
-    void complete(false);
+    setCompletionVisible(true);
   }
 
-  async function complete(medicalConfirmed: boolean) {
+  async function complete(input: CompleteTaskInput) {
     if (!task || !session || !activeFamily) return;
+    setCompletionVisible(false);
     setActionBusy(true);
     setError('');
     setNotice('');
-    const operation = authApi.createCompleteOperation(activeFamily.id, task, medicalConfirmed);
+    const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
       load();
@@ -74,7 +75,14 @@ export default function TaskDetailScreen() {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
         await removeCachedTask(task.id);
-        setTask({ ...task, status: 'COMPLETED', completedAt: new Date().toISOString() });
+        setTask({
+          ...task,
+          status: 'COMPLETED',
+          completedAt: input.actualAt,
+          result: input.result,
+          note: input.note ?? null,
+          version: task.version + 1,
+        });
         setNotice('网络不可用，完成操作已保存并将在恢复后同步。');
       } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
     } finally {
@@ -171,12 +179,16 @@ export default function TaskDetailScreen() {
               value={new Date(task.completedAt).toLocaleString('zh-CN', { hour12: false })}
             />
           ) : null}
+          {formatTaskCompletionResult(task.result) ? (
+            <Info label="执行结果" value={formatTaskCompletionResult(task.result)} />
+          ) : null}
+          {task.note ? <Info label="备注" value={task.note} /> : null}
         </Card>
         <Card>
           <Title>{task.status === 'PENDING' ? '处理任务' : '任务结果'}</Title>
           <Body>
             {task.status === 'PENDING'
-              ? isMedical(task)
+              ? isMedicalTask(task)
                 ? '医疗任务完成前需要再次确认实际执行情况。'
                 : '完成会记录实际时间与执行人；跳过只影响本次任务。'
               : canUndo(task)
@@ -218,6 +230,13 @@ export default function TaskDetailScreen() {
         </Card>
         <TextButton label="返回" onPress={() => router.back()} />
       </ScrollView>
+      <TaskCompletionSheet
+        task={task}
+        visible={completionVisible}
+        busy={actionBusy}
+        onCancel={() => setCompletionVisible(false)}
+        onSubmit={(input) => void complete(input)}
+      />
     </Screen>
   );
 }
@@ -249,9 +268,6 @@ function statusStyle(status: TaskSummary['status']) {
     : status === 'COMPLETED'
       ? styles.completed
       : styles.inactive;
-}
-function isMedical(task: TaskSummary) {
-  return task.type === 'VACCINE' || task.type === 'DEWORMING' || task.type === 'MEDICATION';
 }
 function canUndo(task: TaskSummary) {
   return task.status === 'COMPLETED' || task.status === 'SKIPPED';
