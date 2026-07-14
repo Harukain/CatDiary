@@ -1235,6 +1235,58 @@
         "tags": ["pets"]
       }
     },
+    "/api/v1/pets/{id}/profile-summary": {
+      "get": {
+        "operationId": "PetsController_profileSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": ["pets"]
+      }
+    },
+    "/api/v1/pets/{id}/weight-trend": {
+      "get": {
+        "operationId": "PetsController_weightTrend",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": ["pets"]
+      }
+    },
     "/api/v1/photos": {
       "get": {
         "operationId": "PhotosController_list",

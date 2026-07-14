@@ -169,6 +169,50 @@ export interface RecordSummary {
   pet?: { id: string; name: string } | null;
   author?: { id: string; displayName: string | null };
 }
+export interface PetWeightPoint {
+  recordId: string;
+  occurredAt: string;
+  weightKg: number;
+  bucket: string;
+}
+export interface PetWeightTrend {
+  petId: string;
+  bucket: 'day' | 'raw';
+  timezone: string;
+  points: PetWeightPoint[];
+}
+export interface PetProfileRecordSummary {
+  id: string;
+  type: PlanType;
+  title: string;
+  abnormal: boolean;
+  occurredAt: string;
+  data: Record<string, unknown>;
+  note?: string | null;
+}
+export interface PetProfileMedicalRecordSummary {
+  id: string;
+  type: MedicalRecordType;
+  title: string;
+  occurredAt: string;
+  brand?: string | null;
+  batchNumber?: string | null;
+  dose?: string | null;
+  provider?: string | null;
+  nextDueAt?: string | null;
+  reaction?: string | null;
+  note?: string | null;
+  version: number;
+}
+export interface PetProfileHealthEventSummary {
+  id: string;
+  title: string;
+  status: 'ACTIVE' | 'RECOVERED';
+  startedAt: string;
+  recoveredAt?: string | null;
+  summary?: string | null;
+  version: number;
+}
 export interface HealthEventSummary {
   id: string;
   familyId: string;
@@ -229,6 +273,43 @@ export interface PhotoSummary {
   pets: Array<{ petId: string; pet: { id: string; name: string } }>;
   records: Array<{ recordId: string }>;
   createdBy: { id: string; displayName: string | null };
+}
+export interface PetProfileSummary {
+  generatedAt: string;
+  timezone: string;
+  pet: PetSummary & {
+    sex?: string | null;
+    breed?: string | null;
+    birthDate?: string | null;
+    neutered?: boolean | null;
+    chipNumber?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  care: {
+    activePlanCount: number;
+    pendingTaskCount: number;
+    overdueTaskCount: number;
+  };
+  weight: {
+    latest: PetWeightPoint | null;
+    trend: PetWeightPoint[];
+  };
+  medical: {
+    counts: {
+      vaccines: number;
+      deworming: number;
+      medications: number;
+    };
+    latestRecords: PetProfileMedicalRecordSummary[];
+    nextDue: PetProfileMedicalRecordSummary[];
+  };
+  health: {
+    activeEvents: PetProfileHealthEventSummary[];
+    abnormalRecordCount30d: number;
+  };
+  recentRecords: PetProfileRecordSummary[];
+  photos: PhotoSummary[];
 }
 export interface PhotoPresign {
   uploadUrl: string;
@@ -336,6 +417,25 @@ export const authApi = {
         chipNumber?: string | null;
       }
     >(`/pets/${petId}`, accessToken, familyId);
+  },
+  getPetProfileSummary(accessToken: string, familyId: string, petId: string) {
+    return authenticatedGet<PetProfileSummary>(
+      `/pets/${petId}/profile-summary`,
+      accessToken,
+      familyId,
+    );
+  },
+  getPetWeightTrend(
+    accessToken: string,
+    familyId: string,
+    petId: string,
+    bucket: 'day' | 'raw' = 'day',
+  ) {
+    return authenticatedGet<PetWeightTrend>(
+      `/pets/${petId}/weight-trend?bucket=${bucket}`,
+      accessToken,
+      familyId,
+    );
   },
   updatePet(
     accessToken: string,

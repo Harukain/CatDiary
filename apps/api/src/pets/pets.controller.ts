@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -43,6 +44,11 @@ const createPetSchema = z.object(petFields);
 const updatePetSchema = z
   .object({ ...petFields, name: petNameSchema.optional(), version: z.number().int().positive() })
   .refine((value) => Object.keys(value).some((key) => key !== 'version'), '至少修改一个字段');
+const trendQuerySchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  bucket: z.enum(['day', 'raw']).default('day'),
+});
 
 @ApiTags('pets')
 @ApiBearerAuth()
@@ -59,6 +65,24 @@ export class PetsController {
   @Get(':id')
   get(@CurrentFamily() family: FamilyContext, @Param('id') id: string) {
     return this.pets.get(family.familyId, parseWith(idSchema, id));
+  }
+
+  @Get(':id/profile-summary')
+  profileSummary(@CurrentFamily() family: FamilyContext, @Param('id') id: string) {
+    return this.pets.profileSummary(family.familyId, parseWith(idSchema, id));
+  }
+
+  @Get(':id/weight-trend')
+  weightTrend(
+    @CurrentFamily() family: FamilyContext,
+    @Param('id') id: string,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.pets.weightTrend(
+      family.familyId,
+      parseWith(idSchema, id),
+      parseWith(trendQuerySchema, query),
+    );
   }
 
   @Post()

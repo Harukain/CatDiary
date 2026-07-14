@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
@@ -24,10 +24,11 @@ const labels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用药' } 
 
 export default function MedicalRecordsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ petId?: string }>();
   const { session, activeFamily } = useSession();
   const [records, setRecords] = useState<MedicalRecordSummary[]>([]);
   const [pets, setPets] = useState<PetSummary[]>([]);
-  const [petId, setPetId] = useState('');
+  const [petId, setPetId] = useState(params.petId ?? '');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');

@@ -103,6 +103,7 @@ async function main() {
       'verify-openapi.mjs',
       'verify-otp-store.mjs',
       'verify-records.mjs',
+      'verify-pet-profile.mjs',
       'verify-health-events.mjs',
       'verify-medical-records.mjs',
       'verify-m3-e2e.mjs',

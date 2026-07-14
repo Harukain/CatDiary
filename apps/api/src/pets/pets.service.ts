@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  HealthEventStatus,
+  MedicalRecordType,
+  Prisma,
+  RecordStatus,
+  RecordType,
+} from '@prisma/client';
 import { isCalendarDateOnOrBefore, MAX_PETS_PER_FAMILY } from '@cat-diary/domain';
 import { AppException } from '../common/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +18,12 @@ interface PetInput {
   breed?: string | null;
   neutered?: boolean | null;
   chipNumber?: string | null;
+}
+
+interface WeightTrendFilters {
+  from?: string;
+  to?: string;
+  bucket: 'day' | 'raw';
 }
 
 @Injectable()
@@ -37,6 +49,169 @@ export class PetsService {
     });
     if (!pet) throw new AppException('PET_NOT_FOUND', '猫咪档案不存在', HttpStatus.NOT_FOUND);
     return this.withAvatar(familyId, pet);
+  }
+
+  async profileSummary(familyId: string, id: string) {
+    const [pet, family] = await Promise.all([
+      this.get(familyId, id),
+      this.prisma.family.findUniqueOrThrow({ where: { id: familyId }, select: { timezone: true } }),
+    ]);
+    const now = new Date();
+    const since30Days = new Date(now.getTime() - 30 * 86_400_000);
+    const [
+      recentRecords,
+      weightTrend,
+      latestMedicalRecords,
+      nextMedicalDue,
+      activeHealthEvents,
+      recentPhotos,
+      abnormalRecordCount30d,
+      activePlanCount,
+      pendingTaskCount,
+      overdueTaskCount,
+      medicalCounts,
+    ] = await Promise.all([
+      this.prisma.record.findMany({
+        where: {
+          familyId,
+          petId: id,
+          status: RecordStatus.ACTIVE,
+          deletedAt: null,
+          type: {
+            in: [
+              RecordType.FOOD,
+              RecordType.WATER,
+              RecordType.WEIGHT,
+              RecordType.STOOL,
+              RecordType.VOMIT,
+              RecordType.MEDICATION,
+            ],
+          },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 8,
+        select: this.recordSelection,
+      }),
+      this.weightTrend(familyId, id, { bucket: 'day' }),
+      this.prisma.medicalRecord.findMany({
+        where: { familyId, petId: id, deletedAt: null },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 6,
+        select: this.medicalRecordSelection,
+      }),
+      this.prisma.medicalRecord.findMany({
+        where: { familyId, petId: id, deletedAt: null, nextDueAt: { gte: now } },
+        orderBy: [{ nextDueAt: 'asc' }, { id: 'asc' }],
+        take: 5,
+        select: this.medicalRecordSelection,
+      }),
+      this.prisma.healthEvent.findMany({
+        where: { familyId, petId: id, status: HealthEventStatus.ACTIVE, deletedAt: null },
+        orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+        take: 5,
+        select: this.healthEventSelection,
+      }),
+      this.photos.list(familyId, { petId: id, limit: 6 }),
+      this.prisma.record.count({
+        where: {
+          familyId,
+          petId: id,
+          abnormal: true,
+          status: RecordStatus.ACTIVE,
+          deletedAt: null,
+          occurredAt: { gte: since30Days },
+        },
+      }),
+      this.prisma.plan.count({ where: { familyId, petId: id, enabled: true, deletedAt: null } }),
+      this.prisma.task.count({
+        where: { familyId, petId: id, status: 'PENDING', deletedAt: null },
+      }),
+      this.prisma.task.count({
+        where: {
+          familyId,
+          petId: id,
+          status: 'PENDING',
+          deletedAt: null,
+          scheduledAt: { lt: now },
+        },
+      }),
+      this.medicalCounts(familyId, id),
+    ]);
+    return {
+      generatedAt: now,
+      timezone: family.timezone,
+      pet,
+      care: {
+        activePlanCount,
+        pendingTaskCount,
+        overdueTaskCount,
+      },
+      weight: {
+        latest: weightTrend.points.at(-1) ?? null,
+        trend: weightTrend.points,
+      },
+      medical: {
+        counts: medicalCounts,
+        latestRecords: latestMedicalRecords,
+        nextDue: nextMedicalDue,
+      },
+      health: {
+        activeEvents: activeHealthEvents,
+        abnormalRecordCount30d,
+      },
+      recentRecords,
+      photos: recentPhotos.items,
+    };
+  }
+
+  async weightTrend(familyId: string, id: string, filters: WeightTrendFilters) {
+    const [petExists, family] = await Promise.all([
+      this.prisma.pet.count({ where: { id, familyId, deletedAt: null } }),
+      this.prisma.family.findUniqueOrThrow({ where: { id: familyId }, select: { timezone: true } }),
+    ]);
+    if (!petExists) throw new AppException('PET_NOT_FOUND', '猫咪档案不存在', HttpStatus.NOT_FOUND);
+    const rows = await this.prisma.record.findMany({
+      where: {
+        familyId,
+        petId: id,
+        type: RecordType.WEIGHT,
+        status: RecordStatus.ACTIVE,
+        deletedAt: null,
+        ...(filters.from || filters.to
+          ? {
+              occurredAt: {
+                ...(filters.from ? { gte: new Date(filters.from) } : {}),
+                ...(filters.to ? { lte: new Date(filters.to) } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+      take: 100,
+      select: { id: true, occurredAt: true, data: true },
+    });
+    const points = rows
+      .map((row) => {
+        const weightKg = weightKgFromData(row.data);
+        if (weightKg === null) return null;
+        return {
+          recordId: row.id,
+          occurredAt: row.occurredAt,
+          weightKg,
+          bucket: localDateKey(row.occurredAt, family.timezone),
+        };
+      })
+      .filter((point): point is NonNullable<typeof point> => !!point);
+    const bucketed =
+      filters.bucket === 'raw'
+        ? points
+        : Array.from(new Map(points.map((point) => [point.bucket, point])).values());
+    return {
+      petId: id,
+      bucket: filters.bucket,
+      timezone: family.timezone,
+      points: bucketed,
+    };
   }
 
   async create(familyId: string, userId: string, input: PetInput) {
@@ -193,4 +368,71 @@ export class PetsService {
     createdAt: true,
     updatedAt: true,
   } satisfies Prisma.PetSelect;
+
+  private readonly recordSelection = {
+    id: true,
+    type: true,
+    title: true,
+    abnormal: true,
+    occurredAt: true,
+    data: true,
+    note: true,
+  } satisfies Prisma.RecordSelect;
+
+  private readonly medicalRecordSelection = {
+    id: true,
+    type: true,
+    title: true,
+    occurredAt: true,
+    brand: true,
+    batchNumber: true,
+    dose: true,
+    provider: true,
+    nextDueAt: true,
+    reaction: true,
+    note: true,
+    version: true,
+  } satisfies Prisma.MedicalRecordSelect;
+
+  private readonly healthEventSelection = {
+    id: true,
+    title: true,
+    status: true,
+    startedAt: true,
+    recoveredAt: true,
+    summary: true,
+    version: true,
+  } satisfies Prisma.HealthEventSelect;
+
+  private async medicalCounts(familyId: string, petId: string) {
+    const [vaccines, deworming, medications] = await Promise.all([
+      this.prisma.medicalRecord.count({
+        where: { familyId, petId, type: MedicalRecordType.VACCINE, deletedAt: null },
+      }),
+      this.prisma.medicalRecord.count({
+        where: { familyId, petId, type: MedicalRecordType.DEWORMING, deletedAt: null },
+      }),
+      this.prisma.medicalRecord.count({
+        where: { familyId, petId, type: MedicalRecordType.MEDICATION, deletedAt: null },
+      }),
+    ]);
+    return { vaccines, deworming, medications };
+  }
+}
+
+function weightKgFromData(data: Prisma.JsonValue) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const value = (data as { weightKg?: unknown }).weightKg;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function localDateKey(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '00';
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
