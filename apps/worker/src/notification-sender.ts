@@ -7,13 +7,18 @@ export interface NotificationJobData {
   title: string;
   scheduledAt: string | Date;
   channel: 'DEVELOPMENT' | 'EXPO_PUSH' | 'FEISHU';
+  stage?: ReminderStage;
+  jobKey?: string;
   pushToken?: string;
   pushTokenId?: string;
   channelId?: string;
 }
 
+export type ReminderStage = 'due' | 'overdue-1' | 'overdue-2' | 'overdue-3';
+
 export async function sendNotification(prisma: PrismaClient, data: NotificationJobData) {
-  const message = formatTaskMessage(data.title, new Date(data.scheduledAt));
+  const stage = data.stage ?? 'due';
+  const message = formatTaskMessage(data.title, new Date(data.scheduledAt), stage);
   if (data.channel === 'DEVELOPMENT') {
     console.info(
       JSON.stringify({
@@ -22,6 +27,7 @@ export async function sendNotification(prisma: PrismaClient, data: NotificationJ
         event: 'development-notification',
         taskId: data.id,
         familyId: data.familyId,
+        stage,
       }),
     );
     return { channel: data.channel, providerMessageId: null };
@@ -36,7 +42,7 @@ export async function sendNotification(prisma: PrismaClient, data: NotificationJ
         title: '猫伴日记提醒',
         body: message,
         sound: 'default',
-        data: { taskId: data.id, familyId: data.familyId },
+        data: { taskId: data.id, familyId: data.familyId, category: 'TASK_REMINDER', stage },
       }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -66,9 +72,10 @@ export async function sendNotification(prisma: PrismaClient, data: NotificationJ
   return { channel: data.channel, providerMessageId: null };
 }
 
-export function formatTaskMessage(title: string, scheduledAt: Date) {
+export function formatTaskMessage(title: string, scheduledAt: Date, stage: ReminderStage = 'due') {
   const time = scheduledAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-  return `${title} · ${time}`;
+  if (stage === 'due') return `有一项照顾任务到时间了：${title} · ${time}`;
+  return `有一项照顾任务已逾期：${title} · 原计划 ${time}`;
 }
 
 function decryptSecret(value: string, secret: string) {

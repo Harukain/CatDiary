@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { redisConnectionFromUrl } from '@cat-diary/domain';
-import { generateTasksAndReminders } from './task-generator.js';
+import { generateTasksAndReminders, notificationQueueJobId } from './task-generator.js';
 import { cleanupPhotoObjects, photoStorageConfigFromEnvironment } from './photo-cleanup.js';
 import { processAccountDeletions } from './account-cleanup.js';
 import {
@@ -64,7 +64,10 @@ async function bootstrap() {
     async (job) => {
       if (job.name === 'expo-receipt') return processExpoReceipt(prisma, job.data);
       if (job.name !== 'notification-due') return { ignored: true };
-      const jobKey = job.id ?? `unknown-${job.data.id}`;
+      const jobKey =
+        typeof job.data.jobKey === 'string'
+          ? job.data.jobKey
+          : (job.id ?? `unknown-${job.data.id}`);
       const result = await deliverNotificationDue(prisma, {
         jobKey,
         attemptsMade: job.attemptsMade,
@@ -81,7 +84,7 @@ async function bootstrap() {
             pushTokenId: job.data.pushTokenId,
           },
           {
-            jobId: `${jobKey}-receipt`,
+            jobId: notificationQueueJobId(`${jobKey}:receipt`),
             delay: 15 * 60 * 1000,
             attempts: 6,
             backoff: { type: 'exponential', delay: 5 * 60 * 1000 },
@@ -165,8 +168,10 @@ async function bootstrap() {
       });
       return;
     }
+    const jobKey = typeof job.data.jobKey === 'string' ? job.data.jobKey : job.id;
+    if (!jobKey) return;
     void prisma.notificationLog.updateMany({
-      where: { jobKey: job.id },
+      where: { jobKey },
       data: {
         status: 'FAILED',
         attempt: job.attemptsMade + 1,

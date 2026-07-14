@@ -8,6 +8,14 @@ describe('formatTaskMessage', () => {
     const message = formatTaskMessage('猫三联疫苗', new Date('2026-07-12T08:30:00.000Z'));
     expect(message).toContain('猫三联疫苗');
     expect(message).toContain('2026');
+    expect(message).toContain('到时间');
+  });
+
+  it('marks overdue stages clearly', () => {
+    const message = formatTaskMessage('喂药', new Date('2026-07-12T08:30:00.000Z'), 'overdue-1');
+
+    expect(message).toContain('逾期');
+    expect(message).toContain('原计划');
   });
 
   it('includes the task and family identifiers needed for safe App routing', async () => {
@@ -28,7 +36,12 @@ describe('formatTaskMessage', () => {
 
     const request = fetcher.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body))).toMatchObject({
-      data: { taskId: 'task_12345678', familyId: 'family_12345678' },
+      data: {
+        taskId: 'task_12345678',
+        familyId: 'family_12345678',
+        category: 'TASK_REMINDER',
+        stage: 'due',
+      },
     });
   });
 });

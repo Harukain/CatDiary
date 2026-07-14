@@ -83,13 +83,14 @@ export async function guardNotificationDelivery(
       }),
       prisma.notificationPreference.findUnique({
         where: { familyId_userId: { familyId: log.familyId, userId: log.userId } },
-        select: { taskReminderEnabled: true, pushEnabled: true },
+        select: { taskReminderEnabled: true, pushEnabled: true, overdueEnabled: true },
       }),
     ]);
     if (!activeMembership) reason = 'RECIPIENT_LEFT_FAMILY';
     else if (
       preference?.taskReminderEnabled === false ||
-      (isPushLike(log.channel) && preference?.pushEnabled === false)
+      (isPushLike(log.channel) && preference?.pushEnabled === false) ||
+      (isOverdueJobKey(jobKey) && preference?.overdueEnabled === false)
     )
       reason = 'NOTIFICATION_PREFERENCE_DISABLED';
   }
@@ -139,4 +140,8 @@ export async function deliverNotificationDue(
 
 function isPushLike(channel: NotificationChannelType) {
   return channel === 'EXPO_PUSH' || channel === 'DEVELOPMENT';
+}
+
+function isOverdueJobKey(jobKey: string) {
+  return /:overdue-[1-3]$/.test(jobKey);
 }

@@ -90,7 +90,8 @@ export class NotificationsService implements OnModuleDestroy {
         '只有失败通知可以重试',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
-    const job = await this.queue.getJob(log.jobKey);
+    const queueJobId = notificationQueueJobId(log.jobKey);
+    const job = await this.queue.getJob(queueJobId);
     if (!log.task)
       throw new AppException(
         'NOTIFICATION_TASK_EXPIRED',
@@ -100,6 +101,8 @@ export class NotificationsService implements OnModuleDestroy {
     const data: Record<string, unknown> = {
       ...log.task,
       channel: log.channel,
+      stage: notificationStageFromJobKey(log.jobKey),
+      jobKey: log.jobKey,
     };
     if (log.channel === NotificationChannelType.EXPO_PUSH) {
       if (!log.userId)
@@ -148,13 +151,13 @@ export class NotificationsService implements OnModuleDestroy {
         );
       data.channelId = channel.id;
     }
-    const receiptJob = await this.queue.getJob(`${log.jobKey}-receipt`);
+    const receiptJob = await this.queue.getJob(notificationQueueJobId(`${log.jobKey}:receipt`));
     const queued = await this.markNotificationQueued(log.id);
     try {
       if (receiptJob) await receiptJob.remove();
       if (job) await job.remove();
       await this.queue.add('notification-due', data, {
-        jobId: log.jobKey,
+        jobId: queueJobId,
         attempts: 5,
         backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: { age: 10 * 24 * 60 * 60, count: 10_000 },
@@ -320,4 +323,16 @@ export class NotificationsService implements OnModuleDestroy {
       );
     }
   }
+}
+
+function notificationStageFromJobKey(jobKey: string) {
+  const stage = jobKey.split(':').at(-1);
+  if (stage === 'due' || stage === 'overdue-1' || stage === 'overdue-2' || stage === 'overdue-3') {
+    return stage;
+  }
+  return 'due';
+}
+
+function notificationQueueJobId(jobKey: string) {
+  return jobKey.replaceAll(':', '__');
 }

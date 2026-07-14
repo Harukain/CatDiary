@@ -26,7 +26,7 @@ describe('NotificationsService retry', () => {
       id: 'log-id',
       familyId: 'family-id',
       userId: 'user-id',
-      jobKey: 'reminder-task-push-old-token',
+      jobKey: 'notify:task-id:old-token-id:EXPO_PUSH:overdue-1',
       channel: NotificationChannelType.EXPO_PUSH,
       status: NotificationStatus.FAILED,
       task: {
@@ -71,8 +71,18 @@ describe('NotificationsService retry', () => {
       expect.objectContaining({
         pushToken: 'ExponentPushToken[new]',
         pushTokenId: 'new-token-id',
+        stage: 'overdue-1',
+        jobKey: log.jobKey,
       }),
-      expect.objectContaining({ jobId: log.jobKey }),
+      expect.objectContaining({ jobId: 'notify__task-id__old-token-id__EXPO_PUSH__overdue-1' }),
+    );
+    expect(queue.getJob).toHaveBeenNthCalledWith(
+      1,
+      'notify__task-id__old-token-id__EXPO_PUSH__overdue-1',
+    );
+    expect(queue.getJob).toHaveBeenNthCalledWith(
+      2,
+      'notify__task-id__old-token-id__EXPO_PUSH__overdue-1__receipt',
     );
     expect(receiptJob.remove).toHaveBeenCalledOnce();
     expect(oldJob.remove).toHaveBeenCalledOnce();

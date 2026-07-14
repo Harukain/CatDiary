@@ -47,7 +47,11 @@ function fakePrisma(
   overrides: {
     log?: LogFixture | null;
     activeMembership?: number;
-    preference?: { taskReminderEnabled: boolean; pushEnabled: boolean } | null;
+    preference?: {
+      taskReminderEnabled: boolean;
+      pushEnabled: boolean;
+      overdueEnabled?: boolean;
+    } | null;
   } = {},
 ) {
   const notificationLog = {
@@ -67,7 +71,7 @@ function fakePrisma(
       .mockResolvedValue(
         Object.prototype.hasOwnProperty.call(overrides, 'preference')
           ? overrides.preference
-          : { taskReminderEnabled: true, pushEnabled: true },
+          : { taskReminderEnabled: true, pushEnabled: true, overdueEnabled: true },
       ),
   };
   return {
@@ -148,11 +152,14 @@ describe('deliverNotificationDue', () => {
   it.each([
     ['taskReminderEnabled', { taskReminderEnabled: false, pushEnabled: true }],
     ['pushEnabled', { taskReminderEnabled: true, pushEnabled: false }],
+    ['overdueEnabled', { taskReminderEnabled: true, pushEnabled: true, overdueEnabled: false }],
   ])('用户关闭 %s 后跳过并不调用外部发送', async (_field, preference) => {
     const { prisma, notificationLog } = fakePrisma({ preference });
     const sender = vi.fn();
+    const jobKey =
+      _field === 'overdueEnabled' ? 'notify:task-id:user-id:EXPO_PUSH:overdue-1' : input().jobKey;
 
-    const result = await deliverNotificationDue(prisma, input(), sender);
+    const result = await deliverNotificationDue(prisma, { ...input(), jobKey }, sender);
 
     expect(result).toEqual({ skipped: true, reason: 'NOTIFICATION_PREFERENCE_DISABLED' });
     expect(sender).not.toHaveBeenCalled();

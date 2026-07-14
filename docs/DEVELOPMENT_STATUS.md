@@ -43,6 +43,7 @@
 - M2 多通道发送：Worker 支持 Expo Push、飞书和开发通道，按接收人生成确定性任务并统一记录发送结果与重试状态。
 - M2 通知发送前复核：Worker 在实际发送前再次校验通知日志、任务状态、猫咪状态、家庭成员关系和个人通知偏好；已失效提醒标记为 `SKIPPED`，不会调用外部发送通道。
 - M2 Expo 回执闭环：推送票据提交后延迟查询 Expo Receipt，区分 SENT 与 DELIVERED；回执查询采用指数退避，永久失败写回安全错误，`DeviceNotRegistered` 会自动停用对应设备 Token。
+- M2 完整提醒生命周期：Worker 已按 `due`、`overdue-1`、`overdue-2`、`overdue-3` 四个阶段排队；逾期阶段限制在家庭本地日期内，个人 `overdueEnabled` 偏好在排队和发送前复核均生效；通知日志保留业务 `notify:{taskId}:{receiverId}:{channel}:{stage}` jobKey，BullMQ 使用无冒号安全 jobId，避免队列运行时拒绝自定义 ID；失败重试会保留原提醒阶段。
 - M2 轻量离线：App 使用 SQLite WAL 持久化任务完成、跳过和撤销操作，保留原始请求体与幂等键，联网后自动重放并区分冲突/失败。
 - M3 记录 API 第一阶段：饮食、饮水、体重、排便、呕吐、用药、疫苗、驱虫和铲屎的类型专属校验；创建幂等、时间线筛选、详情、乐观锁编辑、软删除与 30 天管理员恢复。
 - M3 记录权限：所有手动记录强制校验猫咪属于当前家庭；成员仅可编辑/删除自己的记录；任务生成记录禁止直接改写。
@@ -83,7 +84,7 @@
 - Worker 队列运维 CLI 已补齐：支持三条固定队列的只读状态、带精确确认词的全局暂停/恢复，并输出暂停状态与各类积压；真实本机 Redis 状态查询通过。
 - 托管 Redis 连接已统一：API、Worker 与运维 CLI 共同支持 `rediss://` TLS、认证信息、非默认端口和数据库编号，环境校验拒绝非 Redis 协议。
 - 6 条告警均有 promtool 时间序列行为测试，覆盖 `for` 持续时间、比率、P95、增长量、积压阈值以及最终标签/通知文案，避免仅语法正确但无法触发。
-- 当前单元测试 113 个通过（Domain 11、API 39、Worker 30、Mobile 33）；Prisma 共 16 个迁移。
+- 当前单元测试 118 个通过（Domain 11、API 39、Worker 35、Mobile 33）；Prisma 共 16 个迁移。
 - Helmet、CORS、限流、生产环境变量校验、结构化请求日志、存活/就绪探针已启用。
 - CI 已覆盖迁移、集成测试、iOS/Android Expo 导出、依赖审计与 Gitleaks；EAS 三环境配置与 PostgreSQL 备份/恢复脚本已补齐。
 - App 动态构建配置已加固：Preview/Production 强制非本地 HTTPS API 与有效 EAS Project ID，运行时只读取已校验地址；Bundle ID/Package、OTA runtime、更新 URL、出口加密与相机/相册权限均进入自动门禁。
@@ -142,7 +143,7 @@
 ## 下一步
 
 1. 重新连接 Android 真机，复验中央“＋”只弹出快速新增 Bottom Sheet、关闭/返回路径、角色入口、计划管理与普通任务 5 秒撤销，并检查运行日志。
-2. 补齐完整提醒生命周期（到点与逾期阶段）、猫咪档案聚合等剩余 MVP 缺口。
+2. 补齐猫咪档案聚合等剩余 MVP 缺口；提醒生命周期仍需在 iOS/Android 真机上做系统推送和飞书通道回归。
 3. 在 iOS 与 Android 真机回归推送、权限、图片队列恢复、轻量离线同步和 360dp 安全区布局。
 4. 用腾讯云测试 Bucket 与已审核短信签名/模板验收 COS 和真实验证码，再接入托管 PostgreSQL/Redis、域名、备份与监控告警。
 
