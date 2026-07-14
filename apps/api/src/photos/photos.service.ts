@@ -37,6 +37,16 @@ interface PhotoInput {
   recordId?: string;
 }
 
+export interface RecordPhotoSummaryInput {
+  id: string;
+  objectKey: string;
+  thumbnailObjectKey?: string | null;
+  width?: number | null;
+  height?: number | null;
+  note?: string | null;
+  createdAt?: Date | string;
+}
+
 @Injectable()
 export class PhotosService {
   private readonly localDirectory: string;
@@ -573,6 +583,20 @@ export class PhotosService {
       ),
     };
   }
+
+  async recordSummary(photo: RecordPhotoSummaryInput) {
+    const withUrls = await this.withUrl(photo);
+    return {
+      id: withUrls.id,
+      width: withUrls.width ?? null,
+      height: withUrls.height ?? null,
+      note: withUrls.note ?? null,
+      createdAt: withUrls.createdAt,
+      downloadUrl: withUrls.downloadUrl,
+      thumbnailUrl: withUrls.thumbnailUrl,
+    };
+  }
+
   private async objectUrl(photoId: string, objectKey: string, thumbnail: boolean) {
     if (this.cos && this.bucket && this.region)
       return this.cos.getObjectUrl({

@@ -153,6 +153,15 @@ export interface NotificationLogSummary {
 export type ManualRecordType =
   'FOOD' | 'WATER' | 'WEIGHT' | 'STOOL' | 'VOMIT' | 'MEDICATION' | 'LITTER';
 export type CreatableRecordType = ManualRecordType | 'PHOTO';
+export interface RecordPhotoSummary {
+  id: string;
+  width?: number | null;
+  height?: number | null;
+  note?: string | null;
+  createdAt?: string;
+  downloadUrl: string;
+  thumbnailUrl: string;
+}
 export interface RecordSummary {
   id: string;
   clientId: string;
@@ -169,6 +178,7 @@ export interface RecordSummary {
   version: number;
   pet?: { id: string; name: string } | null;
   author?: { id: string; displayName: string | null };
+  photos?: RecordPhotoSummary[];
 }
 export interface PetWeightPoint {
   recordId: string;

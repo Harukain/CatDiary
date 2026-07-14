@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,6 +41,7 @@ import {
   type RecordFormValue,
 } from '../../src/features/records/record-form';
 import { getRecordActionPermissions } from '../../src/features/records/record-permissions';
+import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 
 const typeLabels: Record<string, string> = {
   FOOD: '饮食',
@@ -297,6 +299,32 @@ export default function RecordDetailScreen() {
           ) : (
             <>
               <Text style={styles.sectionTitle}>记录内容</Text>
+              {record.type === 'PHOTO' && record.photos?.length ? (
+                <View style={styles.photoGrid}>
+                  {record.photos.map((photo) => (
+                    <Pressable
+                      key={photo.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={photo.note ? `查看照片：${photo.note}` : '查看照片详情'}
+                      onPress={() =>
+                        router.push({ pathname: '/photos/[id]', params: { id: photo.id } })
+                      }
+                      style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
+                    >
+                      <Image
+                        accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片缩略图'}
+                        resizeMode="cover"
+                        source={photoThumbnailSource(
+                          photo,
+                          session?.accessToken ?? '',
+                          activeFamily?.id ?? '',
+                        )}
+                        style={styles.photoImage}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
               {recordDataRows(record).map((row) => (
                 <View key={row.label} style={styles.dataRow}>
                   <Text style={styles.dataLabel}>{row.label}</Text>
@@ -341,7 +369,9 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
 }
 function recordDataRows(record: RecordSummary) {
   if (record.type === 'PHOTO') {
-    const count = Array.isArray(record.data.photoIds) ? record.data.photoIds.length : 0;
+    const count =
+      record.photos?.length ??
+      (Array.isArray(record.data.photoIds) ? record.data.photoIds.length : 0);
     return [{ label: '照片数量', value: count ? `${count} 张` : '照片记录' }];
   }
   return Object.entries(record.data).map(([label, value]) => ({
@@ -398,6 +428,23 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.surface },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  photoTile: {
+    width: '31%',
+    minWidth: 88,
+    aspectRatio: 1,
+    borderRadius: radii.input,
+    overflow: 'hidden',
+    backgroundColor: colors.divider,
+  },
+  photoImage: { width: '100%', height: '100%' },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   dataRow: {
     minHeight: 42,
     flexDirection: 'row',

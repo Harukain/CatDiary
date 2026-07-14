@@ -1,5 +1,13 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
@@ -15,6 +23,7 @@ import {
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
 import { recordOwnerLabel } from '../../src/features/records/record-form';
+import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 
 const labels: Record<string, string> = {
   FOOD: '饮食',
@@ -162,6 +171,8 @@ export default function RecordsTab() {
               <RecordItem
                 key={record.id}
                 record={record}
+                accessToken={session?.accessToken ?? ''}
+                familyId={activeFamily?.id ?? ''}
                 onPress={() =>
                   router.push({ pathname: '/records/[id]', params: { id: record.id } })
                 }
@@ -186,8 +197,19 @@ function Filter({ active, label, onPress }: { active: boolean; label: string; on
     </Pressable>
   );
 }
-function RecordItem({ record, onPress }: { record: RecordSummary; onPress(): void }) {
+function RecordItem({
+  record,
+  accessToken,
+  familyId,
+  onPress,
+}: {
+  record: RecordSummary;
+  accessToken: string;
+  familyId: string;
+  onPress(): void;
+}) {
   const when = new Date(record.occurredAt);
+  const photos = record.type === 'PHOTO' ? (record.photos ?? []).slice(0, 3) : [];
   return (
     <View style={styles.record}>
       <View style={[styles.dot, record.abnormal && styles.dotAbnormal]} />
@@ -206,6 +228,26 @@ function RecordItem({ record, onPress }: { record: RecordSummary; onPress(): voi
         <Text style={styles.recordMeta}>
           {recordOwnerLabel(record)} · {summary(record)}
         </Text>
+        {photos.length ? (
+          <View style={styles.photoStrip}>
+            {photos.map((photo) => (
+              <Image
+                key={photo.id}
+                accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片记录缩略图'}
+                resizeMode="cover"
+                source={photoThumbnailSource(photo, accessToken, familyId)}
+                style={styles.photoThumb}
+              />
+            ))}
+            {(record.photos?.length ?? 0) > photos.length ? (
+              <View style={styles.morePhotos}>
+                <Text style={styles.morePhotosText}>
+                  +{(record.photos?.length ?? 0) - photos.length}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         {record.note ? <Text style={styles.note}>{record.note}</Text> : null}
         {record.abnormal ? <Text style={styles.abnormal}>已标记异常</Text> : null}
       </Pressable>
@@ -369,6 +411,22 @@ const styles = StyleSheet.create({
   recordTime: { ...typography.caption, color: colors.textTertiary },
   recordTitle: { ...typography.h3, color: colors.ink },
   recordMeta: { ...typography.secondary, color: colors.textSecondary },
+  photoStrip: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  photoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.input,
+    backgroundColor: colors.divider,
+  },
+  morePhotos: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  morePhotosText: { ...typography.h3, color: colors.brand },
   note: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   abnormal: { ...typography.caption, color: colors.dangerDark, fontWeight: '600' },
 });

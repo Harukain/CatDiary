@@ -8,6 +8,7 @@ import {
   RecordType,
 } from '@prisma/client';
 import { AppException } from '../common/app.exception';
+import { PhotosService } from '../photos/photos.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface RecordCreateInput {
@@ -23,7 +24,10 @@ export interface RecordCreateInput {
 
 @Injectable()
 export class RecordsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly photos: PhotosService,
+  ) {}
 
   async list(
     familyId: string,
@@ -72,7 +76,10 @@ export class RecordsService {
     });
     const hasMore = records.length > filters.limit;
     if (hasMore) records.pop();
-    return { items: records, nextCursor: hasMore ? (records.at(-1)?.id ?? null) : null };
+    return {
+      items: await Promise.all(records.map((record) => this.presentRecord(record))),
+      nextCursor: hasMore ? (records.at(-1)?.id ?? null) : null,
+    };
   }
 
   async get(familyId: string, id: string, includeDeleted = false) {
@@ -85,7 +92,7 @@ export class RecordsService {
       select: this.selection,
     });
     if (!record) throw new AppException('RECORD_NOT_FOUND', '记录不存在', HttpStatus.NOT_FOUND);
-    return record;
+    return this.presentRecord(record);
   }
 
   async create(familyId: string, userId: string, input: RecordCreateInput) {
@@ -100,7 +107,7 @@ export class RecordsService {
         '发生时间不能晚于当前时间',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
-    return this.prisma.$transaction(async (tx) => {
+    const recordId = await this.prisma.$transaction(async (tx) => {
       const created = await tx.record.upsert({
         where: { familyId_clientId: { familyId, clientId: input.clientId } },
         create: {
@@ -119,8 +126,9 @@ export class RecordsService {
         select: this.selection,
       });
       if (input.type === RecordType.PHOTO) await this.replacePhotoLinks(tx, created.id, photoIds);
-      return created;
+      return created.id;
     });
+    return this.get(familyId, recordId);
   }
 
   async update(
@@ -199,7 +207,29 @@ export class RecordsService {
       select: this.selection,
     });
     await this.audit(familyId, userId, 'record.restore', id, { type: current.type });
-    return restored;
+    return this.presentRecord(restored);
+  }
+
+  private async presentRecord<
+    T extends {
+      photos?: Array<{
+        photo: {
+          id: string;
+          objectKey: string;
+          thumbnailObjectKey?: string | null;
+          width?: number | null;
+          height?: number | null;
+          note?: string | null;
+          createdAt?: Date | string;
+        };
+      }>;
+    },
+  >(record: T) {
+    const { photos = [], ...rest } = record;
+    return {
+      ...rest,
+      photos: await Promise.all(photos.map(({ photo }) => this.photos.recordSummary(photo))),
+    };
   }
 
   private async requirePetScope(familyId: string, type: RecordType, petId: string | null) {
@@ -338,5 +368,21 @@ export class RecordsService {
     deletedAt: true,
     pet: { select: { id: true, name: true } },
     author: { select: { id: true, displayName: true } },
+    photos: {
+      orderBy: { createdAt: 'asc' },
+      select: {
+        photo: {
+          select: {
+            id: true,
+            objectKey: true,
+            thumbnailObjectKey: true,
+            width: true,
+            height: true,
+            note: true,
+            createdAt: true,
+          },
+        },
+      },
+    },
   } satisfies Prisma.RecordSelect;
 }

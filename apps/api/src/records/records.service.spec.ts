@@ -10,6 +10,17 @@ function record(
     petId: string | null;
     pet: { id: string; name: string } | null;
     data: Record<string, unknown>;
+    photos: Array<{
+      photo: {
+        id: string;
+        objectKey: string;
+        thumbnailObjectKey?: string | null;
+        width?: number | null;
+        height?: number | null;
+        note?: string | null;
+        createdAt?: Date;
+      };
+    }>;
   }> = {},
 ) {
   return {
@@ -33,6 +44,7 @@ function record(
     deletedAt: null,
     pet: { id: 'pet-id', name: '福宝' },
     author: { id: 'member-a', displayName: '成员 A' },
+    photos: [],
     ...overrides,
   };
 }
@@ -55,7 +67,18 @@ function fixture(current = record()) {
   Object.assign(prisma, {
     $transaction: vi.fn(async (callback: (client: typeof prisma) => unknown) => callback(prisma)),
   });
-  return { service: new RecordsService(prisma as never), prisma };
+  const photos = {
+    recordSummary: vi.fn(async (photo) => ({
+      id: photo.id,
+      width: photo.width ?? null,
+      height: photo.height ?? null,
+      note: photo.note ?? null,
+      createdAt: photo.createdAt,
+      downloadUrl: `/photos/${photo.id}/content`,
+      thumbnailUrl: `/photos/${photo.id}/thumbnail`,
+    })),
+  };
+  return { service: new RecordsService(prisma as never, photos as never), prisma, photos };
 }
 
 const updateInput = { version: 1, title: '更新后的记录' };
@@ -124,6 +147,38 @@ describe('RecordsService pet scope', () => {
       data: [{ photoId: '11111111-1111-4111-8111-111111111111', recordId: 'record-id' }],
       skipDuplicates: true,
     });
+  });
+
+  it('returns safe photo summaries for photo records without exposing object keys', async () => {
+    const photoRecord = record({
+      type: RecordType.PHOTO,
+      data: { photoIds: ['11111111-1111-4111-8111-111111111111'] },
+      photos: [
+        {
+          photo: {
+            id: '11111111-1111-4111-8111-111111111111',
+            objectKey: 'families/family-id/photos/raw.jpg',
+            thumbnailObjectKey: 'families/family-id/thumbnails/thumb.jpg',
+            width: 1200,
+            height: 900,
+            note: '晒太阳',
+            createdAt: new Date('2026-07-14T00:00:00.000Z'),
+          },
+        },
+      ],
+    });
+    const { service, photos } = fixture(photoRecord);
+
+    const result = await service.get('family-id', 'record-id');
+
+    expect(photos.recordSummary).toHaveBeenCalledWith(photoRecord.photos[0]!.photo);
+    expect(result.photos).toEqual([
+      expect.objectContaining({
+        id: '11111111-1111-4111-8111-111111111111',
+        thumbnailUrl: '/photos/11111111-1111-4111-8111-111111111111/thumbnail',
+      }),
+    ]);
+    expect(JSON.stringify(result.photos)).not.toContain('objectKey');
   });
 
   it('rejects photo records when photos are not bound to the selected pet', async () => {
