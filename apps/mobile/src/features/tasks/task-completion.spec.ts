@@ -14,7 +14,7 @@ describe('task completion payload', () => {
         resultText: ' 已清理，状态正常 ',
         note: ' 无异常 ',
       },
-      new Date('2026-07-15T09:00:00+08:00'),
+      new Date(2026, 6, 15, 9, 0),
     );
 
     expect(validation.error).toBeUndefined();
@@ -26,14 +26,11 @@ describe('task completion payload', () => {
   });
 
   it('marks medical tasks as confirmed by the completion form', () => {
-    const draft = initialTaskCompletionDraft(
-      { type: 'MEDICATION' },
-      new Date('2026-07-15T08:30:00+08:00'),
-    );
+    const draft = initialTaskCompletionDraft({ type: 'MEDICATION' }, new Date(2026, 6, 15, 8, 30));
     const validation = buildTaskCompletionInput(
       { type: 'MEDICATION' },
       draft,
-      new Date('2026-07-15T08:31:00+08:00'),
+      new Date(2026, 6, 15, 8, 31),
     );
 
     expect(validation.input?.medicalConfirmed).toBe(true);
@@ -52,7 +49,7 @@ describe('task completion payload', () => {
       buildTaskCompletionInput(
         { type: 'LITTER' },
         { actualAtLocal: '2026-07-15 09:10', resultText: '已完成', note: '' },
-        new Date('2026-07-15T09:00:00+08:00'),
+        new Date(2026, 6, 15, 9, 0),
       ).error,
     ).toContain('不能晚于现在');
   });
