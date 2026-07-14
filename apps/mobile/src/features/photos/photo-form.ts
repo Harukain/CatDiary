@@ -48,6 +48,20 @@ export function buildPhotoRecordInput(input: {
   };
 }
 
+export function isPhotoUploadDraftDirty({
+  itemCount,
+  note,
+  petIds,
+  initialPetIds,
+}: {
+  itemCount: number;
+  note: string;
+  petIds: string[];
+  initialPetIds: string[];
+}) {
+  return itemCount > 0 || note.trim() !== '' || !samePhotoPetSelection(petIds, initialPetIds);
+}
+
 function unique(values: string[]) {
   return Array.from(new Set(values));
 }

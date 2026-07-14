@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPhotoRecordInput,
+  isPhotoUploadDraftDirty,
   resolveInitialPhotoPetIds,
   resolvePhotoFilterPetId,
   samePhotoPetSelection,
@@ -76,5 +77,16 @@ describe('photo form pet context rules', () => {
         occurredAt: '2026-07-15T00:00:00.000Z',
       }),
     ).toBeNull();
+  });
+
+  it('detects photo upload drafts that need a leave confirmation', () => {
+    const base = { itemCount: 0, note: '', petIds: ['pet-a'], initialPetIds: ['pet-a'] };
+
+    expect(isPhotoUploadDraftDirty(base)).toBe(false);
+    expect(isPhotoUploadDraftDirty({ ...base, itemCount: 1 })).toBe(true);
+    expect(isPhotoUploadDraftDirty({ ...base, note: '晒太阳' })).toBe(true);
+    expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-b'] })).toBe(true);
+    expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-b', 'pet-a'] })).toBe(true);
+    expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-a'] })).toBe(false);
   });
 });

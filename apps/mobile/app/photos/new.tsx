@@ -1,5 +1,14 @@
-import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  BackHandler,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,6 +29,7 @@ import {
 } from '../../src/features/photos/photo-upload-queue';
 import {
   buildPhotoRecordInput,
+  isPhotoUploadDraftDirty,
   resolveInitialPhotoPetIds,
 } from '../../src/features/photos/photo-form';
 import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
@@ -49,8 +59,10 @@ export default function NewPhotoRoute() {
   const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
   const routePetId = paramValue(params.petId) ?? paramValue(params.pet);
+  const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petIds, setPetIds] = useState<string[]>([]);
+  const [initialPetIds, setInitialPetIds] = useState<string[]>([]);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,7 +76,9 @@ export default function NewPhotoRoute() {
       .then(([rows, queued]) => {
         setPets(rows);
         if (queued[0]) {
-          setPetIds(resolveInitialPhotoPetIds(rows, routePetId, queued[0].petIds));
+          const nextPetIds = resolveInitialPhotoPetIds(rows, routePetId, queued[0].petIds);
+          setPetIds(nextPetIds);
+          setInitialPetIds(nextPetIds);
           setNote(queued[0].note);
           setItems(
             queued.map((item) => ({
@@ -79,10 +93,47 @@ export default function NewPhotoRoute() {
               queued: item,
             })),
           );
-        } else setPetIds(resolveInitialPhotoPetIds(rows, routePetId));
+        } else {
+          const nextPetIds = resolveInitialPhotoPetIds(rows, routePetId);
+          setPetIds(nextPetIds);
+          setInitialPetIds(nextPetIds);
+        }
       })
       .catch(() => setError('照片上传队列加载失败'));
   }, [activeFamily, routePetId, session]);
+  const isDirty = useMemo(
+    () =>
+      isPhotoUploadDraftDirty({
+        itemCount: items.length,
+        note,
+        petIds,
+        initialPetIds,
+      }),
+    [initialPetIds, items.length, note, petIds],
+  );
+  const requestClose = useCallback(() => {
+    if (busy) return;
+    if (!isDirty || allowLeave.current) return router.back();
+    Alert.alert('放弃未保存的照片？', '当前选择的照片和备注尚未完成保存，离开后需要重新选择。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, isDirty, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isDirty || allowLeave.current) return false;
+      requestClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isDirty, requestClose]);
   function addAssets(assets: ImagePicker.ImagePickerAsset[]) {
     setItems((current) => [
       ...current,
@@ -207,6 +258,7 @@ export default function NewPhotoRoute() {
         }
       }
       setBusy(false);
+      allowLeave.current = true;
       router.replace({ pathname: '/photos', params: petIds[0] ? { petId: petIds[0] } : undefined });
     } else {
       setBusy(false);
@@ -230,10 +282,15 @@ export default function NewPhotoRoute() {
     <Screen>
       <View style={styles.nav}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="关闭"
           disabled={busy}
-          onPress={() => router.back()}
-          style={styles.navButton}
+          onPress={requestClose}
+          style={({ pressed }) => [
+            styles.navButton,
+            busy && styles.navButtonDisabled,
+            pressed && styles.pressed,
+          ]}
         >
           <Ionicons name="close" size={23} color={colors.ink} />
         </Pressable>
@@ -320,7 +377,7 @@ export default function NewPhotoRoute() {
           busy={busy}
           onPress={() => void upload()}
         />
-        <TextButton label="取消" disabled={busy} onPress={() => router.back()} />
+        <TextButton label="取消" disabled={busy} onPress={requestClose} />
       </ScrollView>
     </Screen>
   );
@@ -356,6 +413,7 @@ function PickerButton({
 const styles = StyleSheet.create({
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   navButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  navButtonDisabled: { opacity: 0.45 },
   title: { ...typography.h2, color: colors.ink },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   content: { gap: spacing.xl, paddingBottom: 110 },
@@ -442,4 +500,5 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.brand },
   chipText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   chipTextActive: { color: colors.surface },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
