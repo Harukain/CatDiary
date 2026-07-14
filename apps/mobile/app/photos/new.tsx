@@ -30,6 +30,7 @@ import {
 import {
   buildPhotoRecordInput,
   isPhotoUploadDraftDirty,
+  remainingPhotoSlots,
   resolveInitialPhotoPetIds,
 } from '../../src/features/photos/photo-form';
 import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
@@ -67,6 +68,8 @@ export default function NewPhotoRoute() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const slotsLeft = remainingPhotoSlots(items.length);
+  const photoLimitReached = slotsLeft === 0;
   useEffect(() => {
     if (!session || !activeFamily) return;
     void Promise.all([
@@ -137,7 +140,7 @@ export default function NewPhotoRoute() {
   function addAssets(assets: ImagePicker.ImagePickerAsset[]) {
     setItems((current) => [
       ...current,
-      ...assets.slice(0, 9 - current.length).map((asset) => ({
+      ...assets.slice(0, remainingPhotoSlots(current.length)).map((asset) => ({
         id: `${Date.now()}-${Math.random()}`,
         uri: asset.uri,
         name: asset.fileName ?? `cat-${Date.now()}.jpg`,
@@ -149,6 +152,10 @@ export default function NewPhotoRoute() {
     ]);
   }
   async function chooseLibrary() {
+    if (!slotsLeft) {
+      setError('最多选择 9 张照片，先移除一张再继续添加。');
+      return;
+    }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setError('需要相册权限才能选择照片');
@@ -157,12 +164,21 @@ export default function NewPhotoRoute() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      selectionLimit: Math.max(1, 9 - items.length),
+      selectionLimit: slotsLeft,
       quality: 1,
     });
-    if (!result.canceled) addAssets(result.assets);
+    if (!result.canceled) {
+      if (result.assets.length > slotsLeft) {
+        setError(`本次最多还能添加 ${slotsLeft} 张，已自动保留前 ${slotsLeft} 张。`);
+      }
+      addAssets(result.assets);
+    }
   }
   async function takePhoto() {
+    if (!slotsLeft) {
+      setError('最多选择 9 张照片，先移除一张再继续拍摄。');
+      return;
+    }
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       setError('需要相机权限才能拍照');
@@ -304,10 +320,19 @@ export default function NewPhotoRoute() {
           <PickerButton
             icon="images-outline"
             label="从相册选择"
+            disabled={photoLimitReached || busy}
             onPress={() => void chooseLibrary()}
           />
-          <PickerButton icon="camera-outline" label="拍一张" onPress={() => void takePhoto()} />
+          <PickerButton
+            icon="camera-outline"
+            label="拍一张"
+            disabled={photoLimitReached || busy}
+            onPress={() => void takePhoto()}
+          />
         </View>
+        <Text style={[styles.limitHint, photoLimitReached && styles.limitHintFull]}>
+          {photoLimitReached ? '已达到 9 张上限，移除一张后可继续添加' : `还能添加 ${slotsLeft} 张`}
+        </Text>
         {items.length ? (
           <View style={styles.previews}>
             {items.map((item) => (
@@ -395,18 +420,30 @@ function uuid() {
 function PickerButton({
   icon,
   label,
+  disabled,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  disabled?: boolean;
   onPress(): void;
 }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.picker}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.picker,
+        disabled && styles.pickerDisabled,
+        pressed && styles.pressed,
+      ]}
+    >
       <View style={styles.pickerIcon}>
-        <Ionicons name={icon} size={22} color={colors.brand} />
+        <Ionicons name={icon} size={22} color={disabled ? colors.textTertiary : colors.brand} />
       </View>
-      <Text style={styles.pickerText}>{label}</Text>
+      <Text style={[styles.pickerText, disabled && styles.pickerTextDisabled]}>{label}</Text>
     </Pressable>
   );
 }
@@ -418,6 +455,8 @@ const styles = StyleSheet.create({
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   content: { gap: spacing.xl, paddingBottom: 110 },
   pickerRow: { flexDirection: 'row', gap: spacing.md },
+  limitHint: { ...typography.caption, color: colors.textSecondary, marginTop: -spacing.md },
+  limitHintFull: { color: colors.warningDark },
   picker: {
     flex: 1,
     minHeight: 100,
@@ -430,6 +469,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.border,
   },
+  pickerDisabled: { opacity: 0.55 },
   pickerIcon: {
     width: 44,
     height: 44,
@@ -439,6 +479,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerText: { ...typography.caption, color: colors.ink, fontWeight: '700' },
+  pickerTextDisabled: { color: colors.textSecondary },
   previews: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   preview: {
     width: '31.5%',

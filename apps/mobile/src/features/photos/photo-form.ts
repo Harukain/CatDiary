@@ -1,5 +1,7 @@
 type PetOption = { id: string };
 
+export const PHOTO_UPLOAD_LIMIT = 9;
+
 export function resolvePhotoFilterPetId(
   pets: Array<Pick<PetOption, 'id'>>,
   requestedPetId?: string | null,
@@ -60,6 +62,10 @@ export function isPhotoUploadDraftDirty({
   initialPetIds: string[];
 }) {
   return itemCount > 0 || note.trim() !== '' || !samePhotoPetSelection(petIds, initialPetIds);
+}
+
+export function remainingPhotoSlots(itemCount: number, limit = PHOTO_UPLOAD_LIMIT) {
+  return Math.max(0, limit - itemCount);
 }
 
 function unique(values: string[]) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPhotoRecordInput,
   isPhotoUploadDraftDirty,
+  remainingPhotoSlots,
   resolveInitialPhotoPetIds,
   resolvePhotoFilterPetId,
   samePhotoPetSelection,
@@ -88,5 +89,12 @@ describe('photo form pet context rules', () => {
     expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-b'] })).toBe(true);
     expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-b', 'pet-a'] })).toBe(true);
     expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-a'] })).toBe(false);
+  });
+
+  it('calculates remaining upload slots without exceeding the photo limit', () => {
+    expect(remainingPhotoSlots(0)).toBe(9);
+    expect(remainingPhotoSlots(8)).toBe(1);
+    expect(remainingPhotoSlots(9)).toBe(0);
+    expect(remainingPhotoSlots(12)).toBe(0);
   });
 });
