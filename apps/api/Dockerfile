@@ -28,6 +28,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app
 COPY --from=builder --chown=node:node /prod/api ./
 RUN mkdir -p /app/output/uploads /app/output/exports && chown -R node:node /app/output
