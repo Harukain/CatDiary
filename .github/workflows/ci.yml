@@ -7,7 +7,7 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -29,7 +29,7 @@ jobs:
       DATABASE_URL: postgresql://catdiary:catdiary@127.0.0.1:5433/catdiary?schema=public
       REDIS_URL: redis://127.0.0.1:6379
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with:
           version: 11.10.0
@@ -49,6 +49,18 @@ jobs:
       - run: pnpm test:mobile-config
       - run: pnpm test:privacy-manifest
       - run: pnpm test:integration
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Verify PostgreSQL client version
+        run: |
+          pg_dump --version | grep -E '^pg_dump \(PostgreSQL\) 17\.'
+          pg_restore --version | grep -E '^pg_restore \(PostgreSQL\) 17\.'
+          psql --version | grep -E '^psql \(PostgreSQL\) 17\.'
       - run: pnpm test:restore
         env:
           SOURCE_DATABASE_URL: postgresql://catdiary:catdiary@127.0.0.1:5433/catdiary?schema=public
@@ -71,18 +83,23 @@ jobs:
       - run: pnpm audit --audit-level high
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
 
   containers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: verify
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
       - run: ./scripts/verify-monitoring.sh
       - uses: docker/build-push-action@v6
