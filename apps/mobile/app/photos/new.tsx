@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -14,6 +14,7 @@ import {
   processPhotoUpload,
   type PhotoUploadQueueItem,
 } from '../../src/features/photos/photo-upload-queue';
+import { resolveInitialPhotoPetIds } from '../../src/features/photos/photo-form';
 import {
   ErrorText,
   Field,
@@ -36,7 +37,9 @@ type UploadItem = {
 
 export default function NewPhotoRoute() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
+  const routePetId = paramValue(params.petId) ?? paramValue(params.pet);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petIds, setPetIds] = useState<string[]>([]);
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -52,7 +55,7 @@ export default function NewPhotoRoute() {
       .then(([rows, queued]) => {
         setPets(rows);
         if (queued[0]) {
-          setPetIds(queued[0].petIds);
+          setPetIds(resolveInitialPhotoPetIds(rows, routePetId, queued[0].petIds));
           setNote(queued[0].note);
           setItems(
             queued.map((item) => ({
@@ -67,10 +70,10 @@ export default function NewPhotoRoute() {
               queued: item,
             })),
           );
-        } else if (rows[0]) setPetIds([rows[0].id]);
+        } else setPetIds(resolveInitialPhotoPetIds(rows, routePetId));
       })
       .catch(() => setError('照片上传队列加载失败'));
-  }, [activeFamily, session]);
+  }, [activeFamily, routePetId, session]);
   function addAssets(assets: ImagePicker.ImagePickerAsset[]) {
     setItems((current) => [
       ...current,
@@ -167,7 +170,8 @@ export default function NewPhotoRoute() {
     const results = [];
     for (const item of pending) results.push(await uploadOne(item));
     setBusy(false);
-    if (results.length && results.every(Boolean)) router.replace('/photos');
+    if (results.length && results.every(Boolean))
+      router.replace({ pathname: '/photos', params: petIds[0] ? { petId: petIds[0] } : undefined });
     else setError('部分照片没有上传成功，可以点击重试失败项。');
   }
   function togglePet(id: string) {
@@ -277,6 +281,10 @@ export default function NewPhotoRoute() {
       </ScrollView>
     </Screen>
   );
+}
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 function PickerButton({
   icon,

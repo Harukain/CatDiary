@@ -19,6 +19,7 @@ import {
   type PhotoSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { samePhotoPetSelection } from '../../src/features/photos/photo-form';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
   ErrorText,
@@ -56,7 +57,10 @@ export default function PhotoDetailRoute() {
   const changed =
     !!photo &&
     (note.trim() !== (photo.note ?? '') ||
-      petIds.join(',') !== photo.pets.map((entry) => entry.petId).join(','));
+      !samePhotoPetSelection(
+        petIds,
+        photo.pets.map((entry) => entry.petId),
+      ));
   function togglePet(petId: string) {
     setPetIds((current) =>
       current.includes(petId)

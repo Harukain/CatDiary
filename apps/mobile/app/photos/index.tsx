@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -13,16 +13,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type PhotoSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { resolvePhotoFilterPetId } from '../../src/features/photos/photo-form';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 import { Body, ErrorText, PrimaryButton, Screen } from '../../src/shared/ui/primitives';
 
 export default function PhotosRoute() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ petId?: string }>();
+  const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
+  const routePetId = useMemo(
+    () => paramValue(params.petId) ?? paramValue(params.pet),
+    [params.pet, params.petId],
+  );
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [photos, setPhotos] = useState<PhotoSummary[]>([]);
-  const [petId, setPetId] = useState(params.petId ?? '');
+  const [petId, setPetId] = useState(routePetId ?? '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const load = useCallback(async () => {
@@ -30,10 +35,14 @@ export default function PhotosRoute() {
     setLoading(true);
     setError('');
     try {
-      const [petRows, result] = await Promise.all([
-        authApi.listPets(session.accessToken, activeFamily.id),
-        authApi.listPhotos(session.accessToken, activeFamily.id, petId || undefined),
-      ]);
+      const petRows = await authApi.listPets(session.accessToken, activeFamily.id);
+      const effectivePetId = resolvePhotoFilterPetId(petRows, petId);
+      if (effectivePetId !== petId) setPetId(effectivePetId);
+      const result = await authApi.listPhotos(
+        session.accessToken,
+        activeFamily.id,
+        effectivePetId || undefined,
+      );
       setPets(petRows);
       setPhotos(result.items);
     } catch (cause) {
@@ -60,7 +69,9 @@ export default function PhotosRoute() {
         </View>
         <Pressable
           accessibilityLabel="上传照片"
-          onPress={() => router.push('/photos/new')}
+          onPress={() =>
+            router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
+          }
           style={styles.add}
         >
           <Ionicons name="add" size={23} color={colors.surface} />
@@ -123,7 +134,12 @@ export default function PhotosRoute() {
             <Body>
               {petId ? '这只猫咪还没有绑定照片。' : '上传第一张照片，开始记录你们的生活。'}
             </Body>
-            <PrimaryButton label="上传照片" onPress={() => router.push('/photos/new')} />
+            <PrimaryButton
+              label="上传照片"
+              onPress={() =>
+                router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
+              }
+            />
           </View>
         )}
       </ScrollView>
@@ -142,6 +158,10 @@ function Filter({ label, active, onPress }: { label: string; active: boolean; on
       <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
     </Pressable>
   );
+}
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 const styles = StyleSheet.create({
   nav: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
