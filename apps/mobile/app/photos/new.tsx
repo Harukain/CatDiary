@@ -22,6 +22,7 @@ import {
   buildPhotoRecordInput,
   resolveInitialPhotoPetIds,
 } from '../../src/features/photos/photo-form';
+import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
 import {
   ErrorText,
   Field,
@@ -177,15 +178,16 @@ export default function NewPhotoRoute() {
     const pending = items.filter((item) => item.state !== 'DONE');
     const results: Array<PhotoSummary | null> = [];
     for (const item of pending) results.push(await uploadOne(item));
-    const uploadedPhotos = [
-      ...items.flatMap((item) => (item.photo ? [item.photo] : [])),
-      ...results.filter((photo): photo is PhotoSummary => Boolean(photo)),
-    ];
-    if (results.length && results.every(Boolean) && uploadedPhotos.length) {
+    const recordReadiness = resolvePhotoRecordReadiness({
+      existingItems: items,
+      uploadResults: results,
+      pendingCount: pending.length,
+    });
+    if (recordReadiness.ready) {
       const recordInput = buildPhotoRecordInput({
         clientId: uuid(),
         petIds,
-        photoIds: uploadedPhotos.map((photo) => photo.id),
+        photoIds: recordReadiness.photos.map((photo) => photo.id),
         note,
         occurredAt: new Date().toISOString(),
       });
@@ -208,7 +210,11 @@ export default function NewPhotoRoute() {
       router.replace({ pathname: '/photos', params: petIds[0] ? { petId: petIds[0] } : undefined });
     } else {
       setBusy(false);
-      setError('部分照片没有上传成功，可以点击重试失败项。');
+      setError(
+        recordReadiness.reason === 'NO_PHOTOS'
+          ? '请先选择照片。'
+          : '部分照片没有上传成功，可以点击重试失败项。',
+      );
     }
   }
   function togglePet(id: string) {
