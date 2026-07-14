@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,18 +12,28 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type ManualRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { Card, ErrorText, Field, PrimaryButton, Screen } from '../../src/shared/ui/primitives';
+import {
+  Card,
+  ErrorText,
+  Field,
+  PrimaryButton,
+  Screen,
+  TextButton,
+} from '../../src/shared/ui/primitives';
 import {
   enqueueOfflineOperation,
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
 import {
+  blankRecordFormValue,
   buildRecordData,
   datePart,
   fieldConfig,
+  isRecordDraftDirty,
   isRecordDraftReady,
   parseOccurredAt,
   recordDraftOwnerLabel,
@@ -40,12 +51,15 @@ export default function NewRecordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
+  const initialOccurredDate = useRef(datePart()).current;
+  const initialOccurredTime = useRef(timePart()).current;
+  const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
   const [type, setType] = useState<ManualRecordType>('FOOD');
-  const [form, setForm] = useState<RecordFormValue>({ first: '', second: '', blood: false });
-  const [occurredDate, setOccurredDate] = useState(datePart());
-  const [occurredTime, setOccurredTime] = useState(timePart());
+  const [form, setForm] = useState<RecordFormValue>(blankRecordFormValue('FOOD'));
+  const [occurredDate, setOccurredDate] = useState(initialOccurredDate);
+  const [occurredTime, setOccurredTime] = useState(initialOccurredTime);
   const [note, setNote] = useState('');
   const [abnormal, setAbnormal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -65,11 +79,7 @@ export default function NewRecordScreen() {
       .catch((cause) => setError(cause instanceof Error ? cause.message : '猫咪加载失败'));
   }, [activeFamily, routePetId, session]);
   useEffect(() => {
-    setForm({
-      first: '',
-      second: type === 'STOOL' || type === 'VOMIT' ? 'UNKNOWN' : '',
-      blood: false,
-    });
+    setForm(blankRecordFormValue(type));
     setError('');
   }, [type]);
   useEffect(() => {
@@ -79,6 +89,52 @@ export default function NewRecordScreen() {
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
   const canSubmit = isRecordDraftReady(type, form, petId);
   const ownerLabel = useMemo(() => recordDraftOwnerLabel(type, pets, petId), [petId, pets, type]);
+  const isDirty = useMemo(
+    () =>
+      isRecordDraftDirty({
+        type,
+        value: form,
+        note,
+        abnormal,
+        occurredDate,
+        occurredTime,
+        initialOccurredDate,
+        initialOccurredTime,
+      }),
+    [
+      abnormal,
+      form,
+      initialOccurredDate,
+      initialOccurredTime,
+      note,
+      occurredDate,
+      occurredTime,
+      type,
+    ],
+  );
+  const requestClose = useCallback(() => {
+    if (busy) return;
+    if (!isDirty || allowLeave.current) return router.back();
+    Alert.alert('放弃未保存的记录？', '当前填写内容尚未保存，离开后需要重新填写。', [
+      { text: '继续填写', style: 'cancel' },
+      {
+        text: '放弃',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, isDirty, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isDirty || allowLeave.current) return false;
+      requestClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily) return setError('登录状态已失效，请重新登录');
     if (recordRequiresPet(type) && !petId) return setError('请选择猫咪');
@@ -108,11 +164,13 @@ export default function NewRecordScreen() {
     try {
       await authApi.createRecord(session.accessToken, activeFamily.id, input);
       Alert.alert('记录成功', '已经加入记录时间线');
+      allowLeave.current = true;
       router.back();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
         Alert.alert('已保存到本机', '联网后会自动同步到家庭时间线');
+        allowLeave.current = true;
         router.back();
       } else setError(cause instanceof Error ? cause.message : '保存失败');
     } finally {
@@ -130,9 +188,24 @@ export default function NewRecordScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View>
-            <Text style={styles.title}>新增记录</Text>
-            <Text style={styles.subtitle}>记录实际发生的情况，不会生成待办任务</Text>
+          <View style={styles.nav}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭新增记录"
+              disabled={busy}
+              onPress={requestClose}
+              style={({ pressed }) => [
+                styles.navButton,
+                busy && styles.navButtonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="close" size={23} color={colors.ink} />
+            </Pressable>
+            <View style={styles.navCopy}>
+              <Text style={styles.title}>新增记录</Text>
+              <Text style={styles.subtitle}>记录实际发生的情况，不会生成待办任务</Text>
+            </View>
           </View>
           <Card>
             <Text style={styles.section}>{type === 'LITTER' ? '选择归属' : '选择猫咪'}</Text>
@@ -244,6 +317,7 @@ export default function NewRecordScreen() {
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
             <PrimaryButton label="保存记录" busy={busy} disabled={!canSubmit} onPress={submit} />
+            <TextButton label="取消" disabled={busy} onPress={requestClose} />
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -302,6 +376,10 @@ function paramValue(value: string | string[] | undefined) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { gap: spacing.xl, paddingBottom: 80 },
+  nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  navButtonDisabled: { opacity: 0.45 },
+  navCopy: { flex: 1 },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   section: { ...typography.h3, color: colors.ink, marginTop: spacing.sm },
@@ -348,4 +426,5 @@ const styles = StyleSheet.create({
   switchCopy: { flex: 1 },
   switchTitle: { ...typography.h3, color: colors.ink },
   switchBody: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });

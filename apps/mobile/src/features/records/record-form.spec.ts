@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blankRecordFormValue,
   buildRecordData,
+  isRecordDraftDirty,
   isRecordDraftReady,
   recordDraftOwnerLabel,
   recordOwnerLabel,
@@ -49,5 +51,41 @@ describe('record form rules', () => {
     expect(recordDraftOwnerLabel('FOOD', pets, 'pet-b')).toBe('年糕');
     expect(recordDraftOwnerLabel('FOOD', pets, null)).toBe('未选择猫咪');
     expect(recordDraftOwnerLabel('LITTER', pets, null)).toBe('公共猫砂盆');
+  });
+
+  it('does not treat the initial blank record as dirty', () => {
+    expect(
+      isRecordDraftDirty({
+        type: 'FOOD',
+        value: blankRecordFormValue('FOOD'),
+        note: '',
+        abnormal: false,
+        occurredDate: '2026-07-15',
+        occurredTime: '08:30',
+        initialOccurredDate: '2026-07-15',
+        initialOccurredTime: '08:30',
+      }),
+    ).toBe(false);
+  });
+
+  it('treats type, content, abnormal state and time changes as dirty', () => {
+    const base = {
+      type: 'FOOD' as const,
+      value: blankRecordFormValue('FOOD'),
+      note: '',
+      abnormal: false,
+      occurredDate: '2026-07-15',
+      occurredTime: '08:30',
+      initialOccurredDate: '2026-07-15',
+      initialOccurredTime: '08:30',
+    };
+
+    expect(
+      isRecordDraftDirty({ ...base, type: 'STOOL', value: blankRecordFormValue('STOOL') }),
+    ).toBe(true);
+    expect(isRecordDraftDirty({ ...base, value: { ...base.value, first: '主食罐' } })).toBe(true);
+    expect(isRecordDraftDirty({ ...base, note: '精神不错' })).toBe(true);
+    expect(isRecordDraftDirty({ ...base, abnormal: true })).toBe(true);
+    expect(isRecordDraftDirty({ ...base, occurredTime: '09:00' })).toBe(true);
   });
 });

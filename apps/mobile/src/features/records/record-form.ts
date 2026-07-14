@@ -30,6 +30,14 @@ export interface RecordFormValue {
 }
 type PetOption = { id: string; name: string };
 
+export function blankRecordFormValue(type: ManualRecordType): RecordFormValue {
+  return {
+    first: '',
+    second: type === 'STOOL' || type === 'VOMIT' ? 'UNKNOWN' : '',
+    blood: false,
+  };
+}
+
 export function fieldConfig(type: ManualRecordType) {
   switch (type) {
     case 'FOOD':
@@ -179,6 +187,39 @@ export function isRecordDraftReady(
   if (type === 'FOOD' || type === 'MEDICATION') return Boolean(first && second);
   if (type === 'LITTER') return Boolean(first || second);
   return Boolean(first);
+}
+export function isRecordDraftDirty({
+  type,
+  value,
+  note,
+  abnormal,
+  occurredDate,
+  occurredTime,
+  initialType = 'FOOD',
+  initialOccurredDate,
+  initialOccurredTime,
+}: {
+  type: ManualRecordType;
+  value: RecordFormValue;
+  note: string;
+  abnormal: boolean;
+  occurredDate: string;
+  occurredTime: string;
+  initialType?: ManualRecordType;
+  initialOccurredDate: string;
+  initialOccurredTime: string;
+}) {
+  const blank = blankRecordFormValue(type);
+  return (
+    type !== initialType ||
+    value.first.trim() !== '' ||
+    value.second.trim() !== blank.second ||
+    value.blood ||
+    note.trim() !== '' ||
+    abnormal ||
+    occurredDate !== initialOccurredDate ||
+    occurredTime !== initialOccurredTime
+  );
 }
 export function recordOwnerLabel(record: Pick<RecordSummary, 'pet' | 'type'>) {
   if (record.pet?.name) return record.pet.name;
