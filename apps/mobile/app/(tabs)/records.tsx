@@ -24,19 +24,7 @@ import {
 } from '../../src/features/offline/offline-queue';
 import { recordOwnerLabel } from '../../src/features/records/record-form';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
-
-const labels: Record<string, string> = {
-  FOOD: '饮食',
-  WATER: '饮水',
-  WEIGHT: '体重',
-  STOOL: '排便',
-  VOMIT: '呕吐',
-  MEDICATION: '用药',
-  VACCINE: '疫苗',
-  DEWORMING: '驱虫',
-  LITTER: '铲屎',
-  PHOTO: '照片',
-};
+import { recordSummaryText, recordTypeLabel } from '../../src/features/records/record-display';
 
 export default function RecordsTab() {
   const router = useRouter();
@@ -219,14 +207,14 @@ function RecordItem({
         style={({ pressed }) => [styles.recordCard, pressed && styles.pressed]}
       >
         <View style={styles.recordTop}>
-          <Text style={styles.recordType}>{labels[record.type] ?? record.type}</Text>
+          <Text style={styles.recordType}>{recordTypeLabel(record.type)}</Text>
           <Text
             style={styles.recordTime}
           >{`${when.getMonth() + 1}月${when.getDate()}日 ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`}</Text>
         </View>
         <Text style={styles.recordTitle}>{record.title}</Text>
         <Text style={styles.recordMeta}>
-          {recordOwnerLabel(record)} · {summary(record)}
+          {recordOwnerLabel(record)} · {recordSummaryText(record)}
         </Text>
         {photos.length ? (
           <View style={styles.photoStrip}>
@@ -253,20 +241,6 @@ function RecordItem({
       </Pressable>
     </View>
   );
-}
-function summary(record: RecordSummary) {
-  const d = record.data;
-  if (record.type === 'WEIGHT') return `${d.weightKg} kg`;
-  if (record.type === 'FOOD') return `${d.foodName} ${d.amount}${d.unit}`;
-  if (record.type === 'WATER') return `${d.amountMl} ml`;
-  if (record.type === 'STOOL' || record.type === 'VOMIT') return `${d.count} 次`;
-  if (record.type === 'MEDICATION') return `${d.drugName} ${d.dose}`;
-  if (record.type === 'LITTER') return String(d.observation ?? d.boxId ?? '已记录');
-  if (record.type === 'PHOTO') {
-    const count = Array.isArray(d.photoIds) ? d.photoIds.length : 0;
-    return count ? `${count} 张照片` : '照片记录';
-  }
-  return String(d.observation ?? '已记录');
 }
 function Insights({ records }: { records: RecordSummary[] }) {
   const abnormal = records.filter((record) => record.abnormal).length;

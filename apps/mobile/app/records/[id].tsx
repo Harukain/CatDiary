@@ -42,19 +42,7 @@ import {
 } from '../../src/features/records/record-form';
 import { getRecordActionPermissions } from '../../src/features/records/record-permissions';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
-
-const typeLabels: Record<string, string> = {
-  FOOD: '饮食',
-  WATER: '饮水',
-  WEIGHT: '体重',
-  STOOL: '排便',
-  VOMIT: '呕吐',
-  MEDICATION: '用药',
-  VACCINE: '疫苗',
-  DEWORMING: '驱虫',
-  LITTER: '铲屎',
-  PHOTO: '照片',
-};
+import { recordDataRows, recordTypeLabel } from '../../src/features/records/record-display';
 const manualTypes = new Set<string>([
   'FOOD',
   'WATER',
@@ -185,7 +173,7 @@ export default function RecordDetailScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View>
           <Text style={styles.eyebrow}>
-            {typeLabels[record.type] ?? record.type} · {recordOwnerLabel(record)}
+            {recordTypeLabel(record.type)} · {recordOwnerLabel(record)}
           </Text>
           <Text style={styles.title}>{record.title}</Text>
           <Text style={styles.time}>
@@ -366,18 +354,6 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
-}
-function recordDataRows(record: RecordSummary) {
-  if (record.type === 'PHOTO') {
-    const count =
-      record.photos?.length ??
-      (Array.isArray(record.data.photoIds) ? record.data.photoIds.length : 0);
-    return [{ label: '照片数量', value: count ? `${count} 张` : '照片记录' }];
-  }
-  return Object.entries(record.data).map(([label, value]) => ({
-    label,
-    value: typeof value === 'boolean' ? (value ? '是' : '否') : String(value),
-  }));
 }
 function SwitchRow({
   title,
