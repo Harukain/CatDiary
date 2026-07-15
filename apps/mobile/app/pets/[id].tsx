@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -9,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import {
@@ -24,7 +25,11 @@ import {
   type PlanType,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { isValidBirthDate } from '../../src/features/pets/pet-form';
+import {
+  isPetProfileDraftDirty,
+  isValidBirthDate,
+  type PetProfileDraft,
+} from '../../src/features/pets/pet-form';
 import { photoSource, photoThumbnailSource } from '../../src/features/photos/photo-source';
 import {
   Body,
@@ -78,9 +83,11 @@ export default function PetDetailRoute() {
   const [breed, setBreed] = useState('');
   const [chipNumber, setChipNumber] = useState('');
   const [neutered, setNeutered] = useState<boolean | null>(null);
+  const [initialDraft, setInitialDraft] = useState<PetProfileDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const allowLeave = useRef(false);
 
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
@@ -100,6 +107,8 @@ export default function PetDetailRoute() {
         setBreed(detail.breed ?? '');
         setChipNumber(detail.chipNumber ?? '');
         setNeutered(detail.neutered ?? null);
+        setInitialDraft(petDraftFromDetail(detail));
+        allowLeave.current = false;
       })
       .catch((cause) => {
         if (!mounted) return;
@@ -111,6 +120,68 @@ export default function PetDetailRoute() {
   }, [activeFamily, id, session]);
 
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+  const currentDraft = useMemo<PetProfileDraft>(
+    () => ({
+      name,
+      sex,
+      birthDate,
+      breed,
+      chipNumber,
+      neutered,
+    }),
+    [birthDate, breed, chipNumber, name, neutered, sex],
+  );
+  const changed = !!initialDraft && isPetProfileDraftDirty(currentDraft, initialDraft);
+  const birthValid =
+    !birthDate ||
+    isValidBirthDate(birthDate, new Date(), activeFamily?.timezone ?? 'Asia/Shanghai');
+  const requestReturn = useCallback(() => {
+    if (busy) return;
+    if (!changed || allowLeave.current) {
+      router.back();
+      return;
+    }
+    Alert.alert('放弃未保存的猫咪档案修改？', '当前基础资料尚未保存，离开后会丢失修改。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, changed, router]);
+  const guardedNavigate = useCallback(
+    (navigate: () => void, actionLabel = '前往') => {
+      if (busy) return;
+      if (!changed || allowLeave.current) {
+        navigate();
+        return;
+      }
+      Alert.alert('先处理未保存修改？', '继续离开会丢失当前猫咪基础资料修改。', [
+        { text: '继续编辑', style: 'cancel' },
+        {
+          text: `放弃并${actionLabel}`,
+          style: 'destructive',
+          onPress: () => {
+            allowLeave.current = true;
+            navigate();
+          },
+        },
+      ]);
+    },
+    [busy, changed],
+  );
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!changed || allowLeave.current) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [changed, requestReturn]);
 
   async function save() {
     if (!session || !activeFamily || !pet || !name.trim() || busy) return;
@@ -141,6 +212,7 @@ export default function PetDetailRoute() {
       setProfile((current) =>
         current ? { ...current, pet: { ...current.pet, ...nextPet } } : current,
       );
+      setInitialDraft(petDraftFromDetail(nextPet));
       setSuccess('猫咪档案已保存。');
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '保存失败');
@@ -162,6 +234,7 @@ export default function PetDetailRoute() {
     setError('');
     try {
       await authApi.deletePet(session.accessToken, activeFamily.id, pet.id, pet.version);
+      allowLeave.current = true;
       router.replace('/pets');
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '删除失败');
@@ -169,30 +242,24 @@ export default function PetDetailRoute() {
     }
   }
 
-  const changed =
-    !!pet &&
-    (name.trim() !== pet.name ||
-      sex !== (pet.sex ?? 'UNKNOWN') ||
-      birthDate !== (pet.birthDate?.slice(0, 10) ?? '') ||
-      breed.trim() !== (pet.breed ?? '') ||
-      chipNumber.trim() !== (pet.chipNumber ?? '') ||
-      neutered !== (pet.neutered ?? null));
-  const birthValid =
-    !birthDate ||
-    isValidBirthDate(birthDate, new Date(), activeFamily?.timezone ?? 'Asia/Shanghai');
-
   useEffect(() => {
     if (changed) setSuccess('');
   }, [changed]);
 
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="返回"
-          onPress={() => router.back()}
-          style={styles.back}
+          disabled={busy}
+          onPress={requestReturn}
+          style={({ pressed }) => [
+            styles.back,
+            busy && styles.backDisabled,
+            pressed && styles.pressed,
+          ]}
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
@@ -237,7 +304,10 @@ export default function PetDetailRoute() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() =>
-                    router.push({ pathname: '/records/new', params: { petId: pet.id } })
+                    guardedNavigate(
+                      () => router.push({ pathname: '/records/new', params: { petId: pet.id } }),
+                      '记录',
+                    )
                   }
                   style={styles.quickAction}
                 >
@@ -246,7 +316,12 @@ export default function PetDetailRoute() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => router.push({ pathname: '/photos', params: { petId: pet.id } })}
+                  onPress={() =>
+                    guardedNavigate(
+                      () => router.push({ pathname: '/photos', params: { petId: pet.id } }),
+                      '相册',
+                    )
+                  }
                   style={styles.quickAction}
                 >
                   <Ionicons name="images-outline" size={18} color={colors.brand} />
@@ -255,7 +330,11 @@ export default function PetDetailRoute() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() =>
-                    router.push({ pathname: '/medical-records', params: { petId: pet.id } })
+                    guardedNavigate(
+                      () =>
+                        router.push({ pathname: '/medical-records', params: { petId: pet.id } }),
+                      '医疗档案',
+                    )
                   }
                   style={styles.quickAction}
                 >
@@ -274,7 +353,10 @@ export default function PetDetailRoute() {
                 <RecentRecords
                   records={profile.recentRecords}
                   onRecordPress={(recordId) =>
-                    router.push({ pathname: '/records/[id]', params: { id: recordId } })
+                    guardedNavigate(
+                      () => router.push({ pathname: '/records/[id]', params: { id: recordId } }),
+                      '查看记录',
+                    )
                   }
                 />
                 <RecentPhotos
@@ -282,7 +364,10 @@ export default function PetDetailRoute() {
                   accessToken={session.accessToken}
                   familyId={activeFamily.id}
                   onPhotoPress={(photoId) =>
-                    router.push({ pathname: '/photos/[id]', params: { id: photoId } })
+                    guardedNavigate(
+                      () => router.push({ pathname: '/photos/[id]', params: { id: photoId } }),
+                      '查看照片',
+                    )
                   }
                 />
               </>
@@ -658,6 +743,17 @@ function ReadonlyFacts({ pet }: { pet: PetDetail }) {
   );
 }
 
+function petDraftFromDetail(pet: PetDetail): PetProfileDraft {
+  return {
+    name: pet.name,
+    sex: pet.sex ?? 'UNKNOWN',
+    birthDate: pet.birthDate?.slice(0, 10) ?? '',
+    breed: pet.breed ?? '',
+    chipNumber: pet.chipNumber ?? '',
+    neutered: pet.neutered ?? null,
+  };
+}
+
 function Stat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
   return (
     <View style={[styles.stat, danger && styles.statDanger]}>
@@ -726,6 +822,7 @@ function formatShortDateTime(value: string) {
 const styles = StyleSheet.create({
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backDisabled: { opacity: 0.45 },
   navTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
   content: { gap: spacing.lg, paddingBottom: spacing.huge },
   profileTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

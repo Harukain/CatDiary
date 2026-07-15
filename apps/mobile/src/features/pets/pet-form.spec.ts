@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isValidBirthDate } from './pet-form';
+import {
+  isPetProfileDraftDirty,
+  isValidBirthDate,
+  petProfileDraftSnapshot,
+  type PetProfileDraft,
+} from './pet-form';
 
 describe('isValidBirthDate', () => {
   const now = new Date('2026-07-13T00:05:00+08:00');
@@ -25,5 +30,43 @@ describe('isValidBirthDate', () => {
 
   it('rejects an invalid family timezone instead of accepting a future date', () => {
     expect(isValidBirthDate('2026-07-13', now, 'Invalid/Timezone')).toBe(false);
+  });
+});
+
+const cleanDraft: PetProfileDraft = {
+  name: '团团',
+  sex: 'UNKNOWN',
+  birthDate: '2025-04-01',
+  breed: '',
+  chipNumber: '',
+  neutered: null,
+};
+
+describe('pet profile form rules', () => {
+  it('keeps an unchanged pet profile draft clean', () => {
+    expect(isPetProfileDraftDirty({ ...cleanDraft }, cleanDraft)).toBe(false);
+  });
+
+  it('normalizes editable text before comparing with saved pet profile', () => {
+    expect(
+      isPetProfileDraftDirty(
+        { ...cleanDraft, name: '  团团 ', breed: '  ', chipNumber: ' ' },
+        cleanDraft,
+      ),
+    ).toBe(false);
+    expect(petProfileDraftSnapshot(cleanDraft)).toBe(
+      petProfileDraftSnapshot({ ...cleanDraft, name: ' 团团 ' }),
+    );
+  });
+
+  it('treats profile field changes as dirty edits', () => {
+    expect(isPetProfileDraftDirty({ ...cleanDraft, name: '圆圆' }, cleanDraft)).toBe(true);
+    expect(isPetProfileDraftDirty({ ...cleanDraft, sex: 'FEMALE' }, cleanDraft)).toBe(true);
+    expect(isPetProfileDraftDirty({ ...cleanDraft, birthDate: '2025-04-02' }, cleanDraft)).toBe(
+      true,
+    );
+    expect(isPetProfileDraftDirty({ ...cleanDraft, breed: '英短' }, cleanDraft)).toBe(true);
+    expect(isPetProfileDraftDirty({ ...cleanDraft, chipNumber: '985112' }, cleanDraft)).toBe(true);
+    expect(isPetProfileDraftDirty({ ...cleanDraft, neutered: true }, cleanDraft)).toBe(true);
   });
 });
