@@ -14,6 +14,18 @@ export type MedicalRecordDraft = {
   note: string;
 };
 
+export type MedicalRecordDetailDraft = {
+  title: string;
+  occurredDate: string;
+  nextDate: string;
+  brand: string;
+  batchNumber: string;
+  dose: string;
+  provider: string;
+  reaction: string;
+  note: string;
+};
+
 export function isMedicalRecordDraftDirty(
   draft: MedicalRecordDraft,
   initial: Pick<MedicalRecordDraft, 'petId' | 'type' | 'occurredDate'>,
@@ -30,5 +42,22 @@ export function isMedicalRecordDraftDirty(
     draft.provider.trim() !== '' ||
     draft.reaction.trim() !== '' ||
     draft.note.trim() !== ''
+  );
+}
+
+export function isMedicalRecordDetailDraftDirty(
+  draft: MedicalRecordDetailDraft,
+  initial: MedicalRecordDetailDraft,
+) {
+  return (
+    draft.title.trim() !== initial.title.trim() ||
+    draft.occurredDate.trim() !== initial.occurredDate.trim() ||
+    draft.nextDate.trim() !== initial.nextDate.trim() ||
+    draft.brand.trim() !== initial.brand.trim() ||
+    draft.batchNumber.trim() !== initial.batchNumber.trim() ||
+    draft.dose.trim() !== initial.dose.trim() ||
+    draft.provider.trim() !== initial.provider.trim() ||
+    draft.reaction.trim() !== initial.reaction.trim() ||
+    draft.note.trim() !== initial.note.trim()
   );
 }

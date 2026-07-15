@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import taskDetailSource from '../../../app/tasks/[id].tsx?raw';
 import photoDetailSource from '../../../app/photos/[id].tsx?raw';
+import medicalRecordDetailSource from '../../../app/medical-records/[id].tsx?raw';
 
 describe('protected route gestures', () => {
   it('keeps task detail native swipe-back behind the guarded return path', () => {
@@ -13,5 +14,13 @@ describe('protected route gestures', () => {
     expect(photoDetailSource).toContain("BackHandler.addEventListener('hardwareBackPress'");
     expect(photoDetailSource).toContain('<Stack.Screen options={{ gestureEnabled: false }} />');
     expect(photoDetailSource).toContain('onPress={requestBack}');
+  });
+
+  it('keeps medical record detail native swipe-back behind the guarded return path', () => {
+    expect(medicalRecordDetailSource).toContain("BackHandler.addEventListener('hardwareBackPress'");
+    expect(medicalRecordDetailSource).toContain(
+      '<Stack.Screen options={{ gestureEnabled: false }} />',
+    );
+    expect(medicalRecordDetailSource).toContain('onPress={requestReturn}');
   });
 });
