@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +29,7 @@ import {
   formatTaskCompletionResult,
   isMedicalTask,
 } from '../../src/features/tasks/task-completion';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -55,6 +57,29 @@ export default function TaskDetailScreen() {
       load();
     }, [load]),
   );
+
+  const requestReturn = useCallback(() => {
+    const decision = resolveDraftExitDecision({ busy: actionBusy, isDirty: false });
+    if (decision === 'wait') {
+      Alert.alert(
+        '任务正在处理',
+        '请等待当前完成、跳过或撤销操作完成，避免任务和记录状态不一致。',
+        [{ text: '继续等待', style: 'cancel' }],
+      );
+      return;
+    }
+    router.back();
+  }, [actionBusy, router]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const decision = resolveDraftExitDecision({ busy: actionBusy, isDirty: false });
+      if (decision === 'continue') return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [actionBusy, requestReturn]);
 
   function requestComplete() {
     if (!task) return;
@@ -228,7 +253,7 @@ export default function TaskDetailScreen() {
             <Text style={styles.inactiveHint}>无需进行操作</Text>
           )}
         </Card>
-        <TextButton label="返回" onPress={() => router.back()} />
+        <TextButton label={actionBusy ? '处理中，请等待' : '返回'} onPress={requestReturn} />
       </ScrollView>
       <TaskCompletionSheet
         task={task}
