@@ -1,5 +1,4 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,37 +7,18 @@ import { useSession } from '../../src/features/auth/session-provider';
 import {
   Body,
   Card,
-  ErrorText,
   PrimaryButton,
   Row,
   Screen,
   TextButton,
   Title,
 } from '../../src/shared/ui/primitives';
-import { registerForPushNotifications } from '../../src/features/notifications/register-push';
 import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 export default function MeTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session, activeFamily, selectFamily, signOut } = useSession();
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushMessage, setPushMessage] = useState('');
-  const [pushError, setPushError] = useState('');
-  async function enablePush() {
-    if (!session || pushBusy) return;
-    setPushBusy(true);
-    setPushError('');
-    setPushMessage('');
-    try {
-      await registerForPushNotifications(session.accessToken);
-      setPushMessage('通知已开启，这台设备会收到照顾提醒。');
-    } catch (cause) {
-      setPushError(cause instanceof Error ? cause.message : '通知开启失败');
-    } finally {
-      setPushBusy(false);
-    }
-  }
   function confirmSignOut() {
     Alert.alert(
       '退出登录？',
@@ -180,10 +160,11 @@ export default function MeTab() {
         </Card>
         <Card>
           <Title>设备通知</Title>
-          <Body>仅在你点击开启时申请系统权限；拒绝后仍可正常使用其他功能。</Body>
-          {pushMessage ? <Text style={styles.success}>{pushMessage}</Text> : null}
-          {pushError ? <ErrorText>{pushError}</ErrorText> : null}
-          <PrimaryButton label="开启照顾提醒" busy={pushBusy} onPress={() => void enablePush()} />
+          <Body>系统通知权限、当前设备登记和个人偏好已统一放到通知偏好页处理。</Body>
+          <PrimaryButton
+            label="去通知偏好"
+            onPress={() => router.push('/settings/notifications')}
+          />
         </Card>
         <TextButton label="退出登录" onPress={() => confirmSignOut()} />
       </ScrollView>
@@ -217,5 +198,4 @@ const styles = StyleSheet.create({
   rowPress: { flex: 1, minHeight: 56, justifyContent: 'center' },
   rowTitle: { ...typography.h3, color: colors.ink },
   rowBody: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
-  success: { ...typography.caption, color: colors.successDark },
 });

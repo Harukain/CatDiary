@@ -17,11 +17,17 @@ import { authApi, type NotificationPreference } from '../../src/features/auth/au
 import { useSession } from '../../src/features/auth/session-provider';
 import {
   canEditNotificationPreference,
+  devicePushRegistrationActionLabel,
+  devicePushRegistrationBody,
+  devicePushRegistrationTitle,
+  maskExpoPushToken,
   notificationPreferenceDependencyHint,
   notificationPreferenceEffectiveEnabled,
   notificationPreferenceSaveMessage,
+  type DevicePushRegistrationStatus,
   type NotificationPreferenceKey,
 } from '../../src/features/notifications/notification-preferences';
+import { registerForPushNotifications } from '../../src/features/notifications/register-push';
 import {
   Body,
   Card,
@@ -38,8 +44,14 @@ export default function NotificationSettingsRoute() {
   const [preference, setPreference] = useState<NotificationPreference>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<NotificationPreferenceKey | ''>('');
+  const [devicePushStatus, setDevicePushStatus] = useState<DevicePushRegistrationStatus>('idle');
+  const [devicePushToken, setDevicePushToken] = useState('');
+  const [devicePushError, setDevicePushError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const editingDisabled =
+    !canEditNotificationPreference({ loading, savingKey: saving }) ||
+    devicePushStatus === 'registering';
   const load = useCallback(async () => {
     if (!session || !activeFamily) {
       setLoading(false);
@@ -78,7 +90,11 @@ export default function NotificationSettingsRoute() {
   }, [requestReturn, saving]);
   async function change(key: NotificationPreferenceKey, value: boolean) {
     if (!session || !activeFamily || !preference) return;
-    if (!canEditNotificationPreference({ loading, savingKey: saving })) return;
+    if (editingDisabled) return;
+    if (key === 'pushEnabled' && value) {
+      const registered = await registerCurrentDevicePush(false);
+      if (!registered) return;
+    }
     const previous = preference;
     setPreference({ ...preference, [key]: value });
     setSaving(key);
@@ -96,6 +112,25 @@ export default function NotificationSettingsRoute() {
       setError(cause instanceof Error ? cause.message : '保存失败');
     } finally {
       setSaving('');
+    }
+  }
+  async function registerCurrentDevicePush(showSuccess = true) {
+    if (!session || devicePushStatus === 'registering') return false;
+    setDevicePushStatus('registering');
+    setDevicePushToken('');
+    setDevicePushError('');
+    setError('');
+    if (showSuccess) setSuccess('');
+    try {
+      const token = await registerForPushNotifications(session.accessToken);
+      setDevicePushToken(token);
+      setDevicePushStatus('registered');
+      if (showSuccess) setSuccess('当前设备已登记，可接收已开启的照顾提醒。');
+      return true;
+    } catch (cause) {
+      setDevicePushStatus('failed');
+      setDevicePushError(cause instanceof Error ? cause.message : '当前设备推送登记失败');
+      return false;
     }
   }
   return (
@@ -136,16 +171,16 @@ export default function NotificationSettingsRoute() {
                 preference,
                 'taskReminderEnabled',
               )}
-              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              disabled={editingDisabled}
               saving={saving === 'taskReminderEnabled'}
               onChange={(value) => void change('taskReminderEnabled', value)}
             />
             <Setting
               title="手机推送"
-              detail="允许服务器向当前账号已登记的设备发送通知"
+              detail="开启前会先申请系统通知权限并登记当前设备"
               value={preference.pushEnabled}
               effectiveEnabled={notificationPreferenceEffectiveEnabled(preference, 'pushEnabled')}
-              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              disabled={editingDisabled}
               saving={saving === 'pushEnabled'}
               hint={notificationPreferenceDependencyHint(preference, 'pushEnabled')}
               onChange={(value) => void change('pushEnabled', value)}
@@ -158,7 +193,7 @@ export default function NotificationSettingsRoute() {
                 preference,
                 'overdueEnabled',
               )}
-              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              disabled={editingDisabled}
               saving={saving === 'overdueEnabled'}
               hint={notificationPreferenceDependencyHint(preference, 'overdueEnabled')}
               onChange={(value) => void change('overdueEnabled', value)}
@@ -169,6 +204,45 @@ export default function NotificationSettingsRoute() {
             <Title>通知设置加载失败</Title>
             <ErrorText>{error}</ErrorText>
             <TextButton label="重新加载" onPress={() => void load()} />
+          </Card>
+        ) : null}
+        {preference ? (
+          <Card>
+            <Title>当前设备推送</Title>
+            <View style={styles.devicePushHeader}>
+              <View
+                style={[
+                  styles.statusDot,
+                  devicePushStatus === 'registered'
+                    ? styles.statusDotSuccess
+                    : devicePushStatus === 'failed'
+                      ? styles.statusDotDanger
+                      : styles.statusDotWarn,
+                ]}
+              />
+              <View style={styles.devicePushCopy}>
+                <Text style={styles.devicePushTitle}>
+                  {devicePushRegistrationTitle(devicePushStatus)}
+                </Text>
+                <Text style={styles.devicePushBody}>
+                  {devicePushRegistrationBody({
+                    status: devicePushStatus,
+                    maskedToken: maskExpoPushToken(devicePushToken),
+                  })}
+                </Text>
+              </View>
+            </View>
+            {devicePushError ? <ErrorText>{devicePushError}</ErrorText> : null}
+            {!preference.pushEnabled ? (
+              <Text style={styles.settingHint}>
+                当前个人偏好里的“手机推送”是关闭状态；登记设备不会改变任务生成。
+              </Text>
+            ) : null}
+            <TextButton
+              label={devicePushRegistrationActionLabel(devicePushStatus)}
+              disabled={devicePushStatus === 'registering' || Boolean(saving)}
+              onPress={() => void registerCurrentDevicePush()}
+            />
           </Card>
         ) : null}
         <Card>
@@ -265,6 +339,24 @@ const styles = StyleSheet.create({
   settingDetail: { ...typography.caption, color: colors.textSecondary },
   settingHint: { ...typography.caption, color: colors.warningDark },
   savingText: { ...typography.caption, color: colors.brand },
+  devicePushHeader: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: spacing.sm,
+  },
+  statusDotSuccess: { backgroundColor: colors.success },
+  statusDotWarn: { backgroundColor: colors.warning },
+  statusDotDanger: { backgroundColor: colors.danger },
+  devicePushCopy: { flex: 1, gap: spacing.xs },
+  devicePushTitle: { ...typography.h3, color: colors.ink },
+  devicePushBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 19 },
   channelRow: {
     minHeight: 64,
     flexDirection: 'row',

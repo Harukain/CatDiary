@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   canEditNotificationPreference,
+  devicePushRegistrationActionLabel,
+  devicePushRegistrationBody,
+  devicePushRegistrationTitle,
+  maskExpoPushToken,
   notificationPreferenceDependencyHint,
   notificationPreferenceEffectiveEnabled,
   notificationPreferenceSaveMessage,
@@ -16,6 +20,9 @@ const enabled: NotificationPreferenceState = {
 describe('notification preference rules', () => {
   it('explains saved preference changes with concrete copy', () => {
     expect(notificationPreferenceSaveMessage('pushEnabled', false)).toBe('手机推送已关闭。');
+    expect(notificationPreferenceSaveMessage('pushEnabled', true)).toBe(
+      '手机推送已开启。这台设备已完成注册。',
+    );
     expect(notificationPreferenceSaveMessage('overdueEnabled', true)).toBe('逾期提醒已开启。');
     expect(notificationPreferenceSaveMessage('taskReminderEnabled', false)).toContain(
       '手机推送和逾期提醒将暂不触发',
@@ -45,5 +52,24 @@ describe('notification preference rules', () => {
     expect(canEditNotificationPreference({ loading: false, savingKey: '' })).toBe(true);
     expect(canEditNotificationPreference({ loading: true, savingKey: '' })).toBe(false);
     expect(canEditNotificationPreference({ loading: false, savingKey: 'pushEnabled' })).toBe(false);
+  });
+
+  it('keeps device push registration copy explicit and token-safe', () => {
+    const token = 'abcdefghijklmnopqrstuvwxyz';
+
+    expect(maskExpoPushToken(token)).toBe('abcdefghijklmn…uvwxyz');
+    expect(devicePushRegistrationTitle('idle')).toBe('当前设备待确认');
+    expect(devicePushRegistrationTitle('registered')).toBe('当前设备已登记');
+    expect(devicePushRegistrationBody({ status: 'idle' })).toContain('重新登记当前设备');
+    expect(
+      devicePushRegistrationBody({
+        status: 'registered',
+        maskedToken: maskExpoPushToken(token),
+      }),
+    ).toContain('abcdefghijklmn…uvwxyz');
+    expect(devicePushRegistrationBody({ status: 'failed' })).toContain('失败原因');
+    expect(devicePushRegistrationActionLabel('idle')).toBe('登记当前设备');
+    expect(devicePushRegistrationActionLabel('registered')).toBe('重新登记当前设备');
+    expect(devicePushRegistrationActionLabel('registering')).toBe('登记中');
   });
 });
