@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type ManualRecordType, type PetSummary } from '../../src/features/auth/auth-api';
@@ -47,6 +47,7 @@ import {
   vomitOptions,
   type RecordFormValue,
 } from '../../src/features/records/record-form';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 
 export default function NewRecordScreen() {
   const router = useRouter();
@@ -117,8 +118,18 @@ export default function NewRecordScreen() {
     ],
   );
   const requestClose = useCallback(() => {
-    if (busy) return;
-    if (!isDirty || allowLeave.current) return router.back();
+    const decision = resolveDraftExitDecision({
+      busy,
+      isDirty,
+      allowLeave: allowLeave.current,
+    });
+    if (decision === 'wait') {
+      Alert.alert('记录正在保存', '请等待当前记录保存完成，避免重复提交或丢失同步状态。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (decision === 'continue') return router.back();
     Alert.alert('放弃未保存的记录？', '当前填写内容尚未保存，离开后需要重新填写。', [
       { text: '继续填写', style: 'cancel' },
       {
@@ -133,12 +144,17 @@ export default function NewRecordScreen() {
   }, [busy, isDirty, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      const decision = resolveDraftExitDecision({
+        busy,
+        isDirty,
+        allowLeave: allowLeave.current,
+      });
+      if (decision === 'continue') return false;
       requestClose();
       return true;
     });
     return () => subscription.remove();
-  }, [isDirty, requestClose]);
+  }, [busy, isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily) return setError('登录状态已失效，请重新登录');
     if (recordRequiresPet(type) && !petId) return setError('请选择猫咪');
@@ -183,6 +199,7 @@ export default function NewRecordScreen() {
   }
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

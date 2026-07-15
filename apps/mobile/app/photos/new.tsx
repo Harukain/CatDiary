@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -41,6 +41,7 @@ import {
   Screen,
   TextButton,
 } from '../../src/shared/ui/primitives';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 
 type UploadItem = {
   id: string;
@@ -115,8 +116,20 @@ export default function NewPhotoRoute() {
     [initialPetIds, items.length, note, petIds],
   );
   const requestClose = useCallback(() => {
-    if (busy) return;
-    if (!isDirty || allowLeave.current) return router.back();
+    const decision = resolveDraftExitDecision({
+      busy,
+      isDirty,
+      allowLeave: allowLeave.current,
+    });
+    if (decision === 'wait') {
+      Alert.alert(
+        '照片正在处理',
+        '请等待当前照片上传或保存完成，避免照片归属与时间线状态不一致。',
+        [{ text: '继续等待', style: 'cancel' }],
+      );
+      return;
+    }
+    if (decision === 'continue') return router.back();
     Alert.alert('放弃未保存的照片？', '当前选择的照片和备注尚未完成保存，离开后需要重新选择。', [
       { text: '继续编辑', style: 'cancel' },
       {
@@ -131,12 +144,17 @@ export default function NewPhotoRoute() {
   }, [busy, isDirty, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      const decision = resolveDraftExitDecision({
+        busy,
+        isDirty,
+        allowLeave: allowLeave.current,
+      });
+      if (decision === 'continue') return false;
       requestClose();
       return true;
     });
     return () => subscription.remove();
-  }, [isDirty, requestClose]);
+  }, [busy, isDirty, requestClose]);
   function addAssets(assets: ImagePicker.ImagePickerAsset[]) {
     setItems((current) => [
       ...current,
@@ -296,6 +314,7 @@ export default function NewPhotoRoute() {
   }
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"

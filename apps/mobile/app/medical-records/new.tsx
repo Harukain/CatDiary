@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type MedicalRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { isMedicalRecordDraftDirty } from '../../src/features/medical/medical-form';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 import {
   Card,
   ErrorText,
@@ -83,8 +84,18 @@ export default function NewMedicalRecordScreen() {
     ],
   );
   const requestClose = useCallback(() => {
-    if (busy) return;
-    if (!isDirty || allowLeave.current) return router.back();
+    const decision = resolveDraftExitDecision({
+      busy,
+      isDirty,
+      allowLeave: allowLeave.current,
+    });
+    if (decision === 'wait') {
+      Alert.alert('医疗档案正在保存', '请等待当前医疗档案保存完成，避免重复提交。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (decision === 'continue') return router.back();
     Alert.alert('放弃未保存的医疗档案？', '当前填写的医疗信息尚未保存，离开后需要重新填写。', [
       { text: '继续填写', style: 'cancel' },
       {
@@ -99,12 +110,17 @@ export default function NewMedicalRecordScreen() {
   }, [busy, isDirty, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      const decision = resolveDraftExitDecision({
+        busy,
+        isDirty,
+        allowLeave: allowLeave.current,
+      });
+      if (decision === 'continue') return false;
       requestClose();
       return true;
     });
     return () => subscription.remove();
-  }, [isDirty, requestClose]);
+  }, [busy, isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily || !petId) return setError('请选择猫咪');
     let occurredAt: string;
@@ -144,6 +160,7 @@ export default function NewMedicalRecordScreen() {
   }
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.nav}>
           <Pressable

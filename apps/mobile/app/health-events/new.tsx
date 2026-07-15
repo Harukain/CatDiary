@@ -6,6 +6,7 @@ import { colors, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { isHealthEventDraftDirty } from '../../src/features/health-events/health-event-form';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 import {
   Card,
   ErrorText,
@@ -37,8 +38,18 @@ export default function NewHealthEventScreen() {
     [initialTitle, summary, title],
   );
   const requestClose = useCallback(() => {
-    if (busy) return;
-    if (!isDirty || allowLeave.current) return router.back();
+    const decision = resolveDraftExitDecision({
+      busy,
+      isDirty,
+      allowLeave: allowLeave.current,
+    });
+    if (decision === 'wait') {
+      Alert.alert('健康事件正在创建', '请等待当前健康事件保存完成，避免重复创建。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (decision === 'continue') return router.back();
     Alert.alert(
       '放弃未保存的健康事件？',
       '当前填写的标题或情况摘要尚未保存，离开后需要重新填写。',
@@ -57,12 +68,17 @@ export default function NewHealthEventScreen() {
   }, [busy, isDirty, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      const decision = resolveDraftExitDecision({
+        busy,
+        isDirty,
+        allowLeave: allowLeave.current,
+      });
+      if (decision === 'continue') return false;
       requestClose();
       return true;
     });
     return () => subscription.remove();
-  }, [isDirty, requestClose]);
+  }, [busy, isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily || !params.petId)
       return setError('缺少猫咪信息，请从异常记录进入');
