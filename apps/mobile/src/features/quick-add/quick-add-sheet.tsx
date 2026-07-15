@@ -13,35 +13,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-
-const actions = [
-  {
-    icon: 'create-outline' as const,
-    title: '新增生活或健康记录',
-    detail: '饮食、体重、排便、呕吐等日常情况',
-    path: '/records/new' as const,
-  },
-  {
-    icon: 'notifications-outline' as const,
-    title: '新建照顾计划',
-    detail: '疫苗、驱虫、用药或铲屎提醒',
-    path: '/plans/new' as const,
-    requiresManagement: true,
-  },
-  {
-    icon: 'camera-outline' as const,
-    title: '上传猫咪照片',
-    detail: '支持多图、备注和同时绑定多只猫咪',
-    path: '/photos/new' as const,
-  },
-  {
-    icon: 'paw-outline' as const,
-    title: '添加猫咪档案',
-    detail: '创建新猫咪，家庭最多 5 只',
-    path: '/onboarding/pet' as const,
-    requiresManagement: true,
-  },
-];
+import { type QuickAddActionPath, visibleQuickAddActions } from './quick-add-actions';
 
 export function QuickAddSheet({
   visible,
@@ -65,15 +37,13 @@ export function QuickAddSheet({
       if (node) AccessibilityInfo.setAccessibilityFocus(node);
     });
   }, []);
-  function navigate(path: (typeof actions)[number]['path']) {
+  function navigate(path: QuickAddActionPath) {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
     onClose(false);
     router.push(path);
   }
-  const visibleActions = canManage
-    ? actions
-    : actions.filter((action) => !('requiresManagement' in action));
+  const visibleActions = visibleQuickAddActions(canManage);
   return (
     <Modal
       animationType="slide"
