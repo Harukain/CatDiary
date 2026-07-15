@@ -7,19 +7,24 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type PhotoSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { resolvePhotoFilterPetId } from '../../src/features/photos/photo-form';
+import {
+  photoAlbumGridLayout,
+  resolvePhotoFilterPetId,
+} from '../../src/features/photos/photo-form';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 import { Body, ErrorText, PrimaryButton, Screen } from '../../src/shared/ui/primitives';
 
 export default function PhotosRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
+  const { width: screenWidth } = useWindowDimensions();
   const { session, activeFamily } = useSession();
   const routePetId = useMemo(
     () => paramValue(params.petId) ?? paramValue(params.pet),
@@ -30,6 +35,15 @@ export default function PhotosRoute() {
   const [petId, setPetId] = useState(routePetId ?? '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const gridLayout = useMemo(
+    () =>
+      photoAlbumGridLayout({
+        screenWidth,
+        horizontalPadding: spacing.xl,
+        gap: spacing.md,
+      }),
+    [screenWidth],
+  );
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
     setLoading(true);
@@ -105,7 +119,12 @@ export default function PhotosRoute() {
                 accessibilityRole="button"
                 accessibilityLabel={`${photo.pets.map((entry) => entry.pet.name).join('、')}的照片`}
                 onPress={() => router.push({ pathname: '/photos/[id]', params: { id: photo.id } })}
-                style={[styles.tile, index % 5 === 0 && styles.tileWide]}
+                style={[
+                  styles.tile,
+                  { width: gridLayout.columnWidth },
+                  index % 5 === 0 && styles.tileWide,
+                  index % 5 === 0 && { width: gridLayout.contentWidth },
+                ]}
               >
                 <Image
                   source={photoThumbnailSource(photo, session!.accessToken, activeFamily!.id)}
@@ -194,14 +213,13 @@ const styles = StyleSheet.create({
   filterTextActive: { color: colors.surface },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   tile: {
-    width: '47.8%',
     aspectRatio: 0.82,
     borderRadius: radii.card,
     overflow: 'hidden',
     backgroundColor: colors.surface,
     ...shadows.card,
   },
-  tileWide: { width: '100%', aspectRatio: 1.6 },
+  tileWide: { aspectRatio: 1.6 },
   image: { width: '100%', flex: 1, backgroundColor: colors.brandSoft },
   caption: { padding: spacing.md, gap: 3 },
   petNames: { ...typography.caption, color: colors.ink, fontWeight: '700' },

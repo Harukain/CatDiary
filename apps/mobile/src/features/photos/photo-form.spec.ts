@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPhotoRecordInput,
+  isPhotoDetailDraftDirty,
   isPhotoUploadDraftDirty,
+  photoAlbumGridLayout,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
   resolvePhotoFilterPetId,
@@ -91,10 +93,35 @@ describe('photo form pet context rules', () => {
     expect(isPhotoUploadDraftDirty({ ...base, petIds: ['pet-a'] })).toBe(false);
   });
 
+  it('detects photo detail edits that need a leave confirmation', () => {
+    const base = {
+      note: '晒太阳',
+      originalNote: '晒太阳',
+      petIds: ['pet-a', 'pet-b'],
+      originalPetIds: ['pet-b', 'pet-a'],
+    };
+
+    expect(isPhotoDetailDraftDirty(base)).toBe(false);
+    expect(isPhotoDetailDraftDirty({ ...base, note: '  晒太阳  ' })).toBe(false);
+    expect(isPhotoDetailDraftDirty({ ...base, note: '晒太阳和打盹' })).toBe(true);
+    expect(isPhotoDetailDraftDirty({ ...base, petIds: ['pet-a'] })).toBe(true);
+    expect(isPhotoDetailDraftDirty({ ...base, petIds: ['pet-a', 'pet-c'] })).toBe(true);
+  });
+
   it('calculates remaining upload slots without exceeding the photo limit', () => {
     expect(remainingPhotoSlots(0)).toBe(9);
     expect(remainingPhotoSlots(8)).toBe(1);
     expect(remainingPhotoSlots(9)).toBe(0);
     expect(remainingPhotoSlots(12)).toBe(0);
+  });
+
+  it('keeps the album two-column grid within mobile widths', () => {
+    for (const screenWidth of [360, 375, 390, 420]) {
+      const layout = photoAlbumGridLayout({ screenWidth, horizontalPadding: 20, gap: 12 });
+
+      expect(layout.contentWidth).toBe(screenWidth - 40);
+      expect(layout.columnWidth * 2 + 12).toBeLessThanOrEqual(layout.contentWidth);
+      expect(layout.columnWidth).toBeGreaterThanOrEqual(154);
+    }
   });
 });

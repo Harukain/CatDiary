@@ -64,8 +64,41 @@ export function isPhotoUploadDraftDirty({
   return itemCount > 0 || note.trim() !== '' || !samePhotoPetSelection(petIds, initialPetIds);
 }
 
+export function isPhotoDetailDraftDirty({
+  note,
+  originalNote,
+  petIds,
+  originalPetIds,
+}: {
+  note: string;
+  originalNote?: string | null;
+  petIds: string[];
+  originalPetIds: string[];
+}) {
+  return (
+    note.trim() !== (originalNote ?? '').trim() || !samePhotoPetSelection(petIds, originalPetIds)
+  );
+}
+
 export function remainingPhotoSlots(itemCount: number, limit = PHOTO_UPLOAD_LIMIT) {
   return Math.max(0, limit - itemCount);
+}
+
+export function photoAlbumGridLayout({
+  screenWidth,
+  horizontalPadding,
+  gap,
+}: {
+  screenWidth: number;
+  horizontalPadding: number;
+  gap: number;
+}) {
+  const contentWidth = Math.max(0, Math.floor(screenWidth - horizontalPadding * 2));
+  const columnWidth = Math.max(0, Math.floor((contentWidth - gap) / 2));
+  return {
+    contentWidth,
+    columnWidth,
+  };
 }
 
 function unique(values: string[]) {

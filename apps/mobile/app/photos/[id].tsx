@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -19,7 +20,7 @@ import {
   type PhotoSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { samePhotoPetSelection } from '../../src/features/photos/photo-form';
+import { isPhotoDetailDraftDirty } from '../../src/features/photos/photo-form';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
   ErrorText,
@@ -33,12 +34,14 @@ export default function PhotoDetailRoute() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session, activeFamily } = useSession();
+  const allowLeave = useRef(false);
   const [photo, setPhoto] = useState<PhotoSummary | null>(null);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petIds, setPetIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const originalPetIds = useMemo(() => photo?.pets.map((entry) => entry.petId) ?? [], [photo]);
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
     Promise.all([
@@ -56,12 +59,45 @@ export default function PhotoDetailRoute() {
   const canManageAvatar = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const changed =
     !!photo &&
-    (note.trim() !== (photo.note ?? '') ||
-      !samePhotoPetSelection(
-        petIds,
-        photo.pets.map((entry) => entry.petId),
-      ));
+    isPhotoDetailDraftDirty({
+      note,
+      originalNote: photo.note,
+      petIds,
+      originalPetIds,
+    });
+  const requestBack = useCallback(() => {
+    if (busy) {
+      Alert.alert('照片正在处理', '请等待当前操作完成，避免照片归属或备注状态不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (!changed || allowLeave.current) {
+      router.back();
+      return;
+    }
+    Alert.alert('放弃未保存的修改？', '照片备注或绑定猫咪尚未保存，离开后本次修改不会生效。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, changed, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!busy && (!changed || allowLeave.current)) return false;
+      requestBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [busy, changed, requestBack]);
   function togglePet(petId: string) {
+    if (busy) return;
     setPetIds((current) =>
       current.includes(petId)
         ? current.length > 1
@@ -121,7 +157,13 @@ export default function PhotoDetailRoute() {
   return (
     <Screen>
       <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.navButton}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="返回"
+          accessibilityHint={busy ? '照片操作进行中，点击会提示继续等待' : '返回上一页'}
+          onPress={requestBack}
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <Text style={styles.title}>照片详情</Text>
@@ -144,9 +186,14 @@ export default function PhotoDetailRoute() {
                   <Pressable
                     key={pet.id}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: petIds.includes(pet.id) }}
+                    accessibilityState={{ selected: petIds.includes(pet.id), disabled: busy }}
+                    disabled={busy}
                     onPress={() => togglePet(pet.id)}
-                    style={[styles.chip, petIds.includes(pet.id) && styles.chipActive]}
+                    style={[
+                      styles.chip,
+                      petIds.includes(pet.id) && styles.chipActive,
+                      busy && styles.disabled,
+                    ]}
                   >
                     <Text
                       style={[styles.chipText, petIds.includes(pet.id) && styles.chipTextActive]}
@@ -162,6 +209,7 @@ export default function PhotoDetailRoute() {
                 onChangeText={setNote}
                 maxLength={500}
                 multiline
+                editable={!busy}
                 placeholder="写下这一刻"
               />
               {error ? <ErrorText>{error}</ErrorText> : null}
@@ -231,6 +279,8 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.brand },
   chipText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   chipTextActive: { color: colors.surface },
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   avatarArea: {
     marginTop: spacing.sm,
     borderTopWidth: 1,
