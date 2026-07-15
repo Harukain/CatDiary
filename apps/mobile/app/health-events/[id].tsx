@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +15,10 @@ import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type HealthEventSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
+  healthEventDetailNavigationCopy,
   isHealthEventDraftDirty,
+  resolveHealthEventDetailNavigationDecision,
+  type HealthEventDetailNavigationTarget,
   type HealthEventDraft,
 } from '../../src/features/health-events/health-event-form';
 import {
@@ -37,7 +40,6 @@ export default function HealthEventDetailScreen() {
   const [initialDraft, setInitialDraft] = useState<HealthEventDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const allowLeave = useRef(false);
   const load = useCallback(async () => {
     if (!session || !activeFamily || !id) return;
     setError('');
@@ -47,7 +49,6 @@ export default function HealthEventDetailScreen() {
       setTitle(next.title);
       setSummary(next.summary ?? '');
       setInitialDraft({ title: next.title, summary: next.summary ?? '' });
-      allowLeave.current = false;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '加载失败');
     }
@@ -74,59 +75,55 @@ export default function HealthEventDetailScreen() {
       ),
     [initialDraft, summary, title],
   );
+  const requestGuardedNavigation = useCallback(
+    (target: HealthEventDetailNavigationTarget, action: () => void) => {
+      const decision = resolveHealthEventDetailNavigationDecision({ busy, isDirty });
+      if (decision === 'wait') {
+        Alert.alert('健康事件正在处理', '请等待当前操作完成，避免健康事件状态与服务器不一致。', [
+          { text: '继续等待', style: 'cancel' },
+        ]);
+        return;
+      }
+      if (decision === 'continue') {
+        action();
+        return;
+      }
+      const copy = healthEventDetailNavigationCopy(target);
+      Alert.alert(copy.title, copy.message, [
+        { text: '继续编辑', style: 'cancel' },
+        { text: copy.confirmLabel, style: 'destructive', onPress: action },
+      ]);
+    },
+    [busy, isDirty],
+  );
   const requestReturn = useCallback(() => {
-    if (busy) return;
-    if (!isDirty || allowLeave.current) {
-      router.back();
-      return;
-    }
-    Alert.alert('放弃未保存的健康事件修改？', '当前标题或情况摘要尚未保存，离开后会丢失修改。', [
-      { text: '继续编辑', style: 'cancel' },
-      {
-        text: '放弃修改',
-        style: 'destructive',
-        onPress: () => {
-          allowLeave.current = true;
-          router.back();
-        },
-      },
-    ]);
-  }, [busy, isDirty, router]);
+    requestGuardedNavigation('return', () => router.back());
+  }, [requestGuardedNavigation, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      if (!busy && !isDirty) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
-  }, [isDirty, requestReturn]);
+  }, [busy, isDirty, requestReturn]);
   const requestLinkRecord = useCallback(() => {
-    if (!event || busy) return;
-    const navigate = () =>
+    if (!event) return;
+    requestGuardedNavigation('linkRecord', () =>
       router.push({
         pathname: '/health-events/link-record',
         params: { eventId: event.id },
-      });
-    if (!isDirty) {
-      navigate();
-      return;
-    }
-    Alert.alert(
-      '先处理未保存修改？',
-      '继续关联记录会离开当前页面，未保存的标题或摘要修改不会保留。',
-      [
-        { text: '继续编辑', style: 'cancel' },
-        {
-          text: '放弃并关联',
-          style: 'destructive',
-          onPress: () => {
-            allowLeave.current = true;
-            navigate();
-          },
-        },
-      ],
+      }),
     );
-  }, [busy, event, isDirty, router]);
+  }, [event, requestGuardedNavigation, router]);
+  const requestViewRecord = useCallback(
+    (recordId: string) => {
+      requestGuardedNavigation('viewRecord', () =>
+        router.push({ pathname: '/records/[id]', params: { id: recordId } }),
+      );
+    },
+    [requestGuardedNavigation, router],
+  );
   async function save() {
     if (!event || !session || !activeFamily) return;
     setBusy(true);
@@ -278,10 +275,10 @@ export default function HealthEventDetailScreen() {
               event.records.map(({ record, relationType }) => (
                 <View key={record.id} style={styles.record}>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`查看关联记录：${record.title}`}
                     style={styles.recordMain}
-                    onPress={() =>
-                      router.push({ pathname: '/records/[id]', params: { id: record.id } })
-                    }
+                    onPress={() => requestViewRecord(record.id)}
                   >
                     <Text style={styles.relation}>{relationLabel(relationType)}</Text>
                     <Text style={styles.recordTitle}>{record.title}</Text>
