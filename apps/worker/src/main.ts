@@ -171,7 +171,7 @@ async function bootstrap() {
     const jobKey = typeof job.data.jobKey === 'string' ? job.data.jobKey : job.id;
     if (!jobKey) return;
     void prisma.notificationLog.updateMany({
-      where: { jobKey },
+      where: { jobKey, status: { not: 'FAILED' } },
       data: {
         status: 'FAILED',
         attempt: job.attemptsMade + 1,

@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { deliverNotificationDue } from './notification-delivery';
+import { deliverNotificationDue, notificationFailureLogData } from './notification-delivery';
 
 const jobData = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -100,6 +100,41 @@ describe('deliverNotificationDue', () => {
     expect(notificationLog.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'SENT', attempt: 1 }) }),
     );
+  });
+
+  it('records a safe FAILED log before rethrowing provider send failures', async () => {
+    const { prisma, notificationLog } = fakePrisma();
+    const sender = vi
+      .fn()
+      .mockRejectedValue(new Error('EXPO_PUSH_REJECTED:ExponentPushToken[secret] should not leak'));
+
+    await expect(
+      deliverNotificationDue(prisma, { ...input(), attemptsMade: 2 }, sender),
+    ).rejects.toThrow(/EXPO_PUSH_REJECTED/);
+
+    expect(notificationLog.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { jobKey: input().jobKey, status: { in: ['QUEUED', 'FAILED'] } },
+        data: expect.objectContaining({
+          status: 'FAILED',
+          attempt: 3,
+          errorCode: 'EXPO_PUSH_REJECTED',
+          errorMessageSafe: 'Expo 推送服务拒绝发送，请检查设备 Token 或推送凭据',
+        }),
+      }),
+    );
+  });
+
+  it('does not expose raw provider details in safe failure messages', () => {
+    const failure = notificationFailureLogData(
+      'FEISHU',
+      new Error('FEISHU_REJECTED:https://open.feishu.cn/open-apis/bot/v2/hook/secret'),
+    );
+
+    expect(failure).toEqual({
+      errorCode: 'FEISHU_REJECTED',
+      errorMessageSafe: '飞书机器人拒绝消息，请检查 Webhook 是否仍有效',
+    });
   });
 
   it.each([

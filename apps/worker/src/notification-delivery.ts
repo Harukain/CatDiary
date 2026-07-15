@@ -119,7 +119,22 @@ export async function deliverNotificationDue(
   const guard = await guardNotificationDelivery(prisma, input.jobKey);
   if (!guard.allowed) return { skipped: true as const, reason: guard.reason };
 
-  const delivery = await sender(prisma, input.data);
+  let delivery: Awaited<ReturnType<NotificationSender>>;
+  try {
+    delivery = await sender(prisma, input.data);
+  } catch (error) {
+    const failure = notificationFailureLogData(input.data.channel, error);
+    await prisma.notificationLog.updateMany({
+      where: { jobKey: input.jobKey, status: { in: [...sendableLogStatuses] } },
+      data: {
+        status: 'FAILED',
+        attempt: input.attemptsMade + 1,
+        errorCode: failure.errorCode,
+        errorMessageSafe: failure.errorMessageSafe,
+      },
+    });
+    throw error;
+  }
   await prisma.notificationLog.updateMany({
     where: { jobKey: input.jobKey, status: { in: [...sendableLogStatuses] } },
     data: {
@@ -144,4 +159,30 @@ function isPushLike(channel: NotificationChannelType) {
 
 function isOverdueJobKey(jobKey: string) {
   return /:overdue-[1-3]$/.test(jobKey);
+}
+
+export function notificationFailureLogData(
+  channel: NotificationChannelType,
+  error: unknown,
+): { errorCode: string; errorMessageSafe: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  const rawCode = message.split(':', 1)[0] || 'UNKNOWN';
+  const providerCode = rawCode.replace(/[^A-Z0-9_]/g, '_').slice(0, 80) || 'UNKNOWN';
+  return {
+    errorCode: providerCode.startsWith(channel) ? providerCode : `${channel}_${providerCode}`,
+    errorMessageSafe: safeNotificationFailureMessage(providerCode),
+  };
+}
+
+function safeNotificationFailureMessage(providerCode: string) {
+  if (providerCode === 'PUSH_TOKEN_MISSING')
+    return '手机推送 Token 缺失，请在真机重新开启通知后重试';
+  if (providerCode === 'EXPO_PUSH_REJECTED')
+    return 'Expo 推送服务拒绝发送，请检查设备 Token 或推送凭据';
+  if (providerCode === 'FEISHU_CHANNEL_MISSING')
+    return '飞书通知配置缺失，请重新保存 Webhook 后重试';
+  if (providerCode === 'FEISHU_CHANNEL_DISABLED') return '飞书通知已停用，请重新启用后重试';
+  if (providerCode === 'INVALID_CHANNEL_SECRET') return '飞书通知密钥无法解密，请重新保存 Webhook';
+  if (providerCode === 'FEISHU_REJECTED') return '飞书机器人拒绝消息，请检查 Webhook 是否仍有效';
+  return '通知发送失败，系统会按重试策略稍后再试';
 }

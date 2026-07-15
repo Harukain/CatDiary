@@ -58,6 +58,7 @@
 - M2 飞书通知：家庭管理员可配置、测试和移除飞书机器人；Webhook 使用 AES-GCM 加密保存，接口只返回脱敏信息。
 - M2 多通道发送：Worker 支持 Expo Push、飞书和开发通道，按接收人生成确定性任务并统一记录发送结果与重试状态。
 - M2 通知发送前复核：Worker 在实际发送前再次校验通知日志、任务状态、猫咪状态、家庭成员关系和个人通知偏好；已失效提醒标记为 `SKIPPED`，不会调用外部发送通道。
+- M2 通知失败可观测性：通过发送前复核后的外部通道失败会立即写入 `FAILED`、attempt、稳定错误码和安全中文错误说明，再交由 BullMQ 按原策略重试；兜底失败处理不会覆盖已写入的安全失败原因。
 - M2 Expo 回执闭环：推送票据提交后延迟查询 Expo Receipt，区分 SENT 与 DELIVERED；回执查询采用指数退避，永久失败写回安全错误，`DeviceNotRegistered` 会自动停用对应设备 Token。
 - M2 完整提醒生命周期：Worker 已按 `due`、`overdue-1`、`overdue-2`、`overdue-3` 四个阶段排队；逾期阶段限制在家庭本地日期内，个人 `overdueEnabled` 偏好在排队和发送前复核均生效；通知日志保留业务 `notify:{taskId}:{receiverId}:{channel}:{stage}` jobKey，BullMQ 使用无冒号安全 jobId，避免队列运行时拒绝自定义 ID；失败重试会保留原提醒阶段。
 - M2 轻量离线：App 使用 SQLite WAL 持久化任务完成、跳过和撤销操作，保留原始请求体与幂等键，联网后自动重放并区分冲突/失败。
@@ -128,7 +129,7 @@
 - Worker 队列运维 CLI 已补齐：支持三条固定队列的只读状态、带精确确认词的全局暂停/恢复，并输出暂停状态与各类积压；真实本机 Redis 状态查询通过。
 - 托管 Redis 连接已统一：API、Worker 与运维 CLI 共同支持 `rediss://` TLS、认证信息、非默认端口和数据库编号，环境校验拒绝非 Redis 协议。
 - 6 条告警均有 promtool 时间序列行为测试，覆盖 `for` 持续时间、比率、P95、增长量、积压阈值以及最终标签/通知文案，避免仅语法正确但无法触发。
-- 当前单元测试 220 个通过（Domain 11、API 55、Worker 38、Mobile 116）；Prisma 共 16 个迁移。
+- 当前单元测试 222 个通过（Domain 11、API 55、Worker 40、Mobile 116）；Prisma 共 16 个迁移。
 - Helmet、CORS、限流、生产环境变量校验、结构化请求日志、存活/就绪探针已启用。
 - CI 已覆盖迁移、集成测试、iOS/Android Expo 导出、依赖审计与 Gitleaks；EAS 三环境配置与 PostgreSQL 备份/恢复脚本已补齐。
 - App 动态构建配置已加固：Preview/Production 强制非本地 HTTPS API 与有效 EAS Project ID，运行时只读取已校验地址；Bundle ID/Package、OTA runtime、更新 URL、出口加密与相机/相册权限均进入自动门禁。
