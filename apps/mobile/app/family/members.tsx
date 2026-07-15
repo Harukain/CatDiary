@@ -1,10 +1,25 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { phoneSchema } from '@cat-diary/validation';
 import { authApi, AuthApiError, type MemberSummary } from '../../src/features/auth/auth-api';
+import {
+  canOperateFamilyMember,
+  familyMemberDisplayName,
+  familyMemberRoleChangeCopy,
+  memberOperationKey,
+  normalizeInvitePhone,
+} from '../../src/features/family/member-actions';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
   Body,
@@ -13,26 +28,39 @@ import {
   Field,
   PrimaryButton,
   Screen,
+  SuccessText,
   Title,
 } from '../../src/shared/ui/primitives';
+
+type MembersOperation = '' | 'invite' | `role:${string}` | `remove:${string}`;
 
 export default function MembersRoute() {
   const router = useRouter();
   const { session, activeFamily } = useSession();
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [phone, setPhone] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState<MembersOperation>('');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [devToken, setDevToken] = useState('');
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+  const phoneValid = phoneSchema.safeParse(phone).success;
+  const busy = operation !== '';
 
   const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       setMembers(await authApi.listMembers(session.accessToken, activeFamily.id));
       setError('');
     } catch {
       setError('成员列表加载失败');
+    } finally {
+      setLoading(false);
     }
   }, [activeFamily, session]);
   useFocusEffect(
@@ -42,9 +70,10 @@ export default function MembersRoute() {
   );
 
   async function invite() {
-    if (!session || !activeFamily || !phoneSchema.safeParse(phone).success || busy) return;
-    setBusy(true);
+    if (!session || !activeFamily || !phoneValid || busy) return;
+    setOperation('invite');
     setError('');
+    setSuccess('');
     setDevToken('');
     try {
       const result = await authApi.inviteMember(
@@ -55,37 +84,86 @@ export default function MembersRoute() {
       );
       setPhone('');
       setDevToken(result.token ?? '');
+      setSuccess('邀请已生成。');
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '邀请创建失败');
     } finally {
-      setBusy(false);
+      setOperation('');
     }
   }
 
-  async function toggleRole(member: MemberSummary) {
-    if (!session || !activeFamily) return;
-    const next = member.role === 'MEMBER' ? 'ADMIN' : 'MEMBER';
+  function confirmToggleRole(member: MemberSummary) {
+    if (
+      busy ||
+      !canOperateFamilyMember({
+        currentRole: activeFamily?.role,
+        currentUserId: session?.user.id,
+        member,
+      })
+    )
+      return;
+    const name = familyMemberDisplayName(member, session?.user.id);
+    const copy = familyMemberRoleChangeCopy(name, member.role);
+    if (!copy) return;
+    Alert.alert(copy.title, copy.message, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: copy.confirmLabel,
+        onPress: () => void toggleRole(member, copy.nextRole, copy.success),
+      },
+    ]);
+  }
+
+  async function toggleRole(
+    member: MemberSummary,
+    next: 'ADMIN' | 'MEMBER',
+    successMessage: string,
+  ) {
+    if (!session || !activeFamily || busy) return;
+    setOperation(memberOperationKey('role', member.id));
+    setError('');
+    setSuccess('');
     try {
       await authApi.changeMemberRole(session.accessToken, activeFamily.id, member.id, next);
       await load();
+      setSuccess(successMessage);
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '角色调整失败');
+    } finally {
+      setOperation('');
     }
   }
 
   function confirmRemove(member: MemberSummary) {
-    Alert.alert('移除家庭成员', '该成员将无法继续查看和记录此家庭的数据。', [
+    if (
+      busy ||
+      !canOperateFamilyMember({
+        currentRole: activeFamily?.role,
+        currentUserId: session?.user.id,
+        member,
+      })
+    )
+      return;
+    const name = familyMemberDisplayName(member, session?.user.id);
+    Alert.alert('移除家庭成员？', `${name} 将无法继续查看和记录此家庭的数据。`, [
       { text: '取消', style: 'cancel' },
       { text: '确认移除', style: 'destructive', onPress: () => void remove(member) },
     ]);
   }
   async function remove(member: MemberSummary) {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily || busy) return;
+    const name = familyMemberDisplayName(member, session.user.id);
+    setOperation(memberOperationKey('remove', member.id));
+    setError('');
+    setSuccess('');
     try {
       await authApi.removeMember(session.accessToken, activeFamily.id, member.id);
       await load();
+      setSuccess(`${name} 已从家庭移除。`);
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '移除失败');
+    } finally {
+      setOperation('');
     }
   }
 
@@ -106,45 +184,92 @@ export default function MembersRoute() {
       <ScrollView contentContainerStyle={styles.content}>
         <Card>
           <Title>{activeFamily?.name}</Title>
-          <Body>管理员可以邀请、调整角色和移除成员。家庭必须至少保留一名管理员。</Body>
+          <Body>
+            {canManage
+              ? '管理员可以邀请、调整角色和移除成员。家庭必须至少保留一名管理员。'
+              : '你可以查看家庭成员。邀请、角色调整和移除需要家庭管理员操作。'}
+          </Body>
           {error ? <ErrorText>{error}</ErrorText> : null}
+          {success ? <SuccessText>{success}</SuccessText> : null}
           <View>
-            {members.map((member) => (
-              <View key={member.id} style={styles.member}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {(member.user.displayName ?? '家').slice(0, 1)}
-                  </Text>
-                </View>
-                <View style={styles.memberBody}>
-                  <Text style={styles.memberName}>
-                    {member.user.displayName ??
-                      (member.user.id === session?.user.id ? '我' : '家庭成员')}
-                  </Text>
-                  <Text style={styles.role}>{roleLabel(member.role)}</Text>
-                </View>
-                {canManage && member.user.id !== session?.user.id ? (
-                  <View style={styles.actions}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void toggleRole(member)}
-                      style={styles.action}
-                    >
-                      <Text style={styles.actionText}>
-                        {member.role === 'MEMBER' ? '设为管理员' : '设为成员'}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => confirmRemove(member)}
-                      style={styles.remove}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                    </Pressable>
-                  </View>
-                ) : null}
+            {loading ? (
+              <View style={styles.loading}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.loadingText}>正在加载成员…</Text>
               </View>
-            ))}
+            ) : members.length === 0 ? (
+              <Text style={styles.emptyText}>暂无成员，请稍后重试。</Text>
+            ) : (
+              members.map((member) => {
+                const memberName = familyMemberDisplayName(member, session?.user.id);
+                const canOperate = canOperateFamilyMember({
+                  currentRole: activeFamily?.role,
+                  currentUserId: session?.user.id,
+                  member,
+                });
+                const roleBusy = operation === memberOperationKey('role', member.id);
+                const removeBusy = operation === memberOperationKey('remove', member.id);
+                const disabled = busy || loading;
+                return (
+                  <View key={member.id} style={styles.member}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{memberName.slice(0, 1)}</Text>
+                    </View>
+                    <View style={styles.memberBody}>
+                      <Text style={styles.memberName}>{memberName}</Text>
+                      <Text style={styles.role}>{roleLabel(member.role)}</Text>
+                    </View>
+                    {canOperate ? (
+                      <View style={styles.actions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            member.role === 'MEMBER'
+                              ? `将 ${memberName} 设为管理员`
+                              : `将 ${memberName} 设为普通成员`
+                          }
+                          accessibilityState={{ disabled }}
+                          disabled={disabled}
+                          onPress={() => confirmToggleRole(member)}
+                          style={({ pressed }) => [
+                            styles.action,
+                            disabled && styles.actionDisabled,
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          {roleBusy ? <ActivityIndicator color={colors.warningDark} /> : null}
+                          <Text style={styles.actionText}>
+                            {member.role === 'MEMBER' ? '设为管理员' : '设为成员'}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`移除 ${memberName}`}
+                          accessibilityState={{ disabled }}
+                          disabled={disabled}
+                          onPress={() => confirmRemove(member)}
+                          style={({ pressed }) => [
+                            styles.remove,
+                            disabled && styles.actionDisabled,
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          {removeBusy ? (
+                            <ActivityIndicator color={colors.dangerDark} />
+                          ) : (
+                            <Ionicons
+                              name="trash-outline"
+                              size={18}
+                              color={disabled ? colors.textTertiary : colors.danger}
+                            />
+                          )}
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
           </View>
         </Card>
         {canManage ? (
@@ -157,14 +282,15 @@ export default function MembersRoute() {
               value={phone}
               placeholder="请输入对方手机号"
               onChangeText={(value) => {
-                setPhone(value.replace(/\D/g, ''));
+                setPhone(normalizeInvitePhone(value));
                 setError('');
+                setSuccess('');
               }}
             />
             <PrimaryButton
               label="生成邀请"
-              busy={busy}
-              disabled={!phoneSchema.safeParse(phone).success}
+              busy={operation === 'invite'}
+              disabled={!phoneValid || busy || loading}
               onPress={invite}
             />
             {devToken ? (
@@ -214,10 +340,22 @@ const styles = StyleSheet.create({
   memberBody: { flex: 1 },
   memberName: { ...typography.h3, color: colors.ink },
   role: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  loading: { minHeight: 80, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  loadingText: { ...typography.caption, color: colors.textSecondary },
+  emptyText: { ...typography.secondary, color: colors.textSecondary, paddingVertical: spacing.lg },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  action: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  actionDisabled: { opacity: 0.5 },
   actionText: { fontSize: 12, fontWeight: '600', color: colors.warningDark },
   remove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   devInvite: {
     borderRadius: radii.banner,
     backgroundColor: colors.warningSoft,
