@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,23 @@ import {
   type NotificationStatus,
 } from '../src/features/auth/auth-api';
 import { useSession } from '../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, Title } from '../src/shared/ui/primitives';
+import {
+  mergeRetriedNotificationLog,
+  notificationLogChannelLabel,
+  notificationLogEmptyCopy,
+  notificationLogPageStats,
+  notificationLogRetrySuccessMessage,
+  notificationLogStatusCopy,
+} from '../src/features/notifications/notification-log-rules';
+import {
+  Body,
+  Card,
+  ErrorText,
+  Screen,
+  SuccessText,
+  TextButton,
+  Title,
+} from '../src/shared/ui/primitives';
 
 const filters: Array<{ label: string; value?: NotificationStatus }> = [
   { label: '全部' },
@@ -38,6 +54,10 @@ export default function NotificationLogsRoute() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [retryingId, setRetryingId] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
+  const stats = useMemo(() => notificationLogPageStats(items), [items]);
+  const emptyCopy = notificationLogEmptyCopy(status);
 
   const load = useCallback(
     async (cursor?: string, append = false) => {
@@ -46,6 +66,7 @@ export default function NotificationLogsRoute() {
       else {
         setLoading(true);
         setError('');
+        setSuccess('');
       }
       try {
         const result = await authApi.listNotificationLogs(
@@ -56,6 +77,7 @@ export default function NotificationLogsRoute() {
         );
         setItems((current) => (append ? [...current, ...result.items] : result.items));
         setNextCursor(result.page.nextCursor);
+        setLastLoadedAt(new Date());
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : '提醒发送记录加载失败');
       } finally {
@@ -83,13 +105,15 @@ export default function NotificationLogsRoute() {
     if (!session || !activeFamily) return;
     setRetryingId(item.id);
     setError('');
+    setSuccess('');
     try {
       const next = await authApi.retryNotificationLog(
         session.accessToken,
         activeFamily.id,
         item.id,
       );
-      setItems((current) => current.map((value) => (value.id === next.id ? next : value)));
+      setItems((current) => mergeRetriedNotificationLog(current, next, status));
+      setSuccess(notificationLogRetrySuccessMessage(next, status));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '重新发送失败');
     } finally {
@@ -121,7 +145,10 @@ export default function NotificationLogsRoute() {
               key={filter.label}
               accessibilityRole="button"
               accessibilityState={{ selected: status === filter.value }}
-              onPress={() => setStatus(filter.value)}
+              onPress={() => {
+                setStatus(filter.value);
+                setSuccess('');
+              }}
               style={[styles.filter, status === filter.value && styles.filterActive]}
             >
               <Text style={[styles.filterText, status === filter.value && styles.filterTextActive]}>
@@ -130,7 +157,36 @@ export default function NotificationLogsRoute() {
             </Pressable>
           ))}
         </ScrollView>
+        <Card>
+          <View style={styles.summaryTop}>
+            <View style={styles.summaryCopy}>
+              <Title>
+                {status ? `${notificationLogStatusCopy(status).label}记录` : '本页概览'}
+              </Title>
+              <Body>
+                {lastLoadedAt
+                  ? `已加载 ${stats.total} 条，最近刷新 ${formatDate(lastLoadedAt.toISOString())}`
+                  : '正在读取最近的提醒发送状态。'}
+              </Body>
+            </View>
+            <TextButton
+              label={loading ? '刷新中' : '刷新'}
+              disabled={loading}
+              onPress={() => void load()}
+            />
+          </View>
+          <View style={styles.stats}>
+            <StatChip label="失败" value={stats.failed} tone="danger" />
+            <StatChip label="队列" value={stats.queued} tone="warning" />
+            <StatChip label="已发送" value={stats.sent} tone="brand" />
+            <StatChip label="送达" value={stats.delivered} tone="success" />
+          </View>
+          {status ? (
+            <Text style={styles.statusHelp}>{notificationLogStatusCopy(status).description}</Text>
+          ) : null}
+        </Card>
         {error ? <ErrorText>{error}</ErrorText> : null}
+        {success ? <SuccessText>{success}</SuccessText> : null}
         {loading ? (
           <ActivityIndicator color={colors.brand} />
         ) : items.length ? (
@@ -141,11 +197,16 @@ export default function NotificationLogsRoute() {
                   <View style={styles.itemHeading}>
                     <Text style={styles.itemTitle}>{item.task?.title ?? '原任务已删除'}</Text>
                     <Text style={styles.itemMeta}>
-                      {channelLabel(item.channel)} · {formatDate(item.scheduledAt)}
+                      {notificationLogChannelLabel(item.channel)} · 计划{' '}
+                      {formatDate(item.scheduledAt)}
+                      {item.attempt ? ` · 第 ${item.attempt} 次` : ''}
                     </Text>
                   </View>
                   <StatusBadge status={item.status} />
                 </View>
+                <Text style={styles.statusDescription}>
+                  {notificationLogStatusCopy(item.status).description}
+                </Text>
                 {item.status === 'FAILED' ? (
                   <View style={styles.failure}>
                     <Text style={styles.failureText}>
@@ -188,8 +249,8 @@ export default function NotificationLogsRoute() {
           </View>
         ) : (
           <Card>
-            <Title>还没有提醒记录</Title>
-            <Body>创建照顾计划并到达提醒时间后，这里会显示发送状态。</Body>
+            <Title>{emptyCopy.title}</Title>
+            <Body>{emptyCopy.body}</Body>
           </Card>
         )}
       </ScrollView>
@@ -198,24 +259,50 @@ export default function NotificationLogsRoute() {
 }
 
 function StatusBadge({ status }: { status: NotificationStatus }) {
-  const detail = statusDetail(status);
+  const detail = notificationLogStatusCopy(status);
+  return <ToneBadge label={detail.label} tone={detail.tone} />;
+}
+
+function StatChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'brand' | 'success' | 'warning' | 'danger';
+}) {
   return (
-    <View style={[styles.badge, detail.style]}>
-      <Text style={[styles.badgeText, detail.textStyle]}>{detail.label}</Text>
+    <View style={styles.statChip}>
+      <Text style={styles.statValue}>{value}</Text>
+      <ToneBadge label={label} tone={tone} />
     </View>
   );
 }
-function statusDetail(status: NotificationStatus) {
-  return {
-    QUEUED: { label: '队列中', style: styles.warningBadge, textStyle: styles.warningText },
-    SENT: { label: '已发送', style: styles.brandBadge, textStyle: styles.brandText },
-    DELIVERED: { label: '已送达', style: styles.successBadge, textStyle: styles.successText },
-    FAILED: { label: '发送失败', style: styles.dangerBadge, textStyle: styles.dangerText },
-    SKIPPED: { label: '已跳过', style: styles.neutralBadge, textStyle: styles.neutralText },
-  }[status];
+
+function ToneBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'brand' | 'success' | 'warning' | 'danger' | 'neutral';
+}) {
+  const detail = toneDetail(tone);
+  return (
+    <View style={[styles.badge, detail.style]}>
+      <Text style={[styles.badgeText, detail.textStyle]}>{label}</Text>
+    </View>
+  );
 }
-function channelLabel(channel: NotificationLogSummary['channel']) {
-  return { DEVELOPMENT: '开发通知', EXPO_PUSH: '手机推送', FEISHU: '飞书通知' }[channel];
+
+function toneDetail(tone: 'brand' | 'success' | 'warning' | 'danger' | 'neutral') {
+  return {
+    brand: { style: styles.brandBadge, textStyle: styles.brandText },
+    success: { style: styles.successBadge, textStyle: styles.successText },
+    warning: { style: styles.warningBadge, textStyle: styles.warningText },
+    danger: { style: styles.dangerBadge, textStyle: styles.dangerText },
+    neutral: { style: styles.neutralBadge, textStyle: styles.neutralText },
+  }[tone];
 }
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -245,6 +332,27 @@ const styles = StyleSheet.create({
   filterActive: { backgroundColor: colors.ink },
   filterText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   filterTextActive: { color: colors.surface },
+  summaryTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  summaryCopy: { flex: 1, gap: spacing.xs },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  statChip: {
+    minHeight: 44,
+    minWidth: 76,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  statValue: {
+    ...typography.h2,
+    color: colors.ink,
+    fontVariant: ['tabular-nums'],
+  },
+  statusHelp: { ...typography.caption, color: colors.textSecondary },
   list: { gap: spacing.md },
   itemTop: {
     flexDirection: 'row',
@@ -255,6 +363,7 @@ const styles = StyleSheet.create({
   itemHeading: { flex: 1, gap: spacing.xs },
   itemTitle: { ...typography.h3, color: colors.ink },
   itemMeta: { ...typography.caption, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+  statusDescription: { ...typography.caption, color: colors.textSecondary },
   badge: { borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   badgeText: { ...typography.caption, fontWeight: '600' },
   warningBadge: { backgroundColor: colors.warningSoft },
