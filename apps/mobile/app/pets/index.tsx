@@ -101,7 +101,12 @@ export default function PetsRoute() {
             <Body>这个家庭还没有猫咪档案。</Body>
           )}
           {canManage && pets.length < 5 ? (
-            <PrimaryButton label="添加猫咪" onPress={() => router.push('/onboarding/pet')} />
+            <PrimaryButton
+              label="添加猫咪"
+              onPress={() =>
+                router.push({ pathname: '/onboarding/pet', params: { returnTo: 'pets' } })
+              }
+            />
           ) : null}
           {pets.length >= 5 ? <Body>已达到每个家庭 5 只猫咪的上限。</Body> : null}
         </Card>

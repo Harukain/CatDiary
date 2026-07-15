@@ -1,4 +1,5 @@
-export type QuickAddActionPath = '/records/new' | '/plans/new' | '/photos/new' | '/onboarding/pet';
+export type QuickAddActionPath =
+  '/records/new' | '/plans/new' | '/photos/new' | '/onboarding/pet?returnTo=pets';
 
 export type QuickAddAction = {
   icon: 'create-outline' | 'notifications-outline' | 'camera-outline' | 'paw-outline';
@@ -32,7 +33,7 @@ export const quickAddActions: QuickAddAction[] = [
     icon: 'paw-outline',
     title: '添加猫咪档案',
     detail: '创建新猫咪，家庭最多 5 只',
-    path: '/onboarding/pet',
+    path: '/onboarding/pet?returnTo=pets',
     requiresManagement: true,
   },
 ];

@@ -7,7 +7,7 @@ describe('quick add action rules', () => {
       '/records/new',
       '/plans/new',
       '/photos/new',
-      '/onboarding/pet',
+      '/onboarding/pet?returnTo=pets',
     ]);
     expect(isQuickAddRoute('/(tabs)/add')).toBe(false);
   });

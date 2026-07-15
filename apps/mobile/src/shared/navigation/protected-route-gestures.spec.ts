@@ -3,6 +3,7 @@ import taskDetailSource from '../../../app/tasks/[id].tsx?raw';
 import photoDetailSource from '../../../app/photos/[id].tsx?raw';
 import medicalRecordDetailSource from '../../../app/medical-records/[id].tsx?raw';
 import healthEventLinkRecordSource from '../../../app/health-events/link-record.tsx?raw';
+import createPetSource from '../../../app/onboarding/pet.tsx?raw';
 
 describe('protected route gestures', () => {
   it('keeps task detail native swipe-back behind the guarded return path', () => {
@@ -33,5 +34,11 @@ describe('protected route gestures', () => {
       '<Stack.Screen options={{ gestureEnabled: false }} />',
     );
     expect(healthEventLinkRecordSource).toContain('onPress={requestClose}');
+  });
+
+  it('keeps create-pet native swipe-back behind the guarded return path', () => {
+    expect(createPetSource).toContain("BackHandler.addEventListener('hardwareBackPress'");
+    expect(createPetSource).toContain('<Stack.Screen options={{ gestureEnabled: false }} />');
+    expect(createPetSource).toContain('onPress={requestExit}');
   });
 });
