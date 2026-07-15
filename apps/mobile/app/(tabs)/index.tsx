@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -22,9 +23,11 @@ import {
   Screen,
   Title,
 } from '../../src/shared/ui/primitives';
+import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 export default function HomeTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskSummary[]>([]);
@@ -55,7 +58,13 @@ export default function HomeTab() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomTabScrollPadding(insets.bottom) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heading}>
           <Text style={styles.eyebrow}>
             {formatToday()} · {activeFamily?.name ?? '尚未选择家庭'}
@@ -175,7 +184,7 @@ export default function HomeTab() {
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing.xxl, paddingBottom: 104 },
+  content: { gap: spacing.xxl },
   heading: { gap: spacing.xs },
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '600' },
   title: { ...typography.h1, color: colors.ink },

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { AccessibilityInfo, findNodeHandle, Pressable, type View } from 'react-native';
-import { colors, radii } from '@cat-diary/design-tokens';
+import { colors } from '@cat-diary/design-tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '../../src/features/auth/session-provider';
 import { QuickAddSheet } from '../../src/features/quick-add/quick-add-sheet';
+import { bottomTabBarStyle } from '../../src/shared/ui/bottom-tab-layout';
 
 const icons = {
   index: ['home-outline', 'home'] as const,
@@ -16,6 +18,7 @@ const icons = {
 
 export default function TabsLayout() {
   const { restoring, session, activeFamily } = useSession();
+  const insets = useSafeAreaInsets();
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const addTabButtonRef = useRef<View>(null);
   const restoreFocusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -49,18 +52,7 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarActiveTintColor: colors.navActive,
           tabBarInactiveTintColor: colors.navInactive,
-          tabBarStyle: {
-            position: 'absolute',
-            left: 12,
-            right: 12,
-            bottom: 12,
-            height: 68,
-            borderRadius: radii.navigation,
-            borderTopWidth: 0,
-            backgroundColor: colors.ink,
-            paddingTop: 8,
-            paddingBottom: 8,
-          },
+          tabBarStyle: bottomTabBarStyle(insets.bottom),
           tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600' },
           tabBarIcon: ({ color, focused, size }) => {
             const pair = icons[route.name as keyof typeof icons] ?? icons.index;

@@ -2,6 +2,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
@@ -15,9 +16,11 @@ import {
   Title,
 } from '../../src/shared/ui/primitives';
 import { registerForPushNotifications } from '../../src/features/notifications/register-push';
+import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 export default function MeTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily, selectFamily, signOut } = useSession();
   const [pushBusy, setPushBusy] = useState(false);
   const [pushMessage, setPushMessage] = useState('');
@@ -52,7 +55,12 @@ export default function MeTab() {
   }
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomTabScrollPadding(insets.bottom) },
+        ]}
+      >
         <View>
           <Text style={styles.title}>我的</Text>
           <Text style={styles.subtitle}>家庭、成员与账号设置</Text>
@@ -187,7 +195,7 @@ function roleLabel(role: string) {
   return role === 'OWNER' ? '家庭创建者' : role === 'ADMIN' ? '管理员' : '成员';
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.xxl, paddingBottom: 104 },
+  content: { gap: spacing.xxl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   familyList: { gap: spacing.sm },

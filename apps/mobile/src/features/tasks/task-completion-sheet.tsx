@@ -9,6 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import type { CompleteTaskInput, TaskSummary } from '../auth/auth-api';
 import { ErrorText, Field, PrimaryButton, TextButton } from '../../shared/ui/primitives';
@@ -34,6 +36,7 @@ export function TaskCompletionSheet({
   onCancel,
   onSubmit,
 }: TaskCompletionSheetProps) {
+  const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<TaskCompletionDraft>(() =>
     initialTaskCompletionDraft(task ?? { type: 'LITTER' }),
   );
@@ -68,8 +71,16 @@ export function TaskCompletionSheet({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={styles.root}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        if (!busy) onCancel();
+      }}
+      statusBarTranslucent
+    >
+      <View accessibilityViewIsModal style={styles.root}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="关闭完成任务面板"
@@ -81,13 +92,30 @@ export function TaskCompletionSheet({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboard}
         >
-          <ScrollView contentContainerStyle={styles.sheet} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={[
+              styles.sheet,
+              { paddingBottom: Math.max(spacing.xxxl, insets.bottom + spacing.xl) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.handle} />
             <View style={styles.heading}>
-              <Text style={styles.title}>完成任务</Text>
-              <Text style={styles.subtitle}>
-                {task.pet?.name ?? '家庭公共任务'} · {task.title}
-              </Text>
+              <View style={styles.headingCopy}>
+                <Text style={styles.title}>完成任务</Text>
+                <Text style={styles.subtitle}>
+                  {task.pet?.name ?? '家庭公共任务'} · {task.title}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="关闭"
+                disabled={busy}
+                onPress={onCancel}
+                style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+              >
+                <Ionicons name="close" size={20} color={busy ? colors.textTertiary : colors.ink} />
+              </Pressable>
             </View>
             {medical ? (
               <View style={styles.warning}>
@@ -141,7 +169,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radii.navigation,
     borderTopRightRadius: radii.navigation,
     padding: spacing.xl,
-    paddingBottom: spacing.xxxl,
     gap: spacing.lg,
   },
   handle: {
@@ -151,9 +178,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.border,
   },
-  heading: { gap: spacing.xs },
+  heading: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  headingCopy: { flex: 1, gap: spacing.xs },
   title: { ...typography.h2, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   warning: {
     borderRadius: radii.banner,
     backgroundColor: colors.warningSoft,

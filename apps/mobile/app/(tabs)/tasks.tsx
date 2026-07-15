@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -35,6 +36,7 @@ import {
 import { TaskUndoBanner } from '../../src/features/tasks/task-undo-banner';
 import { TaskCompletionSheet } from '../../src/features/tasks/task-completion-sheet';
 import { isMedicalTask } from '../../src/features/tasks/task-completion';
+import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 const scopes = [
   { value: 'today', label: '今天' },
@@ -46,6 +48,7 @@ type Scope = (typeof scopes)[number]['value'];
 
 export default function TasksTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [scope, setScope] = useState<Scope>('today');
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
@@ -165,7 +168,13 @@ export default function TasksTab() {
   const canManagePlans = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomTabScrollPadding(insets.bottom) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heading}>
           <View>
             <Text style={styles.title}>照顾任务</Text>
@@ -362,7 +371,7 @@ function emptyBody(scope: Scope) {
     : '创建疫苗、驱虫、用药或铲屎计划后，系统会生成未来 7 天任务。';
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.xxl, paddingBottom: 104 },
+  content: { gap: spacing.xxl },
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   title: { ...typography.h1, color: colors.ink },

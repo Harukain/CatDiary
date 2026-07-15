@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type RecordSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -25,9 +26,11 @@ import {
 import { recordOwnerLabel } from '../../src/features/records/record-form';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 import { recordSummaryText, recordTypeLabel } from '../../src/features/records/record-display';
+import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 export default function RecordsTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [records, setRecords] = useState<RecordSummary[]>([]);
   const [pets, setPets] = useState<PetSummary[]>([]);
@@ -83,7 +86,13 @@ export default function RecordsTab() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomTabScrollPadding(insets.bottom) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heading}>
           <View>
             <Text style={styles.title}>记录时间线</Text>
@@ -288,7 +297,7 @@ function Insights({ records }: { records: RecordSummary[] }) {
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing.lg, paddingBottom: 104 },
+  content: { gap: spacing.lg },
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
