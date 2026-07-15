@@ -1,31 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { isQuickAddRoute, quickAddActions, visibleQuickAddActions } from './quick-add-actions';
+import {
+  hasHiddenManagementQuickAddActions,
+  isQuickAddRoute,
+  quickAddActions,
+  visibleQuickAddActions,
+  visibleQuickAddActionsByPlacement,
+} from './quick-add-actions';
 
 describe('quick add action rules', () => {
   it('keeps the central plus as a quick action sheet instead of a tab destination', () => {
     expect(quickAddActions.map((action) => action.path)).toEqual([
+      '/records/new?type=FOOD',
+      '/records/new?type=WEIGHT',
+      '/records/new?type=LITTER',
+      '/photos/new',
       '/records/new',
       '/plans/new',
-      '/photos/new',
       '/onboarding/pet?returnTo=pets',
     ]);
     expect(isQuickAddRoute('/(tabs)/add')).toBe(false);
   });
 
+  it('puts high-frequency record actions into tappable sheet cards', () => {
+    expect(visibleQuickAddActionsByPlacement(true, 'card').map((action) => action.path)).toEqual([
+      '/records/new?type=FOOD',
+      '/records/new?type=WEIGHT',
+      '/records/new?type=LITTER',
+      '/photos/new',
+    ]);
+  });
+
   it('shows all quick actions to family managers', () => {
     expect(visibleQuickAddActions(true).map((action) => action.title)).toEqual([
-      '新增生活或健康记录',
+      '饮食',
+      '体重',
+      '铲屎',
+      '照片',
+      '更多记录类型',
       '新建照顾计划',
-      '上传猫咪照片',
       '添加猫咪档案',
     ]);
   });
 
   it('hides manager-only actions from regular family members', () => {
     expect(visibleQuickAddActions(false).map((action) => action.path)).toEqual([
-      '/records/new',
+      '/records/new?type=FOOD',
+      '/records/new?type=WEIGHT',
+      '/records/new?type=LITTER',
       '/photos/new',
+      '/records/new',
     ]);
+    expect(hasHiddenManagementQuickAddActions(false)).toBe(true);
+    expect(hasHiddenManagementQuickAddActions(true)).toBe(false);
   });
 
   it('keeps write actions aligned with MVP ownership rules', () => {
