@@ -41,6 +41,7 @@ export default function TaskDetailScreen() {
   const [notice, setNotice] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [completionVisible, setCompletionVisible] = useState(false);
+  const [completionError, setCompletionError] = useState('');
 
   const load = useCallback(() => {
     if (!id || !session || !activeFamily) return;
@@ -84,33 +85,41 @@ export default function TaskDetailScreen() {
 
   function requestComplete() {
     if (!task) return;
+    setCompletionError('');
+    setError('');
     setCompletionVisible(true);
   }
 
   async function complete(input: CompleteTaskInput) {
     if (!task || !session || !activeFamily) return;
-    setCompletionVisible(false);
     setActionBusy(true);
     setError('');
+    setCompletionError('');
     setNotice('');
     const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
+      setCompletionVisible(false);
       load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
-        await enqueueOfflineOperation(operation);
-        await removeCachedTask(task.id);
-        setTask({
-          ...task,
-          status: 'COMPLETED',
-          completedAt: input.actualAt,
-          result: input.result,
-          note: input.note ?? null,
-          version: task.version + 1,
-        });
-        setNotice('网络不可用，完成操作已保存并将在恢复后同步。');
-      } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
+        try {
+          await enqueueOfflineOperation(operation);
+          await removeCachedTask(task.id);
+          setTask({
+            ...task,
+            status: 'COMPLETED',
+            completedAt: input.actualAt,
+            result: input.result,
+            note: input.note ?? null,
+            version: task.version + 1,
+          });
+          setCompletionVisible(false);
+          setNotice('网络不可用，完成操作已保存并将在恢复后同步。');
+        } catch {
+          setCompletionError('离线操作保存失败，请稍后重试');
+        }
+      } else setCompletionError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
     } finally {
       setActionBusy(false);
     }
@@ -274,7 +283,11 @@ export default function TaskDetailScreen() {
         task={task}
         visible={completionVisible}
         busy={actionBusy}
-        onCancel={() => setCompletionVisible(false)}
+        submissionError={completionError}
+        onCancel={() => {
+          setCompletionError('');
+          setCompletionVisible(false);
+        }}
         onSubmit={(input) => void complete(input)}
       />
     </Screen>

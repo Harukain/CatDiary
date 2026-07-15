@@ -28,6 +28,7 @@ interface TaskCompletionSheetProps {
   task?: TaskSummary;
   visible: boolean;
   busy?: boolean;
+  submissionError?: string;
   onCancel(): void;
   onSubmit(input: CompleteTaskInput): void;
 }
@@ -36,6 +37,7 @@ export function TaskCompletionSheet({
   task,
   visible,
   busy,
+  submissionError,
   onCancel,
   onSubmit,
 }: TaskCompletionSheetProps) {
@@ -56,6 +58,10 @@ export function TaskCompletionSheet({
       setError('');
     }
   }, [task, visible]);
+
+  useEffect(() => {
+    if (visible && submissionError) setError(submissionError);
+  }, [submissionError, visible]);
 
   if (!task) return null;
   const medical = isMedicalTask(task);
@@ -166,6 +172,7 @@ export function TaskCompletionSheet({
               placeholder="YYYY-MM-DD HH:mm"
               keyboardType="numbers-and-punctuation"
               maxLength={16}
+              editable={!busy}
             />
             <Field
               label="执行结果"
@@ -173,6 +180,7 @@ export function TaskCompletionSheet({
               onChangeText={(value) => update('resultText', value)}
               placeholder="例如：已清理，状态正常"
               maxLength={160}
+              editable={!busy}
             />
             <Field
               label="备注"
@@ -181,6 +189,7 @@ export function TaskCompletionSheet({
               placeholder="选填，可记录反应、异常或补充说明"
               maxLength={500}
               multiline
+              editable={!busy}
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
             <PrimaryButton label="保存完成结果" busy={busy} onPress={submit} />

@@ -58,6 +58,7 @@ export default function TasksTab() {
   const [offlineNotice, setOfflineNotice] = useState('');
   const [undoableTask, setUndoableTask] = useState<TaskSummary>();
   const [completingTask, setCompletingTask] = useState<TaskSummary>();
+  const [completionError, setCompletionError] = useState('');
   const dismissUndo = useCallback(() => setUndoableTask(undefined), []);
 
   const load = useCallback(async () => {
@@ -88,26 +89,34 @@ export default function TasksTab() {
   );
 
   function requestComplete(task: TaskSummary) {
+    setCompletionError('');
+    setError('');
     setCompletingTask(task);
   }
   async function complete(task: TaskSummary, input: CompleteTaskInput) {
     if (!session || !activeFamily) return;
-    setCompletingTask(undefined);
     setActionId(task.id);
     setError('');
+    setCompletionError('');
     const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
       const result = await authApi.sendTaskOperation(session.accessToken, operation);
+      setCompletingTask(undefined);
       await load();
       if (!isMedicalTask(task)) setUndoableTask(taskFromMutationResult(result, task));
     } catch (cause) {
       if (isNetworkFailure(cause)) {
-        await enqueueOfflineOperation(operation);
-        await removeCachedTask(task.id);
-        setTasks((current) => current.filter((item) => item.id !== task.id));
-        setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
-        if (!isMedicalTask(task)) setUndoableTask(optimisticCompletedTask(task, input.actualAt));
-      } else setError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
+        try {
+          await enqueueOfflineOperation(operation);
+          await removeCachedTask(task.id);
+          setTasks((current) => current.filter((item) => item.id !== task.id));
+          setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
+          if (!isMedicalTask(task)) setUndoableTask(optimisticCompletedTask(task, input.actualAt));
+          setCompletingTask(undefined);
+        } catch {
+          setCompletionError('离线操作保存失败，请稍后重试');
+        }
+      } else setCompletionError(cause instanceof AuthApiError ? cause.message : '任务完成失败');
     } finally {
       setActionId('');
     }
@@ -332,7 +341,11 @@ export default function TasksTab() {
         task={completingTask}
         visible={!!completingTask}
         busy={!!completingTask && actionId === completingTask.id}
-        onCancel={() => setCompletingTask(undefined)}
+        submissionError={completionError}
+        onCancel={() => {
+          setCompletionError('');
+          setCompletingTask(undefined);
+        }}
         onSubmit={(input) => completingTask && void complete(completingTask, input)}
       />
     </Screen>
