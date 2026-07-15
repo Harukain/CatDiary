@@ -84,6 +84,47 @@ export function remainingPhotoSlots(itemCount: number, limit = PHOTO_UPLOAD_LIMI
   return Math.max(0, limit - itemCount);
 }
 
+export type PhotoUploadSubmitBlockReason =
+  'LOADING_PETS' | 'PET_LOAD_ERROR' | 'NO_PETS' | 'NO_PHOTOS' | 'NO_SELECTED_PETS' | null;
+
+export function resolvePhotoUploadSubmitState({
+  itemCount,
+  selectedPetCount,
+  petCount,
+  petsLoading,
+  petLoadError,
+}: {
+  itemCount: number;
+  selectedPetCount: number;
+  petCount: number;
+  petsLoading: boolean;
+  petLoadError: string;
+}): { canSubmit: boolean; reason: PhotoUploadSubmitBlockReason } {
+  if (petsLoading) return { canSubmit: false, reason: 'LOADING_PETS' };
+  if (petLoadError) return { canSubmit: false, reason: 'PET_LOAD_ERROR' };
+  if (petCount === 0) return { canSubmit: false, reason: 'NO_PETS' };
+  if (itemCount === 0) return { canSubmit: false, reason: 'NO_PHOTOS' };
+  if (selectedPetCount === 0) return { canSubmit: false, reason: 'NO_SELECTED_PETS' };
+  return { canSubmit: true, reason: null };
+}
+
+export function photoUploadSubmitBlockMessage(reason: PhotoUploadSubmitBlockReason) {
+  switch (reason) {
+    case 'LOADING_PETS':
+      return '正在确认照片归属，请稍后再上传';
+    case 'PET_LOAD_ERROR':
+      return '猫咪列表加载失败，请先重试确认照片归属';
+    case 'NO_PETS':
+      return '请先添加猫咪档案，再上传照片';
+    case 'NO_PHOTOS':
+      return '请先选择照片';
+    case 'NO_SELECTED_PETS':
+      return '请至少选择一只照片里的猫咪';
+    default:
+      return '';
+  }
+}
+
 export function photoAlbumGridLayout({
   screenWidth,
   horizontalPadding,

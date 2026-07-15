@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   BackHandler,
   Image,
@@ -30,8 +31,10 @@ import {
 import {
   buildPhotoRecordInput,
   isPhotoUploadDraftDirty,
+  photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
+  resolvePhotoUploadSubmitState,
 } from '../../src/features/photos/photo-form';
 import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
 import {
@@ -63,6 +66,8 @@ export default function NewPhotoRoute() {
   const routePetId = paramValue(params.petId) ?? paramValue(params.pet);
   const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
+  const [petsLoading, setPetsLoading] = useState(true);
+  const [petLoadError, setPetLoadError] = useState('');
   const [petIds, setPetIds] = useState<string[]>([]);
   const [initialPetIds, setInitialPetIds] = useState<string[]>([]);
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -71,8 +76,10 @@ export default function NewPhotoRoute() {
   const [error, setError] = useState('');
   const slotsLeft = remainingPhotoSlots(items.length);
   const photoLimitReached = slotsLeft === 0;
-  useEffect(() => {
+  const loadPhotoContext = useCallback(() => {
     if (!session || !activeFamily) return;
+    setPetsLoading(true);
+    setPetLoadError('');
     void Promise.all([
       authApi.listPets(session.accessToken, activeFamily.id),
       listPhotoUploads(activeFamily.id),
@@ -103,8 +110,32 @@ export default function NewPhotoRoute() {
           setInitialPetIds(nextPetIds);
         }
       })
-      .catch(() => setError('照片上传队列加载失败'));
+      .catch((cause) => {
+        setPets([]);
+        setPetIds([]);
+        setInitialPetIds([]);
+        setPetLoadError(cause instanceof Error ? cause.message : '照片归属加载失败');
+      })
+      .finally(() => setPetsLoading(false));
   }, [activeFamily, routePetId, session]);
+  useEffect(() => {
+    loadPhotoContext();
+  }, [loadPhotoContext]);
+  const submitState = useMemo(
+    () =>
+      resolvePhotoUploadSubmitState({
+        itemCount: items.length,
+        selectedPetCount: petIds.length,
+        petCount: pets.length,
+        petsLoading,
+        petLoadError,
+      }),
+    [items.length, petIds.length, petLoadError, pets.length, petsLoading],
+  );
+  const canUpload = submitState.canSubmit;
+  const fieldsDisabled =
+    busy || petsLoading || Boolean(petLoadError) || submitState.reason === 'NO_PETS';
+  const canPickPhotos = !fieldsDisabled && !photoLimitReached;
   const isDirty = useMemo(
     () =>
       isPhotoUploadDraftDirty({
@@ -170,6 +201,10 @@ export default function NewPhotoRoute() {
     ]);
   }
   async function chooseLibrary() {
+    if (petsLoading || petLoadError || !pets.length) {
+      setError(photoUploadSubmitBlockMessage(submitState.reason));
+      return;
+    }
     if (!slotsLeft) {
       setError('最多选择 9 张照片，先移除一张再继续添加。');
       return;
@@ -193,6 +228,10 @@ export default function NewPhotoRoute() {
     }
   }
   async function takePhoto() {
+    if (petsLoading || petLoadError || !pets.length) {
+      setError(photoUploadSubmitBlockMessage(submitState.reason));
+      return;
+    }
     if (!slotsLeft) {
       setError('最多选择 9 张照片，先移除一张再继续拍摄。');
       return;
@@ -257,7 +296,11 @@ export default function NewPhotoRoute() {
     setItems((current) => current.filter((entry) => entry.id !== item.id));
   }
   async function upload() {
-    if (!items.length || !petIds.length || busy) return;
+    if (busy) return;
+    if (!canUpload) {
+      setError(photoUploadSubmitBlockMessage(submitState.reason));
+      return;
+    }
     setBusy(true);
     setError('');
     const pending = items.filter((item) => item.state !== 'DONE');
@@ -304,6 +347,7 @@ export default function NewPhotoRoute() {
     }
   }
   function togglePet(id: string) {
+    if (fieldsDisabled) return;
     setPetIds((current) =>
       current.includes(id)
         ? current.length > 1
@@ -339,18 +383,26 @@ export default function NewPhotoRoute() {
           <PickerButton
             icon="images-outline"
             label="从相册选择"
-            disabled={photoLimitReached || busy}
+            disabled={!canPickPhotos}
             onPress={() => void chooseLibrary()}
           />
           <PickerButton
             icon="camera-outline"
             label="拍一张"
-            disabled={photoLimitReached || busy}
+            disabled={!canPickPhotos}
             onPress={() => void takePhoto()}
           />
         </View>
         <Text style={[styles.limitHint, photoLimitReached && styles.limitHintFull]}>
-          {photoLimitReached ? '已达到 9 张上限，移除一张后可继续添加' : `还能添加 ${slotsLeft} 张`}
+          {petsLoading
+            ? '正在确认照片归属'
+            : petLoadError
+              ? '照片归属加载失败，请先重试'
+              : !pets.length
+                ? '请先添加猫咪档案，再上传照片'
+                : photoLimitReached
+                  ? '已达到 9 张上限，移除一张后可继续添加'
+                  : `还能添加 ${slotsLeft} 张`}
         </Text>
         {items.length ? (
           <View style={styles.previews}>
@@ -381,14 +433,40 @@ export default function NewPhotoRoute() {
         <View style={styles.section}>
           <Text style={styles.label}>照片里有谁</Text>
           <Text style={styles.hint}>可以同时绑定多只猫咪</Text>
+          {petsLoading ? (
+            <View style={styles.inlineState}>
+              <ActivityIndicator color={colors.brand} />
+              <Text style={styles.inlineStateText}>正在确认可绑定的猫咪档案</Text>
+            </View>
+          ) : petLoadError ? (
+            <View style={styles.inlineState}>
+              <ErrorText>{petLoadError}</ErrorText>
+              <TextButton label="重新加载猫咪" disabled={busy} onPress={loadPhotoContext} />
+            </View>
+          ) : !pets.length ? (
+            <View style={styles.inlineState}>
+              <Text style={styles.inlineStateTitle}>还没有可绑定的猫咪档案</Text>
+              <Text style={styles.inlineStateText}>
+                照片必须至少绑定一只猫咪，添加猫咪后再上传照片。
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.chips}>
             {pets.map((pet) => (
               <Pressable
                 key={pet.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected: petIds.includes(pet.id) }}
+                accessibilityState={{
+                  selected: petIds.includes(pet.id),
+                  disabled: fieldsDisabled,
+                }}
+                disabled={fieldsDisabled}
                 onPress={() => togglePet(pet.id)}
-                style={[styles.chip, petIds.includes(pet.id) && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  petIds.includes(pet.id) && styles.chipActive,
+                  fieldsDisabled && styles.chipDisabled,
+                ]}
               >
                 <Ionicons
                   name={petIds.includes(pet.id) ? 'checkmark-circle' : 'ellipse-outline'}
@@ -409,6 +487,7 @@ export default function NewPhotoRoute() {
           placeholder="例如：一起晒太阳的下午"
           maxLength={500}
           multiline
+          editable={!fieldsDisabled}
         />
         {error ? <ErrorText>{error}</ErrorText> : null}
         <PrimaryButton
@@ -417,7 +496,7 @@ export default function NewPhotoRoute() {
               ? '重试失败照片'
               : `上传 ${items.length || ''} 张照片`
           }
-          disabled={!items.length || !petIds.length}
+          disabled={!canUpload}
           busy={busy}
           onPress={() => void upload()}
         />
@@ -547,6 +626,14 @@ const styles = StyleSheet.create({
   },
   label: { ...typography.h3, color: colors.ink },
   hint: { ...typography.caption, color: colors.textSecondary },
+  inlineState: {
+    borderRadius: radii.input,
+    backgroundColor: colors.brandSoft,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  inlineStateTitle: { ...typography.h3, color: colors.ink },
+  inlineStateText: { ...typography.caption, color: colors.textSecondary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     minHeight: 38,
@@ -558,6 +645,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   chipActive: { backgroundColor: colors.brand },
+  chipDisabled: { opacity: 0.55 },
   chipText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   chipTextActive: { color: colors.surface },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },

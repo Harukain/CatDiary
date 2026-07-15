@@ -4,8 +4,10 @@ import {
   isPhotoDetailDraftDirty,
   isPhotoUploadDraftDirty,
   photoAlbumGridLayout,
+  photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
+  resolvePhotoUploadSubmitState,
   resolvePhotoFilterPetId,
   samePhotoPetSelection,
 } from './photo-form';
@@ -113,6 +115,67 @@ describe('photo form pet context rules', () => {
     expect(remainingPhotoSlots(8)).toBe(1);
     expect(remainingPhotoSlots(9)).toBe(0);
     expect(remainingPhotoSlots(12)).toBe(0);
+  });
+
+  it('blocks photo upload until ownership and photos are ready', () => {
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 1,
+        petCount: 1,
+        petsLoading: true,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'LOADING_PETS' });
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 0,
+        petCount: 0,
+        petsLoading: false,
+        petLoadError: '猫咪加载失败',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'PET_LOAD_ERROR' });
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 0,
+        petCount: 0,
+        petsLoading: false,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'NO_PETS' });
+    expect(photoUploadSubmitBlockMessage('NO_PETS')).toBe('请先添加猫咪档案，再上传照片');
+  });
+
+  it('requires both at least one photo and at least one selected pet before uploading', () => {
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 0,
+        selectedPetCount: 1,
+        petCount: 1,
+        petsLoading: false,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'NO_PHOTOS' });
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 0,
+        petCount: 1,
+        petsLoading: false,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'NO_SELECTED_PETS' });
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 1,
+        petCount: 1,
+        petsLoading: false,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: true, reason: null });
   });
 
   it('keeps the album two-column grid within mobile widths', () => {
