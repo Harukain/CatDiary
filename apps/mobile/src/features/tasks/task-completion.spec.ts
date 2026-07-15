@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTaskCompletionInput,
+  canQuickUndoTaskCompletion,
   formatTaskCompletionResult,
   initialTaskCompletionDraft,
   isTaskCompletionDraftDirty,
@@ -36,6 +37,13 @@ describe('task completion payload', () => {
 
     expect(validation.input?.medicalConfirmed).toBe(true);
     expect(validation.input?.result).toEqual({ summary: '已按计划完成用药' });
+  });
+
+  it('only allows quick undo for non-medical task completions', () => {
+    expect(canQuickUndoTaskCompletion({ type: 'LITTER' })).toBe(true);
+    expect(canQuickUndoTaskCompletion({ type: 'VACCINE' })).toBe(false);
+    expect(canQuickUndoTaskCompletion({ type: 'DEWORMING' })).toBe(false);
+    expect(canQuickUndoTaskCompletion({ type: 'MEDICATION' })).toBe(false);
   });
 
   it('rejects invalid or future actual time', () => {

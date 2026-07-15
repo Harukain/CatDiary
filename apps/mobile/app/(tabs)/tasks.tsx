@@ -35,7 +35,7 @@ import {
 } from '../../src/features/tasks/task-mutation';
 import { TaskUndoBanner } from '../../src/features/tasks/task-undo-banner';
 import { TaskCompletionSheet } from '../../src/features/tasks/task-completion-sheet';
-import { isMedicalTask } from '../../src/features/tasks/task-completion';
+import { canQuickUndoTaskCompletion } from '../../src/features/tasks/task-completion';
 import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 const scopes = [
@@ -101,9 +101,10 @@ export default function TasksTab() {
     const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
       const result = await authApi.sendTaskOperation(session.accessToken, operation);
+      const completedTask = taskFromMutationResult(result, task);
       setCompletingTask(undefined);
+      if (canQuickUndoTaskCompletion(task)) setUndoableTask(completedTask);
       await load();
-      if (!isMedicalTask(task)) setUndoableTask(taskFromMutationResult(result, task));
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         try {
@@ -111,7 +112,8 @@ export default function TasksTab() {
           await removeCachedTask(task.id);
           setTasks((current) => current.filter((item) => item.id !== task.id));
           setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
-          if (!isMedicalTask(task)) setUndoableTask(optimisticCompletedTask(task, input.actualAt));
+          if (canQuickUndoTaskCompletion(task))
+            setUndoableTask(optimisticCompletedTask(task, input.actualAt));
           setCompletingTask(undefined);
         } catch {
           setCompletionError('离线操作保存失败，请稍后重试');

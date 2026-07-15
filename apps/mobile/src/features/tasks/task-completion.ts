@@ -19,6 +19,10 @@ export function isMedicalTask(task: Pick<TaskSummary, 'type'>) {
   return task.type === 'VACCINE' || task.type === 'DEWORMING' || task.type === 'MEDICATION';
 }
 
+export function canQuickUndoTaskCompletion(task: Pick<TaskSummary, 'type'>) {
+  return !isMedicalTask(task);
+}
+
 export function initialTaskCompletionDraft(
   task: Pick<TaskSummary, 'type'>,
   now = new Date(),
