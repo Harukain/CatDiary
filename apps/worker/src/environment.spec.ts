@@ -28,6 +28,23 @@ describe('validateWorkerEnvironment', () => {
     );
   });
 
+  it('treats blank optional object storage secrets as unset in development', () => {
+    expect(
+      validateWorkerEnvironment({
+        ...base,
+        COS_SECRET_ID: '',
+        COS_SECRET_KEY: '',
+        COS_BUCKET: '',
+        COS_REGION: '',
+      }),
+    ).toMatchObject({
+      COS_SECRET_ID: undefined,
+      COS_SECRET_KEY: undefined,
+      COS_BUCKET: undefined,
+      COS_REGION: undefined,
+    });
+  });
+
   it('accepts rediss and rejects non-Redis dependency URLs', () => {
     expect(
       validateWorkerEnvironment({ ...base, REDIS_URL: 'rediss://cache.internal/5' }).REDIS_URL,

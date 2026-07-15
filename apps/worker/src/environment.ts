@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-const optionalSecret = z.string().min(1).optional();
+const optionalSecret = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().min(1).optional(),
+);
 const booleanFlag = z
   .enum(['true', 'false'])
   .default('true')
