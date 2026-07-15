@@ -21,6 +21,7 @@ import {
   type PlanType,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 import {
   Body,
   Card,
@@ -153,7 +154,12 @@ export default function NewPlanRoute() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!isDirty || allowLeave.current) return false;
+      const decision = resolveDraftExitDecision({
+        busy,
+        isDirty,
+        allowLeave: allowLeave.current,
+      });
+      if (decision === 'continue') return false;
       requestReturn();
       return true;
     });
@@ -241,7 +247,18 @@ export default function NewPlanRoute() {
     else router.replace('/plans');
   }
   function requestReturn() {
-    if (!isDirty || allowLeave.current) {
+    const decision = resolveDraftExitDecision({
+      busy,
+      isDirty,
+      allowLeave: allowLeave.current,
+    });
+    if (decision === 'wait') {
+      Alert.alert('照顾计划正在处理', '请等待当前保存或删除操作完成，避免未来任务状态不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (decision === 'continue') {
       returnToPlans();
       return;
     }
