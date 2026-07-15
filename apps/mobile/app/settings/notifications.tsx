@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,41 +10,87 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type NotificationPreference } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, Title } from '../../src/shared/ui/primitives';
+import {
+  canEditNotificationPreference,
+  notificationPreferenceDependencyHint,
+  notificationPreferenceEffectiveEnabled,
+  notificationPreferenceSaveMessage,
+  type NotificationPreferenceKey,
+} from '../../src/features/notifications/notification-preferences';
+import {
+  Body,
+  Card,
+  ErrorText,
+  Screen,
+  SuccessText,
+  TextButton,
+  Title,
+} from '../../src/shared/ui/primitives';
 
 export default function NotificationSettingsRoute() {
   const router = useRouter();
   const { session, activeFamily } = useSession();
   const [preference, setPreference] = useState<NotificationPreference>();
-  const [saving, setSaving] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<NotificationPreferenceKey | ''>('');
   const [error, setError] = useState('');
-  useEffect(() => {
-    if (session && activeFamily)
-      void authApi
-        .getNotificationPreference(session.accessToken, activeFamily.id)
-        .then(setPreference)
-        .catch((cause) => setError(cause instanceof Error ? cause.message : '通知设置加载失败'));
+  const [success, setSuccess] = useState('');
+  const load = useCallback(async () => {
+    if (!session || !activeFamily) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      setPreference(await authApi.getNotificationPreference(session.accessToken, activeFamily.id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '通知设置加载失败');
+    } finally {
+      setLoading(false);
+    }
   }, [activeFamily, session]);
-  async function change(
-    key: 'taskReminderEnabled' | 'pushEnabled' | 'overdueEnabled',
-    value: boolean,
-  ) {
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const requestReturn = useCallback(() => {
+    if (!saving) {
+      router.back();
+      return;
+    }
+    Alert.alert('通知设置正在保存', '请等待当前开关保存完成，避免本机展示状态与服务器不一致。', [
+      { text: '继续等待', style: 'cancel' },
+    ]);
+  }, [router, saving]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!saving) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [requestReturn, saving]);
+  async function change(key: NotificationPreferenceKey, value: boolean) {
     if (!session || !activeFamily || !preference) return;
+    if (!canEditNotificationPreference({ loading, savingKey: saving })) return;
     const previous = preference;
     setPreference({ ...preference, [key]: value });
     setSaving(key);
     setError('');
+    setSuccess('');
     try {
       setPreference(
         await authApi.updateNotificationPreference(session.accessToken, activeFamily.id, {
           [key]: value,
         }),
       );
+      setSuccess(notificationPreferenceSaveMessage(key, value));
     } catch (cause) {
       setPreference(previous);
       setError(cause instanceof Error ? cause.message : '保存失败');
@@ -52,8 +100,14 @@ export default function NotificationSettingsRoute() {
   }
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.back}>
+        <Pressable
+          accessibilityLabel="返回"
+          accessibilityHint={saving ? '通知设置保存中，点击会提示继续等待' : '返回上一页'}
+          onPress={requestReturn}
+          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <Text style={styles.navTitle}>通知偏好</Text>
@@ -64,38 +118,62 @@ export default function NotificationSettingsRoute() {
           <Text style={styles.title}>由你决定何时提醒</Text>
           <Text style={styles.subtitle}>设置仅影响你本人，不会停止家庭任务生成。</Text>
         </View>
-        {!preference && !error ? (
-          <ActivityIndicator color={colors.brand} />
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={colors.brand} />
+            <Text style={styles.loadingText}>正在加载通知设置…</Text>
+          </View>
         ) : preference ? (
           <Card>
             <Title>{activeFamily?.name}</Title>
+            {success ? <SuccessText>{success}</SuccessText> : null}
+            {error ? <ErrorText>{error}</ErrorText> : null}
             <Setting
               title="照顾任务提醒"
               detail="接收疫苗、驱虫、用药和铲屎等计划提醒"
               value={preference.taskReminderEnabled}
-              disabled={!!saving}
+              effectiveEnabled={notificationPreferenceEffectiveEnabled(
+                preference,
+                'taskReminderEnabled',
+              )}
+              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              saving={saving === 'taskReminderEnabled'}
               onChange={(value) => void change('taskReminderEnabled', value)}
             />
             <Setting
               title="手机推送"
               detail="允许服务器向当前账号已登记的设备发送通知"
               value={preference.pushEnabled}
-              disabled={!!saving}
+              effectiveEnabled={notificationPreferenceEffectiveEnabled(preference, 'pushEnabled')}
+              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              saving={saving === 'pushEnabled'}
+              hint={notificationPreferenceDependencyHint(preference, 'pushEnabled')}
               onChange={(value) => void change('pushEnabled', value)}
             />
             <Setting
               title="逾期提醒"
               detail="任务超过计划时间后继续提醒你处理"
               value={preference.overdueEnabled}
-              disabled={!!saving}
+              effectiveEnabled={notificationPreferenceEffectiveEnabled(
+                preference,
+                'overdueEnabled',
+              )}
+              disabled={!canEditNotificationPreference({ loading, savingKey: saving })}
+              saving={saving === 'overdueEnabled'}
+              hint={notificationPreferenceDependencyHint(preference, 'overdueEnabled')}
               onChange={(value) => void change('overdueEnabled', value)}
             />
           </Card>
+        ) : error ? (
+          <Card>
+            <Title>通知设置加载失败</Title>
+            <ErrorText>{error}</ErrorText>
+            <TextButton label="重新加载" onPress={() => void load()} />
+          </Card>
         ) : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
         <View style={styles.notice}>
           <Ionicons name="information-circle-outline" size={20} color={colors.brand} />
-          <Body>关闭通知不会删除任务；你仍然可以在“照顾”页面查看和完成它们。</Body>
+          <Body>关闭通知不会删除任务；你仍然可以在“任务”页面查看和完成它们。</Body>
         </View>
       </ScrollView>
     </Screen>
@@ -105,13 +183,19 @@ function Setting({
   title,
   detail,
   value,
+  effectiveEnabled,
   disabled,
+  saving,
+  hint,
   onChange,
 }: {
   title: string;
   detail: string;
   value: boolean;
+  effectiveEnabled: boolean;
   disabled: boolean;
+  saving: boolean;
+  hint?: string;
   onChange(value: boolean): void;
 }) {
   return (
@@ -119,15 +203,22 @@ function Setting({
       <View style={styles.settingBody}>
         <Text style={styles.settingTitle}>{title}</Text>
         <Text style={styles.settingDetail}>{detail}</Text>
+        {hint ? <Text style={styles.settingHint}>{hint}</Text> : null}
+        {saving ? <Text style={styles.savingText}>保存中…</Text> : null}
       </View>
-      <Switch
-        accessibilityLabel={title}
-        disabled={disabled}
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: colors.divider, true: colors.brandSoft }}
-        thumbColor={value ? colors.brand : colors.textTertiary}
-      />
+      <View style={styles.switchWrap}>
+        {saving ? <ActivityIndicator color={colors.brand} /> : null}
+        <Switch
+          accessibilityLabel={title}
+          accessibilityHint={hint || undefined}
+          accessibilityState={{ disabled, checked: value }}
+          disabled={disabled}
+          value={value}
+          onValueChange={onChange}
+          trackColor={{ false: colors.divider, true: colors.brandSoft }}
+          thumbColor={effectiveEnabled ? colors.brand : colors.textTertiary}
+        />
+      </View>
     </View>
   );
 }
@@ -138,8 +229,10 @@ const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: 104 },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
+  loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  loadingText: { ...typography.caption, color: colors.textSecondary },
   setting: {
-    minHeight: 76,
+    minHeight: 84,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
@@ -149,6 +242,14 @@ const styles = StyleSheet.create({
   settingBody: { flex: 1, gap: spacing.xs },
   settingTitle: { ...typography.h3, color: colors.ink },
   settingDetail: { ...typography.caption, color: colors.textSecondary },
+  settingHint: { ...typography.caption, color: colors.warningDark },
+  savingText: { ...typography.caption, color: colors.brand },
+  switchWrap: {
+    minWidth: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   notice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -157,4 +258,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
     borderRadius: radii.input,
   },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
