@@ -5,6 +5,7 @@ import {
   isPhotoDetailDraftDirty,
   isPhotoUploadDraftDirty,
   photoAlbumGridLayout,
+  photoUploadPreviewStatus,
   photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
@@ -298,6 +299,59 @@ describe('photo form pet context rules', () => {
         petLoadError: '',
       }),
     ).toEqual({ canSubmit: true, reason: null });
+  });
+
+  it('describes preview upload progress with a bounded percentage', () => {
+    expect(photoUploadPreviewStatus({ state: 'UPLOADING', progress: 37.6 })).toEqual({
+      text: '上传中 38%',
+      tone: 'brand',
+      accessibilityLabel: '照片上传中，进度 38%',
+    });
+    expect(photoUploadPreviewStatus({ state: 'UPLOADING', progress: 126 })).toEqual({
+      text: '上传中 100%',
+      tone: 'brand',
+      accessibilityLabel: '照片上传中，进度 100%',
+    });
+  });
+
+  it('keeps failed preview status close to the exact failure reason', () => {
+    expect(
+      photoUploadPreviewStatus({
+        state: 'FAILED',
+        error: '压缩后仍超过 10MB',
+      }),
+    ).toEqual({
+      text: '上传失败：压缩后仍超过 10MB',
+      tone: 'danger',
+      accessibilityLabel: '照片上传失败，原因：压缩后仍超过 10MB',
+    });
+  });
+
+  it('uses a recovery-specific preview status for queued uploads without a concrete error', () => {
+    expect(
+      photoUploadPreviewStatus({
+        state: 'FAILED',
+        error: '等待恢复上传',
+        queued: true,
+      }),
+    ).toEqual({
+      text: '待恢复上传，可重试',
+      tone: 'danger',
+      accessibilityLabel: '照片待恢复上传，可以重试',
+    });
+  });
+
+  it('describes ready and uploaded preview states', () => {
+    expect(photoUploadPreviewStatus({ state: 'READY' })).toEqual({
+      text: '待上传',
+      tone: 'neutral',
+      accessibilityLabel: '照片待上传',
+    });
+    expect(photoUploadPreviewStatus({ state: 'DONE' })).toEqual({
+      text: '已上传',
+      tone: 'success',
+      accessibilityLabel: '照片已上传',
+    });
   });
 
   it('keeps the album two-column grid within mobile widths', () => {

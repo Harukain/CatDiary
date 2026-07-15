@@ -31,6 +31,7 @@ import {
 import {
   buildGroupedPhotoRecordInputs,
   isPhotoUploadDraftDirty,
+  photoUploadPreviewStatus,
   photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
@@ -470,28 +471,57 @@ export default function NewPhotoRoute() {
         ) : null}
         {items.length ? (
           <View style={styles.previews}>
-            {items.map((item) => (
-              <View key={item.id} style={styles.preview}>
-                <Image source={{ uri: item.uri }} style={styles.previewImage} />
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressBar, { width: `${item.progress}%` }]} />
-                </View>
-                {item.state === 'FAILED' ? (
-                  <View style={styles.failed}>
-                    <Ionicons name="alert-circle" size={16} color={colors.surface} />
-                  </View>
-                ) : null}
-                {(item.state === 'READY' || item.state === 'FAILED') && !busy ? (
-                  <Pressable
-                    accessibilityLabel="移除照片"
-                    onPress={() => void removeItem(item)}
-                    style={styles.remove}
+            {items.map((item) => {
+              const status = photoUploadPreviewStatus({
+                state: item.state,
+                progress: item.progress,
+                error: item.error,
+                queued: Boolean(item.queued),
+              });
+              const shouldShowStatus = item.state !== 'READY' || Boolean(item.error);
+              return (
+                <View key={item.id} style={styles.previewCard}>
+                  <View
+                    accessible
+                    accessibilityRole="image"
+                    accessibilityLabel={status.accessibilityLabel}
+                    style={styles.preview}
                   >
-                    <Ionicons name="close" size={15} color={colors.surface} />
-                  </Pressable>
-                ) : null}
-              </View>
-            ))}
+                    <Image source={{ uri: item.uri }} style={styles.previewImage} />
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressBar, { width: `${item.progress}%` }]} />
+                    </View>
+                    {item.state === 'FAILED' ? (
+                      <View style={styles.failed}>
+                        <Ionicons name="alert-circle" size={16} color={colors.surface} />
+                      </View>
+                    ) : null}
+                    {(item.state === 'READY' || item.state === 'FAILED') && !busy ? (
+                      <Pressable
+                        accessibilityLabel="移除照片"
+                        onPress={() => void removeItem(item)}
+                        style={styles.remove}
+                      >
+                        <Ionicons name="close" size={15} color={colors.surface} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {shouldShowStatus ? (
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.previewStatus,
+                        status.tone === 'brand' && styles.previewStatusBrand,
+                        status.tone === 'success' && styles.previewStatusSuccess,
+                        status.tone === 'danger' && styles.previewStatusDanger,
+                      ]}
+                    >
+                      {status.text}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         ) : null}
         <View style={styles.section}>
@@ -653,8 +683,9 @@ const styles = StyleSheet.create({
   pickerText: { ...typography.caption, color: colors.ink, fontWeight: '700' },
   pickerTextDisabled: { color: colors.textSecondary },
   previews: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  previewCard: { width: '31.5%', gap: spacing.xs },
   preview: {
-    width: '31.5%',
+    width: '100%',
     aspectRatio: 1,
     borderRadius: radii.input,
     overflow: 'hidden',
@@ -692,6 +723,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(172,65,57,.5)',
   },
+  previewStatus: { ...typography.caption, color: colors.textSecondary },
+  previewStatusBrand: { color: colors.brand },
+  previewStatusSuccess: { color: colors.successDark },
+  previewStatusDanger: { color: colors.dangerDark },
   section: {
     gap: spacing.sm,
     backgroundColor: colors.surface,

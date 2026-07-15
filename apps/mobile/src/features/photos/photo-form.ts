@@ -215,6 +215,58 @@ export function photoUploadSubmitBlockMessage(reason: PhotoUploadSubmitBlockReas
   }
 }
 
+export type PhotoUploadPreviewTone = 'neutral' | 'brand' | 'success' | 'danger';
+
+export type PhotoUploadPreviewState = 'READY' | 'UPLOADING' | 'DONE' | 'FAILED';
+
+export function photoUploadPreviewStatus({
+  state,
+  progress = 0,
+  error,
+  queued = false,
+}: {
+  state: PhotoUploadPreviewState;
+  progress?: number;
+  error?: string | null;
+  queued?: boolean;
+}): { text: string; tone: PhotoUploadPreviewTone; accessibilityLabel: string } {
+  if (state === 'UPLOADING') {
+    const percent = Math.min(100, Math.max(0, Math.round(progress)));
+    return {
+      text: `上传中 ${percent}%`,
+      tone: 'brand',
+      accessibilityLabel: `照片上传中，进度 ${percent}%`,
+    };
+  }
+  if (state === 'DONE') {
+    return {
+      text: '已上传',
+      tone: 'success',
+      accessibilityLabel: '照片已上传',
+    };
+  }
+  if (state === 'FAILED') {
+    const message = (error ?? '').trim();
+    if (queued && (!message || message === '等待恢复上传')) {
+      return {
+        text: '待恢复上传，可重试',
+        tone: 'danger',
+        accessibilityLabel: '照片待恢复上传，可以重试',
+      };
+    }
+    return {
+      text: message ? `上传失败：${message}` : '上传失败，可重试',
+      tone: 'danger',
+      accessibilityLabel: message ? `照片上传失败，原因：${message}` : '照片上传失败，可以重试',
+    };
+  }
+  return {
+    text: '待上传',
+    tone: 'neutral',
+    accessibilityLabel: '照片待上传',
+  };
+}
+
 export function photoAlbumGridLayout({
   screenWidth,
   horizontalPadding,
