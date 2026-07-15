@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +29,7 @@ import {
   isValidBirthDate,
   type PetProfileDraft,
 } from '../../src/features/pets/pet-form';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoSource, photoThumbnailSource } from '../../src/features/photos/photo-source';
 import {
   Body,
@@ -279,7 +279,7 @@ export default function PetDetailRoute() {
             <Card elevated>
               <View style={styles.profileTop}>
                 {pet.avatarUrl && session && activeFamily ? (
-                  <Image
+                  <AuthenticatedImage
                     accessibilityLabel={`${pet.name}的头像`}
                     source={photoSource(
                       { downloadUrl: pet.avatarUrl },
@@ -706,7 +706,7 @@ function RecentPhotos({
               onPress={() => onPhotoPress(photo.id)}
               style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
             >
-              <Image
+              <AuthenticatedImage
                 source={photoThumbnailSource(photo, accessToken, familyId)}
                 style={styles.photo}
                 resizeMode="cover"

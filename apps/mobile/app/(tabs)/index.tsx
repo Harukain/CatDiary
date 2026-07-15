@@ -1,19 +1,12 @@
 import { useCallback, useState, type ComponentProps } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
   Body,
@@ -182,7 +175,7 @@ export default function HomeTab() {
                   style={({ pressed }) => [styles.petChip, pressed && styles.pressed]}
                 >
                   {pet.avatarUrl && session && activeFamily ? (
-                    <Image
+                    <AuthenticatedImage
                       accessibilityLabel={`${pet.name}的头像`}
                       source={photoSource(
                         { downloadUrl: pet.avatarUrl },

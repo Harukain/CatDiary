@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import {
   photoAlbumGridLayout,
   resolvePhotoFilterPetId,
 } from '../../src/features/photos/photo-form';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 import { Body, ErrorText, PrimaryButton, Screen } from '../../src/shared/ui/primitives';
 
@@ -126,7 +126,7 @@ export default function PhotosRoute() {
                   index % 5 === 0 && { width: gridLayout.contentWidth },
                 ]}
               >
-                <Image
+                <AuthenticatedImage
                   source={photoThumbnailSource(photo, session!.accessToken, activeFamily!.id)}
                   style={styles.image}
                   resizeMode="cover"

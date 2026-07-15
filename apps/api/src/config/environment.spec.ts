@@ -30,6 +30,33 @@ describe('validateEnvironment', () => {
     );
   });
 
+  it('treats blank optional provider secrets as unset in development', () => {
+    expect(
+      validateEnvironment({
+        ...base,
+        COS_SECRET_ID: '',
+        COS_SECRET_KEY: '',
+        COS_BUCKET: '',
+        COS_REGION: '',
+        SMS_APP_ID: '',
+        SMS_SIGN_NAME: '',
+        SMS_TEMPLATE_ID: '',
+        SMS_SECRET_ID: '',
+        SMS_SECRET_KEY: '',
+      }),
+    ).toMatchObject({
+      COS_SECRET_ID: undefined,
+      COS_SECRET_KEY: undefined,
+      COS_BUCKET: undefined,
+      COS_REGION: undefined,
+      SMS_APP_ID: undefined,
+      SMS_SIGN_NAME: undefined,
+      SMS_TEMPLATE_ID: undefined,
+      SMS_SECRET_ID: undefined,
+      SMS_SECRET_KEY: undefined,
+    });
+  });
+
   it('accepts managed Redis TLS URLs and rejects unrelated protocols', () => {
     expect(validateEnvironment({ ...base, REDIS_URL: 'rediss://cache.internal/2' }).REDIS_URL).toBe(
       'rediss://cache.internal/2',

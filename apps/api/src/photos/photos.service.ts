@@ -102,7 +102,7 @@ export class PhotosService {
         },
       });
       return {
-        uploadUrl: this.cos.getObjectUrl({
+        uploadUrl: await this.signedObjectUrl({
           Bucket: this.bucket,
           Region: this.region,
           Key: objectKey,
@@ -599,7 +599,7 @@ export class PhotosService {
 
   private async objectUrl(photoId: string, objectKey: string, thumbnail: boolean) {
     if (this.cos && this.bucket && this.region)
-      return this.cos.getObjectUrl({
+      return this.signedObjectUrl({
         Bucket: this.bucket,
         Region: this.region,
         Key: objectKey,
@@ -608,6 +608,32 @@ export class PhotosService {
         Expires: 3600,
       });
     return `/photos/${photoId}/${thumbnail ? 'thumbnail' : 'content'}`;
+  }
+  private async signedObjectUrl(params: COS.GetObjectUrlParams) {
+    if (!this.cos)
+      throw new AppException(
+        'COS_NOT_CONFIGURED',
+        '图片服务尚未配置',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const syncUrl = this.cos.getObjectUrl(params);
+    if (typeof syncUrl === 'string' && syncUrl) return syncUrl;
+    const asyncUrl = await new Promise<string>((resolve, reject) => {
+      this.cos!.getObjectUrl(params, (error, data) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(data.Url);
+      });
+    });
+    if (!asyncUrl)
+      throw new AppException(
+        'COS_SIGN_URL_FAILED',
+        '图片签名地址生成失败',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return asyncUrl;
   }
   private localPath(objectKey: string) {
     return join(this.localDirectory, ...objectKey.split('/'));

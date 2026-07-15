@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import {
   type PhotoSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { isPhotoDetailDraftDirty } from '../../src/features/photos/photo-form';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
@@ -175,7 +175,7 @@ export default function PhotoDetailRoute() {
           <ActivityIndicator color={colors.brand} />
         ) : photo && session && activeFamily ? (
           <>
-            <Image
+            <AuthenticatedImage
               source={photoSource(photo, session.accessToken, activeFamily.id)}
               style={styles.hero}
               resizeMode="cover"

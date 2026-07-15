@@ -126,7 +126,7 @@ export class ExportsService implements OnModuleDestroy {
     const expiresAt = new Date(Date.now() + 10 * 60_000);
     if (this.cos && this.bucket && this.region)
       return {
-        downloadUrl: this.cos.getObjectUrl({
+        downloadUrl: await this.signedObjectUrl({
           Bucket: this.bucket,
           Region: this.region,
           Key: job.objectKey,
@@ -177,6 +177,32 @@ export class ExportsService implements OnModuleDestroy {
   private publicJob<T extends { objectKey: string | null }>(job: T) {
     const { objectKey: _objectKey, ...safe } = job;
     return safe;
+  }
+  private async signedObjectUrl(params: COS.GetObjectUrlParams) {
+    if (!this.cos)
+      throw new AppException(
+        'COS_NOT_CONFIGURED',
+        '文件服务尚未配置',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const syncUrl = this.cos.getObjectUrl(params);
+    if (typeof syncUrl === 'string' && syncUrl) return syncUrl;
+    const asyncUrl = await new Promise<string>((resolve, reject) => {
+      this.cos!.getObjectUrl(params, (error, data) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(data.Url);
+      });
+    });
+    if (!asyncUrl)
+      throw new AppException(
+        'EXPORT_SIGN_URL_FAILED',
+        '导出文件签名地址生成失败',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return asyncUrl;
   }
   private readonly selection = {
     id: true,

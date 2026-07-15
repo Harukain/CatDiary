@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import {
   type RecordSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import {
   Card,
   ErrorText,
@@ -392,7 +392,7 @@ export default function RecordDetailScreen() {
                       }
                       style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
                     >
-                      <Image
+                      <AuthenticatedImage
                         accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片缩略图'}
                         resizeMode="cover"
                         source={photoThumbnailSource(

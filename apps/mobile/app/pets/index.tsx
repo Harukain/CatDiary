@@ -1,18 +1,11 @@
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
   Body,
@@ -76,7 +69,7 @@ export default function PetsRoute() {
                 style={styles.pet}
               >
                 {pet.avatarUrl && session && activeFamily ? (
-                  <Image
+                  <AuthenticatedImage
                     accessibilityLabel={`${pet.name}的头像`}
                     source={photoSource(
                       { downloadUrl: pet.avatarUrl },
