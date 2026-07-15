@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -181,6 +182,20 @@ export default function TaskDetailScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
+      <View style={styles.nav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="返回"
+          accessibilityHint={actionBusy ? '任务操作处理中，点击会提示继续等待' : '返回上一页'}
+          onPress={requestReturn}
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        </Pressable>
+        <Text style={styles.navTitle}>任务详情</Text>
+        <View style={styles.navButton} />
+      </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heading}>
           <Text style={styles.eyebrow}>照顾任务 · {typeLabel(task.type)}</Text>
@@ -299,6 +314,14 @@ function canUndo(task: TaskSummary) {
 }
 
 const styles = StyleSheet.create({
+  nav: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  navTitle: { ...typography.h2, color: colors.ink },
   content: { gap: spacing.xxl, paddingBottom: spacing.xxxl },
   heading: { gap: spacing.sm, alignItems: 'flex-start' },
   eyebrow: { ...typography.secondary, color: colors.brand, fontWeight: '600' },
