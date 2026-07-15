@@ -50,6 +50,54 @@ export function buildPhotoRecordInput(input: {
   };
 }
 
+export type PhotoRecordSource = {
+  id: string;
+  note?: string | null;
+  pets?: Array<{ petId?: string; pet?: { id: string } }>;
+};
+
+export function buildGroupedPhotoRecordInputs(input: {
+  clientIdFactory: () => string;
+  photos: PhotoRecordSource[];
+  fallbackPetIds: string[];
+  fallbackNote: string;
+  occurredAt: string;
+}) {
+  const groups = new Map<
+    string,
+    {
+      petId: string;
+      note: string;
+      photoIds: string[];
+    }
+  >();
+
+  for (const photo of input.photos) {
+    const boundPetIds = photoBoundPetIds(photo);
+    const petId =
+      input.fallbackPetIds.find((candidate) => boundPetIds.includes(candidate)) ??
+      boundPetIds[0] ??
+      input.fallbackPetIds[0];
+    if (!petId) continue;
+    const note = (photo.note ?? input.fallbackNote).trim();
+    const key = `${petId}\u0000${note}`;
+    const group = groups.get(key) ?? { petId, note, photoIds: [] };
+    group.photoIds.push(photo.id);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values()).flatMap((group) => {
+    const record = buildPhotoRecordInput({
+      clientId: input.clientIdFactory(),
+      petIds: [group.petId],
+      photoIds: group.photoIds,
+      note: group.note,
+      occurredAt: input.occurredAt,
+    });
+    return record ? [record] : [];
+  });
+}
+
 export function isPhotoUploadDraftDirty({
   itemCount,
   note,
@@ -144,4 +192,12 @@ export function photoAlbumGridLayout({
 
 function unique(values: string[]) {
   return Array.from(new Set(values));
+}
+
+function photoBoundPetIds(photo: PhotoRecordSource) {
+  return unique(
+    (photo.pets ?? [])
+      .map((entry) => entry.petId ?? entry.pet?.id)
+      .filter((value): value is string => Boolean(value)),
+  );
 }

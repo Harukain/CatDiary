@@ -29,7 +29,7 @@ import {
   type PhotoUploadQueueItem,
 } from '../../src/features/photos/photo-upload-queue';
 import {
-  buildPhotoRecordInput,
+  buildGroupedPhotoRecordInputs,
   isPhotoUploadDraftDirty,
   photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
@@ -76,6 +76,7 @@ export default function NewPhotoRoute() {
   const [error, setError] = useState('');
   const slotsLeft = remainingPhotoSlots(items.length);
   const photoLimitReached = slotsLeft === 0;
+  const restoredQueueCount = items.filter((item) => item.queued).length;
   const loadPhotoContext = useCallback(() => {
     if (!session || !activeFamily) return;
     setPetsLoading(true);
@@ -312,27 +313,40 @@ export default function NewPhotoRoute() {
       pendingCount: pending.length,
     });
     if (recordReadiness.ready) {
-      const recordInput = buildPhotoRecordInput({
-        clientId: uuid(),
-        petIds,
-        photoIds: recordReadiness.photos.map((photo) => photo.id),
-        note,
+      const recordInputs = buildGroupedPhotoRecordInputs({
+        clientIdFactory: uuid,
+        photos: recordReadiness.photos,
+        fallbackPetIds: petIds,
+        fallbackNote: note,
         occurredAt: new Date().toISOString(),
       });
-      if (recordInput && session && activeFamily) {
-        const operation = authApi.createRecordOperation(activeFamily.id, recordInput);
-        try {
-          await authApi.createRecord(session.accessToken, activeFamily.id, recordInput);
-        } catch (cause) {
-          if (isNetworkFailure(cause)) {
-            await enqueueOfflineOperation(operation);
-            Alert.alert('照片已上传', '记录已保存到本机，联网后会进入时间线。');
-          } else {
-            setError(cause instanceof Error ? cause.message : '照片已上传，但记录时间线生成失败');
-            setBusy(false);
-            return;
+      if (!recordInputs.length) {
+        setBusy(false);
+        setError('照片已上传，但没有可用于生成时间线记录的猫咪归属。请重新选择照片里的猫咪。');
+        return;
+      }
+      if (session && activeFamily) {
+        let offlineRecordCount = 0;
+        for (const recordInput of recordInputs) {
+          const operation = authApi.createRecordOperation(activeFamily.id, recordInput);
+          try {
+            await authApi.createRecord(session.accessToken, activeFamily.id, recordInput);
+          } catch (cause) {
+            if (isNetworkFailure(cause)) {
+              await enqueueOfflineOperation(operation);
+              offlineRecordCount += 1;
+            } else {
+              setError(cause instanceof Error ? cause.message : '照片已上传，但记录时间线生成失败');
+              setBusy(false);
+              return;
+            }
           }
         }
+        if (offlineRecordCount)
+          Alert.alert(
+            '照片已上传',
+            `${offlineRecordCount} 条照片记录已保存到本机，联网后会进入时间线。`,
+          );
       }
       setBusy(false);
       allowLeave.current = true;
@@ -404,6 +418,15 @@ export default function NewPhotoRoute() {
                   ? '已达到 9 张上限，移除一张后可继续添加'
                   : `还能添加 ${slotsLeft} 张`}
         </Text>
+        {restoredQueueCount ? (
+          <View style={styles.restoreNotice}>
+            <Ionicons name="cloud-upload-outline" size={18} color={colors.warningDark} />
+            <Text style={styles.restoreNoticeText}>
+              已恢复 {restoredQueueCount}{' '}
+              张上次未完成的照片；重试时会沿用每张照片原本保存的猫咪归属和备注。
+            </Text>
+          </View>
+        ) : null}
         {items.length ? (
           <View style={styles.previews}>
             {items.map((item) => (
@@ -555,6 +578,16 @@ const styles = StyleSheet.create({
   pickerRow: { flexDirection: 'row', gap: spacing.md },
   limitHint: { ...typography.caption, color: colors.textSecondary, marginTop: -spacing.md },
   limitHintFull: { color: colors.warningDark },
+  restoreNotice: {
+    minHeight: 48,
+    borderRadius: radii.input,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  restoreNoticeText: { flex: 1, ...typography.caption, color: colors.warningDark },
   picker: {
     flex: 1,
     minHeight: 100,

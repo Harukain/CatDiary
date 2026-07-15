@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildGroupedPhotoRecordInputs,
   buildPhotoRecordInput,
   isPhotoDetailDraftDirty,
   isPhotoUploadDraftDirty,
@@ -82,6 +83,79 @@ describe('photo form pet context rules', () => {
         occurredAt: '2026-07-15T00:00:00.000Z',
       }),
     ).toBeNull();
+  });
+
+  it('groups uploaded photos into timeline records by bound pet and note', () => {
+    let counter = 0;
+    const records = buildGroupedPhotoRecordInputs({
+      clientIdFactory: () => `client-${++counter}`,
+      fallbackPetIds: ['pet-a'],
+      fallbackNote: '当前备注',
+      occurredAt: '2026-07-15T00:00:00.000Z',
+      photos: [
+        {
+          id: 'photo-a',
+          note: '晒太阳',
+          pets: [{ petId: 'pet-a' }],
+        },
+        {
+          id: 'photo-b',
+          note: '晒太阳',
+          pets: [{ petId: 'pet-a' }, { petId: 'pet-b' }],
+        },
+        {
+          id: 'photo-c',
+          note: '吃饭',
+          pets: [{ petId: 'pet-b' }],
+        },
+      ],
+    });
+
+    expect(records).toEqual([
+      {
+        clientId: 'client-1',
+        petId: 'pet-a',
+        type: 'PHOTO',
+        title: '照片记录 · 2 张',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+        abnormal: false,
+        data: { photoIds: ['photo-a', 'photo-b'] },
+        note: '晒太阳',
+      },
+      {
+        clientId: 'client-2',
+        petId: 'pet-b',
+        type: 'PHOTO',
+        title: '照片记录',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+        abnormal: false,
+        data: { photoIds: ['photo-c'] },
+        note: '吃饭',
+      },
+    ]);
+  });
+
+  it('uses route/page ownership only when uploaded photo metadata has no bound pet', () => {
+    const records = buildGroupedPhotoRecordInputs({
+      clientIdFactory: () => 'client-id',
+      fallbackPetIds: ['pet-b'],
+      fallbackNote: '页面备注',
+      occurredAt: '2026-07-15T00:00:00.000Z',
+      photos: [{ id: 'photo-a', pets: [] }],
+    });
+
+    expect(records).toEqual([
+      {
+        clientId: 'client-id',
+        petId: 'pet-b',
+        type: 'PHOTO',
+        title: '照片记录',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+        abnormal: false,
+        data: { photoIds: ['photo-a'] },
+        note: '页面备注',
+      },
+    ]);
   });
 
   it('detects photo upload drafts that need a leave confirmation', () => {
