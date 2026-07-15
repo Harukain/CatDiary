@@ -146,7 +146,7 @@ export default function MeTab() {
               style={styles.rowPress}
             >
               <Text style={styles.rowTitle}>通知偏好</Text>
-              <Text style={styles.rowBody}>照顾提醒、推送和逾期通知</Text>
+              <Text style={styles.rowBody}>照顾提醒、手机推送和飞书通知</Text>
             </Pressable>
           </Row>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>

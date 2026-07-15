@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type NotificationPreference } from '../../src/features/auth/auth-api';
@@ -171,6 +171,27 @@ export default function NotificationSettingsRoute() {
             <TextButton label="重新加载" onPress={() => void load()} />
           </Card>
         ) : null}
+        <Card>
+          <Title>家庭通知渠道</Title>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="飞书通知"
+            accessibilityHint="配置家庭级飞书机器人通知"
+            onPress={() => router.push('/settings/feishu' as Href)}
+            style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
+          >
+            <View style={styles.channelIcon}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.brand} />
+            </View>
+            <View style={styles.channelBody}>
+              <Text style={styles.channelTitle}>飞书群机器人</Text>
+              <Text style={styles.channelDetail}>
+                管理员配置 Webhook 后，家庭任务可同步到飞书群。
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </Pressable>
+        </Card>
         <View style={styles.notice}>
           <Ionicons name="information-circle-outline" size={20} color={colors.brand} />
           <Body>关闭通知不会删除任务；你仍然可以在“任务”页面查看和完成它们。</Body>
@@ -244,6 +265,23 @@ const styles = StyleSheet.create({
   settingDetail: { ...typography.caption, color: colors.textSecondary },
   settingHint: { ...typography.caption, color: colors.warningDark },
   savingText: { ...typography.caption, color: colors.brand },
+  channelRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  channelIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.input,
+    backgroundColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  channelBody: { flex: 1, gap: spacing.xs },
+  channelTitle: { ...typography.h3, color: colors.ink },
+  channelDetail: { ...typography.caption, color: colors.textSecondary },
   switchWrap: {
     minWidth: 72,
     flexDirection: 'row',

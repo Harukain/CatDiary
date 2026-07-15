@@ -150,6 +150,14 @@ export interface NotificationLogSummary {
   errorMessageSafe?: string | null;
   task?: { id: string; title: string; scheduledAt: string } | null;
 }
+export interface NotificationChannelSummary {
+  id: string;
+  type: 'DEVELOPMENT' | 'EXPO_PUSH' | 'FEISHU';
+  enabled: boolean;
+  maskedHint?: string | null;
+  createdAt?: string;
+  updatedAt: string;
+}
 export type ManualRecordType =
   'FOOD' | 'WATER' | 'WEIGHT' | 'STOOL' | 'VOMIT' | 'MEDICATION' | 'LITTER';
 export type CreatableRecordType = ManualRecordType | 'PHOTO';
@@ -950,6 +958,32 @@ export const authApi = {
       input,
     );
   },
+  listNotificationChannels(accessToken: string, familyId: string) {
+    return authenticatedGet<NotificationChannelSummary[]>(
+      '/notification-channels',
+      accessToken,
+      familyId,
+    );
+  },
+  configureFeishuChannel(accessToken: string, familyId: string, webhookUrl: string) {
+    return authenticatedPut<NotificationChannelSummary>(
+      '/notification-channels/feishu',
+      accessToken,
+      familyId,
+      { webhookUrl },
+    );
+  },
+  testFeishuChannel(accessToken: string, familyId: string) {
+    return authenticatedPost<{ success: boolean }>(
+      '/notification-channels/feishu/test',
+      accessToken,
+      familyId,
+      {},
+    );
+  },
+  removeFeishuChannel(accessToken: string, familyId: string) {
+    return authenticatedDelete('/notification-channels/feishu', accessToken, familyId);
+  },
   listNotificationLogs(
     accessToken: string,
     familyId: string,
@@ -1089,6 +1123,29 @@ async function authenticatedPatch<T>(
 ): Promise<T> {
   const response = await authenticatedFetch(path, accessToken, {
     method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(familyId ? { 'X-Family-Id': familyId } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as ApiEnvelope<T> | ApiErrorEnvelope;
+  if (!response.ok || 'error' in payload) {
+    const error =
+      'error' in payload ? payload.error : { code: 'NETWORK_ERROR', message: '网络请求失败' };
+    throw new AuthApiError(error.code, error.message, error.details);
+  }
+  return payload.data;
+}
+
+async function authenticatedPut<T>(
+  path: string,
+  accessToken: string,
+  familyId: string | undefined,
+  body: unknown,
+): Promise<T> {
+  const response = await authenticatedFetch(path, accessToken, {
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       ...(familyId ? { 'X-Family-Id': familyId } : {}),
