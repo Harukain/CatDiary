@@ -1,9 +1,31 @@
 import { mkdtemp, mkdir, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
-import { cleanupPhotoObjects } from './photo-cleanup.js';
+import { cleanupPhotoObjects, photoStorageConfigFromEnvironment } from './photo-cleanup.js';
+
+function withEnv(name: string, value: string | undefined, assertion: () => void) {
+  const previous = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  try {
+    assertion();
+  } finally {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  }
+}
+
+describe('photoStorageConfigFromEnvironment', () => {
+  it('falls back to the safe upload output directory when UPLOAD_LOCAL_DIR is blank', () => {
+    withEnv('UPLOAD_LOCAL_DIR', '', () => {
+      expect(photoStorageConfigFromEnvironment().localDirectory).toBe(
+        resolve(process.cwd(), '../../output/uploads'),
+      );
+    });
+  });
+});
 
 describe('cleanupPhotoObjects', () => {
   it('removes expired orphan objects, deleted photo files, and their database rows', async () => {

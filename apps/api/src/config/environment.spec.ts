@@ -34,6 +34,8 @@ describe('validateEnvironment', () => {
     expect(
       validateEnvironment({
         ...base,
+        UPLOAD_LOCAL_DIR: '',
+        EXPORT_LOCAL_DIR: '   ',
         COS_SECRET_ID: '',
         COS_SECRET_KEY: '',
         COS_BUCKET: '',
@@ -45,6 +47,8 @@ describe('validateEnvironment', () => {
         SMS_SECRET_KEY: '',
       }),
     ).toMatchObject({
+      UPLOAD_LOCAL_DIR: undefined,
+      EXPORT_LOCAL_DIR: undefined,
       COS_SECRET_ID: undefined,
       COS_SECRET_KEY: undefined,
       COS_BUCKET: undefined,

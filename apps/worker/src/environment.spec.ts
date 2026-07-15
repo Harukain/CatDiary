@@ -32,12 +32,16 @@ describe('validateWorkerEnvironment', () => {
     expect(
       validateWorkerEnvironment({
         ...base,
+        EXPORT_LOCAL_DIR: '',
+        UPLOAD_LOCAL_DIR: '   ',
         COS_SECRET_ID: '',
         COS_SECRET_KEY: '',
         COS_BUCKET: '',
         COS_REGION: '',
       }),
     ).toMatchObject({
+      EXPORT_LOCAL_DIR: undefined,
+      UPLOAD_LOCAL_DIR: undefined,
       COS_SECRET_ID: undefined,
       COS_SECRET_KEY: undefined,
       COS_BUCKET: undefined,

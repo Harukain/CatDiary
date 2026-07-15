@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-const optionalSecret = z.preprocess(
-  (value) => (value === '' ? undefined : value),
-  z.string().min(1).optional(),
-);
+const blankToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+const optionalSecret = z.preprocess(blankToUndefined, z.string().min(1).optional());
+const optionalPath = z.preprocess(blankToUndefined, z.string().min(1).optional());
 const booleanFlag = z
   .enum(['true', 'false'])
   .default('true')
@@ -41,8 +41,8 @@ const schema = z
       .default('123456'),
     DEFAULT_TIMEZONE: z.string().default('Asia/Shanghai'),
     PUBLIC_API_URL: z.string().url().optional(),
-    UPLOAD_LOCAL_DIR: z.string().optional(),
-    EXPORT_LOCAL_DIR: z.string().optional(),
+    UPLOAD_LOCAL_DIR: optionalPath,
+    EXPORT_LOCAL_DIR: optionalPath,
     COS_SECRET_ID: optionalSecret,
     COS_SECRET_KEY: optionalSecret,
     COS_BUCKET: optionalSecret,

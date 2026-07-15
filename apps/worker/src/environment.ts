@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-const optionalSecret = z.preprocess(
-  (value) => (value === '' ? undefined : value),
-  z.string().min(1).optional(),
-);
+const blankToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+const optionalSecret = z.preprocess(blankToUndefined, z.string().min(1).optional());
+const optionalPath = z.preprocess(blankToUndefined, z.string().min(1).optional());
 const booleanFlag = z
   .enum(['true', 'false'])
   .default('true')
@@ -29,8 +29,8 @@ const schema = z
     COS_SECRET_KEY: optionalSecret,
     COS_BUCKET: optionalSecret,
     COS_REGION: optionalSecret,
-    EXPORT_LOCAL_DIR: z.string().optional(),
-    UPLOAD_LOCAL_DIR: z.string().optional(),
+    EXPORT_LOCAL_DIR: optionalPath,
+    UPLOAD_LOCAL_DIR: optionalPath,
     FEATURE_NOTIFICATIONS_ENABLED: booleanFlag,
     FEATURE_EXPORTS_ENABLED: booleanFlag,
   })

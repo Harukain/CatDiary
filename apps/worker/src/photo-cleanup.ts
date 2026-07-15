@@ -9,16 +9,24 @@ interface StorageConfig {
 }
 
 export function photoStorageConfigFromEnvironment(): StorageConfig {
-  const bucket = process.env.COS_BUCKET;
-  const region = process.env.COS_REGION;
-  const secretId = process.env.COS_SECRET_ID;
-  const secretKey = process.env.COS_SECRET_KEY;
+  const bucket = optionalEnvironmentValue('COS_BUCKET');
+  const region = optionalEnvironmentValue('COS_REGION');
+  const secretId = optionalEnvironmentValue('COS_SECRET_ID');
+  const secretKey = optionalEnvironmentValue('COS_SECRET_KEY');
   return {
-    localDirectory: resolve(process.cwd(), process.env.UPLOAD_LOCAL_DIR ?? '../../output/uploads'),
+    localDirectory: resolve(
+      process.cwd(),
+      optionalEnvironmentValue('UPLOAD_LOCAL_DIR') ?? '../../output/uploads',
+    ),
     ...(bucket && region && secretId && secretKey
       ? { cos: { client: new COS({ SecretId: secretId, SecretKey: secretKey }), bucket, region } }
       : {}),
   };
+}
+
+function optionalEnvironmentValue(name: string) {
+  const value = process.env[name];
+  return value && value.trim() ? value : undefined;
 }
 
 export async function cleanupPhotoObjects(

@@ -9,16 +9,24 @@ interface ExportStorage {
   cos?: { client: COS; bucket: string; region: string };
 }
 export function exportStorageFromEnvironment(): ExportStorage {
-  const bucket = process.env.COS_BUCKET;
-  const region = process.env.COS_REGION;
-  const secretId = process.env.COS_SECRET_ID;
-  const secretKey = process.env.COS_SECRET_KEY;
+  const bucket = optionalEnvironmentValue('COS_BUCKET');
+  const region = optionalEnvironmentValue('COS_REGION');
+  const secretId = optionalEnvironmentValue('COS_SECRET_ID');
+  const secretKey = optionalEnvironmentValue('COS_SECRET_KEY');
   return {
-    directory: resolve(process.cwd(), process.env.EXPORT_LOCAL_DIR ?? '../../output/exports'),
+    directory: resolve(
+      process.cwd(),
+      optionalEnvironmentValue('EXPORT_LOCAL_DIR') ?? '../../output/exports',
+    ),
     ...(bucket && region && secretId && secretKey
       ? { cos: { client: new COS({ SecretId: secretId, SecretKey: secretKey }), bucket, region } }
       : {}),
   };
+}
+
+function optionalEnvironmentValue(name: string) {
+  const value = process.env[name];
+  return value && value.trim() ? value : undefined;
 }
 
 export async function buildExport(
