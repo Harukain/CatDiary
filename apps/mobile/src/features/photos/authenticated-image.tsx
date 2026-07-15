@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -31,6 +31,7 @@ export function AuthenticatedImage({
 }: AuthenticatedImageProps) {
   const [localUri, setLocalUri] = useState(source.headers ? '' : source.uri);
   const [failed, setFailed] = useState(false);
+  const lastRequestKey = useRef('');
   const cacheUri = useMemo(() => cachedPhotoUri(source.uri), [source.uri]);
   const headerKey = useMemo(
     () =>
@@ -42,9 +43,12 @@ export function AuthenticatedImage({
         : '',
     [source.headers],
   );
+  const requestKey = `${source.uri}\n${headerKey}`;
 
   useEffect(() => {
     let cancelled = false;
+    const sameRequest = lastRequestKey.current === requestKey;
+    lastRequestKey.current = requestKey;
     setFailed(false);
     const headers = source.headers;
     if (!headers) {
@@ -53,7 +57,7 @@ export function AuthenticatedImage({
         cancelled = true;
       };
     }
-    setLocalUri('');
+    if (!sameRequest) setLocalUri('');
     void (async () => {
       try {
         if (!cacheUri) throw new Error('图片缓存目录不可用');
@@ -74,7 +78,7 @@ export function AuthenticatedImage({
     return () => {
       cancelled = true;
     };
-  }, [cacheUri, headerKey, source.uri]);
+  }, [cacheUri, requestKey, source.headers, source.uri]);
 
   return (
     <View style={[styles.frame, style]}>
