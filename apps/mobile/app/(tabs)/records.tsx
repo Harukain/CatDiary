@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
@@ -15,7 +15,10 @@ import {
   getOfflineOperationCount,
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
-import { recordOwnerLabel } from '../../src/features/records/record-form';
+import {
+  recordOwnerLabel,
+  recordTimelineNoticeState,
+} from '../../src/features/records/record-form';
 import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
 import { recordSummaryText, recordTypeLabel } from '../../src/features/records/record-display';
@@ -23,6 +26,7 @@ import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 
 export default function RecordsTab() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ notice?: string }>();
   const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [records, setRecords] = useState<RecordSummary[]>([]);
@@ -31,6 +35,7 @@ export default function RecordsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [syncNote, setSyncNote] = useState('');
+  const routeNotice = recordTimelineNoticeState(paramValue(params.notice));
 
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
@@ -129,6 +134,30 @@ export default function RecordsTab() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.brand} />
         </Pressable>
+        {routeNotice ? (
+          <View
+            style={[
+              styles.routeNotice,
+              routeNotice.tone === 'success' ? styles.routeNoticeSuccess : styles.routeNoticeWarn,
+            ]}
+          >
+            <Ionicons
+              name={routeNotice.tone === 'success' ? 'checkmark-circle-outline' : 'cloud-outline'}
+              size={16}
+              color={routeNotice.tone === 'success' ? colors.successDark : colors.warningDark}
+            />
+            <Text
+              style={[
+                styles.routeNoticeText,
+                routeNotice.tone === 'success'
+                  ? styles.routeNoticeTextSuccess
+                  : styles.routeNoticeTextWarn,
+              ]}
+            >
+              {routeNotice.text}
+            </Text>
+          </View>
+        ) : null}
         {syncNote ? (
           <Pressable
             disabled={!syncNote.includes('冲突')}
@@ -170,6 +199,11 @@ export default function RecordsTab() {
       </ScrollView>
     </Screen>
   );
+}
+
+function paramValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 
 function Filter({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
@@ -318,6 +352,20 @@ const styles = StyleSheet.create({
   },
   healthLinkTitle: { ...typography.h3, color: colors.ink },
   healthLinkBody: { ...typography.caption, color: colors.textSecondary, marginTop: 3 },
+  routeNotice: {
+    minHeight: 52,
+    borderRadius: radii.input,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  routeNoticeSuccess: { backgroundColor: colors.successSoft },
+  routeNoticeWarn: { backgroundColor: colors.warningSoft },
+  routeNoticeText: { ...typography.caption, flex: 1 },
+  routeNoticeTextSuccess: { color: colors.successDark },
+  routeNoticeTextWarn: { color: colors.warningDark },
   sync: {
     flexDirection: 'row',
     alignItems: 'center',

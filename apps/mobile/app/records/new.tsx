@@ -40,6 +40,8 @@ import {
   recordDraftOwnerLabel,
   recordRequiresPet,
   recordSaveFailureMessage,
+  recordSubmitSuccessNotice,
+  recordTimelineRoute,
   recordTitle,
   recordTypes,
   resolveInitialRecordPetId,
@@ -212,16 +214,20 @@ export default function NewRecordScreen() {
     setError('');
     try {
       await authApi.createRecord(session.accessToken, activeFamily.id, input);
-      Alert.alert('记录成功', '已经加入记录时间线');
       allowLeave.current = true;
-      router.back();
+      router.replace({
+        pathname: recordTimelineRoute,
+        params: { notice: recordSubmitSuccessNotice('server') },
+      });
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         try {
           await enqueueOfflineOperation(operation);
-          Alert.alert('已保存到本机', '联网后会自动同步到家庭时间线');
           allowLeave.current = true;
-          router.back();
+          router.replace({
+            pathname: recordTimelineRoute,
+            params: { notice: recordSubmitSuccessNotice('offlineQueue') },
+          });
         } catch {
           setError(recordSaveFailureMessage('offlineQueue'));
         }

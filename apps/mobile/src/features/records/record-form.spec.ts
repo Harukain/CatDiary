@@ -10,6 +10,9 @@ import {
   recordOwnerLabel,
   recordRequiresPet,
   recordSaveFailureMessage,
+  recordSubmitSuccessNotice,
+  recordTimelineNoticeState,
+  recordTimelineRoute,
   resolveInitialRecordPetId,
   resolveInitialRecordType,
   resolveRecordDraftSubmitState,
@@ -126,6 +129,21 @@ describe('record form rules', () => {
     expect(recordSaveFailureMessage('offlineQueue')).toBe(
       '本机离线队列保存失败，请稍后重试，当前草稿仍保留在页面',
     );
+  });
+
+  it('routes successful manual records back to the timeline with explicit feedback', () => {
+    expect(recordTimelineRoute).toBe('/(tabs)/records');
+    expect(recordSubmitSuccessNotice('server')).toBe('record-created');
+    expect(recordSubmitSuccessNotice('offlineQueue')).toBe('record-offline-queued');
+    expect(recordTimelineNoticeState('record-created')).toEqual({
+      tone: 'success',
+      text: '记录已加入时间线，可以继续查看或筛选猫咪。',
+    });
+    expect(recordTimelineNoticeState('record-offline-queued')).toEqual({
+      tone: 'warning',
+      text: '已保存到本机，联网后会自动同步到家庭时间线。',
+    });
+    expect(recordTimelineNoticeState('/records/new')).toBeNull();
   });
 
   it('does not treat the initial blank record as dirty', () => {

@@ -233,6 +233,27 @@ export function recordSaveFailureMessage(stage: 'server' | 'offlineQueue', cause
   if (stage === 'offlineQueue') return '本机离线队列保存失败，请稍后重试，当前草稿仍保留在页面';
   return cause instanceof Error ? cause.message : '保存失败';
 }
+export const recordTimelineRoute = '/(tabs)/records' as const;
+export type RecordSubmitSuccessStage = 'server' | 'offlineQueue';
+export type RecordTimelineNoticeCode = 'record-created' | 'record-offline-queued';
+export type RecordTimelineNoticeState = {
+  tone: 'success' | 'warning';
+  text: string;
+};
+export function recordSubmitSuccessNotice(
+  stage: RecordSubmitSuccessStage,
+): RecordTimelineNoticeCode {
+  return stage === 'offlineQueue' ? 'record-offline-queued' : 'record-created';
+}
+export function recordTimelineNoticeState(
+  notice?: string | null,
+): RecordTimelineNoticeState | null {
+  if (notice === 'record-created')
+    return { tone: 'success', text: '记录已加入时间线，可以继续查看或筛选猫咪。' };
+  if (notice === 'record-offline-queued')
+    return { tone: 'warning', text: '已保存到本机，联网后会自动同步到家庭时间线。' };
+  return null;
+}
 export function isRecordDraftDirty({
   type,
   value,
