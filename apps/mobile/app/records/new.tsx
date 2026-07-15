@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   BackHandler,
   KeyboardAvoidingView,
@@ -34,14 +35,15 @@ import {
   datePart,
   fieldConfig,
   isRecordDraftDirty,
-  isRecordDraftReady,
   parseOccurredAt,
+  recordDraftSubmitBlockMessage,
   recordDraftOwnerLabel,
   recordRequiresPet,
   recordTitle,
   recordTypes,
   resolveInitialRecordPetId,
   resolveInitialRecordType,
+  resolveRecordDraftSubmitState,
   stoolOptions,
   timePart,
   vomitOptions,
@@ -58,6 +60,8 @@ export default function NewRecordScreen() {
   const initialType = useRef(resolveInitialRecordType(paramValue(params.type))).current;
   const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
+  const [petsLoading, setPetsLoading] = useState(true);
+  const [petLoadError, setPetLoadError] = useState('');
   const [petId, setPetId] = useState<string | null>(null);
   const [type, setType] = useState<ManualRecordType>(initialType);
   const [form, setForm] = useState<RecordFormValue>(blankRecordFormValue(initialType));
@@ -71,16 +75,26 @@ export default function NewRecordScreen() {
     () => paramValue(params.petId) ?? paramValue(params.pet),
     [params.pet, params.petId],
   );
-  useEffect(() => {
+  const loadPets = useCallback(() => {
     if (!session || !activeFamily) return;
+    setPetsLoading(true);
+    setPetLoadError('');
+    setPets([]);
     void authApi
       .listPets(session.accessToken, activeFamily.id)
       .then((items) => {
         setPets(items);
         setPetId(resolveInitialRecordPetId(items, routePetId));
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : '猫咪加载失败'));
+      .catch((cause) => {
+        setPetLoadError(cause instanceof Error ? cause.message : '猫咪加载失败');
+        setPetId(null);
+      })
+      .finally(() => setPetsLoading(false));
   }, [activeFamily, routePetId, session]);
+  useEffect(() => {
+    loadPets();
+  }, [loadPets]);
   useEffect(() => {
     setForm(blankRecordFormValue(type));
     setError('');
@@ -90,7 +104,22 @@ export default function NewRecordScreen() {
   }, [petId, pets, type]);
   const fields = useMemo(() => fieldConfig(type), [type]);
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
-  const canSubmit = isRecordDraftReady(type, form, petId);
+  const submitState = useMemo(
+    () =>
+      resolveRecordDraftSubmitState({
+        type,
+        value: form,
+        petId,
+        petCount: pets.length,
+        petsLoading,
+        petLoadError,
+      }),
+    [form, petId, petLoadError, pets.length, petsLoading, type],
+  );
+  const canSubmit = submitState.canSubmit;
+  const noSelectablePet = submitState.reason === 'NO_PETS';
+  const fieldsDisabled =
+    busy || petsLoading || (recordRequiresPet(type) && (Boolean(petLoadError) || noSelectablePet));
   const ownerLabel = useMemo(() => recordDraftOwnerLabel(type, pets, petId), [petId, pets, type]);
   const isDirty = useMemo(
     () =>
@@ -157,9 +186,8 @@ export default function NewRecordScreen() {
   }, [busy, isDirty, requestClose]);
   async function submit() {
     if (!session || !activeFamily) return setError('登录状态已失效，请重新登录');
+    if (!canSubmit) return setError(recordDraftSubmitBlockMessage(submitState.reason, type));
     if (recordRequiresPet(type) && !petId) return setError('请选择猫咪');
-    if (!canSubmit)
-      return setError(type === 'LITTER' ? '请填写猫砂盆或观察内容' : '请完整填写必填内容');
     let data: Record<string, unknown>;
     let occurredAt: string;
     try {
@@ -233,14 +261,38 @@ export default function NewRecordScreen() {
             {type === 'LITTER' ? (
               <Text style={styles.sectionHint}>不确定是哪只猫时，选择公共猫砂盆。</Text>
             ) : null}
+            {petsLoading ? (
+              <View style={styles.inlineState}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.inlineStateText}>正在确认可记录的猫咪档案</Text>
+              </View>
+            ) : petLoadError ? (
+              <View style={styles.inlineState}>
+                <ErrorText>{petLoadError}</ErrorText>
+                <TextButton label="重新加载猫咪" disabled={busy} onPress={loadPets} />
+              </View>
+            ) : noSelectablePet ? (
+              <View style={styles.inlineState}>
+                <Text style={styles.inlineStateTitle}>还没有可写入的猫咪档案</Text>
+                <Text style={styles.inlineStateText}>
+                  单猫记录必须明确归属。你仍可以切换到“铲屎”记录公共猫砂盆观察。
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.chips}>
               {type === 'LITTER' ? (
-                <Chip active={petId === null} label="公共猫砂盆" onPress={() => setPetId(null)} />
+                <Chip
+                  active={petId === null}
+                  disabled={busy || petsLoading}
+                  label="公共猫砂盆"
+                  onPress={() => setPetId(null)}
+                />
               ) : null}
               {pets.map((pet) => (
                 <Chip
                   key={pet.id}
                   active={pet.id === petId}
+                  disabled={busy || petsLoading}
                   label={pet.name}
                   onPress={() => setPetId(pet.id)}
                 />
@@ -256,6 +308,7 @@ export default function NewRecordScreen() {
                 <Chip
                   key={item.value}
                   active={item.value === type}
+                  disabled={busy || petsLoading}
                   label={item.label}
                   onPress={() => setType(item.value)}
                 />
@@ -269,6 +322,7 @@ export default function NewRecordScreen() {
                   onChangeText={setOccurredDate}
                   placeholder="YYYY-MM-DD"
                   maxLength={10}
+                  editable={!fieldsDisabled}
                 />
               </View>
               <View style={styles.timeField}>
@@ -278,6 +332,7 @@ export default function NewRecordScreen() {
                   onChangeText={setOccurredTime}
                   placeholder="HH:mm"
                   maxLength={5}
+                  editable={!fieldsDisabled}
                 />
               </View>
             </View>
@@ -287,6 +342,7 @@ export default function NewRecordScreen() {
               onChangeText={(first) => setForm((current) => ({ ...current, first }))}
               placeholder={fields.firstPlaceholder}
               keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
+              editable={!fieldsDisabled}
             />
             {choices ? (
               <View style={styles.optionBlock}>
@@ -296,6 +352,7 @@ export default function NewRecordScreen() {
                     <Chip
                       key={item.value}
                       active={form.second === item.value}
+                      disabled={fieldsDisabled}
                       label={item.label}
                       onPress={() => setForm((current) => ({ ...current, second: item.value }))}
                     />
@@ -309,6 +366,7 @@ export default function NewRecordScreen() {
                 onChangeText={(second) => setForm((current) => ({ ...current, second }))}
                 placeholder={fields.secondPlaceholder}
                 keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
+                editable={!fieldsDisabled}
               />
             ) : null}
             {type === 'STOOL' || type === 'VOMIT' ? (
@@ -316,6 +374,7 @@ export default function NewRecordScreen() {
                 title="发现血迹"
                 body="建议标记为异常并持续观察，必要时及时就医"
                 value={form.blood}
+                disabled={fieldsDisabled}
                 onChange={(blood) => {
                   setForm((current) => ({ ...current, blood }));
                   if (blood) setAbnormal(true);
@@ -329,11 +388,13 @@ export default function NewRecordScreen() {
               onChangeText={setNote}
               maxLength={500}
               placeholder="补充品牌、反应或观察情况"
+              editable={!fieldsDisabled}
             />
             <SwitchRow
               title="标记为异常"
               body="会在时间线和健康摘要中醒目标识"
               value={abnormal}
+              disabled={fieldsDisabled}
               onChange={setAbnormal}
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
@@ -345,13 +406,24 @@ export default function NewRecordScreen() {
     </Screen>
   );
 }
-function Chip({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+function Chip({
+  active,
+  disabled,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
+      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
     >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
@@ -361,12 +433,14 @@ function SwitchRow({
   title,
   body,
   value,
+  disabled,
   onChange,
   danger,
 }: {
   title: string;
   body: string;
   value: boolean;
+  disabled?: boolean;
   onChange(value: boolean): void;
   danger?: boolean;
 }) {
@@ -378,6 +452,7 @@ function SwitchRow({
       </View>
       <Switch
         value={value}
+        disabled={disabled}
         onValueChange={onChange}
         trackColor={{ true: danger ? colors.danger : colors.brand }}
       />
@@ -407,6 +482,14 @@ const styles = StyleSheet.create({
   sectionHint: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.ink },
   optionBlock: { gap: spacing.sm, marginTop: spacing.sm },
+  inlineState: {
+    borderRadius: radii.input,
+    backgroundColor: colors.brandSoft,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  inlineStateTitle: { ...typography.h3, color: colors.ink },
+  inlineStateText: { ...typography.caption, color: colors.textSecondary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   ownerNotice: {
     minHeight: 48,
@@ -429,6 +512,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipDisabled: { opacity: 0.55 },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.surface },
   dateRow: { flexDirection: 'row', gap: spacing.md },

@@ -5,11 +5,13 @@ import {
   isRecordDetailDraftDirty,
   isRecordDraftDirty,
   isRecordDraftReady,
+  recordDraftSubmitBlockMessage,
   recordDraftOwnerLabel,
   recordOwnerLabel,
   recordRequiresPet,
   resolveInitialRecordPetId,
   resolveInitialRecordType,
+  resolveRecordDraftSubmitState,
   type RecordFormValue,
 } from './record-form';
 
@@ -61,6 +63,60 @@ describe('record form rules', () => {
     expect(resolveInitialRecordType('PHOTO')).toBe('FOOD');
     expect(resolveInitialRecordType('')).toBe('FOOD');
     expect(resolveInitialRecordType(null)).toBe('FOOD');
+  });
+
+  it('blocks single-cat record submission until pet ownership has loaded', () => {
+    const value = { ...blank, first: '主食罐', second: '80' };
+
+    expect(
+      resolveRecordDraftSubmitState({
+        type: 'FOOD',
+        value,
+        petId: 'pet-a',
+        petCount: 1,
+        petsLoading: true,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'LOADING_PETS' });
+    expect(
+      resolveRecordDraftSubmitState({
+        type: 'FOOD',
+        value,
+        petId: null,
+        petCount: 0,
+        petsLoading: false,
+        petLoadError: '猫咪加载失败',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'PET_LOAD_ERROR' });
+    expect(recordDraftSubmitBlockMessage('PET_LOAD_ERROR', 'FOOD')).toBe(
+      '猫咪列表加载失败，请先重试确认归属',
+    );
+  });
+
+  it('allows a public litter observation even when no pet can be selected', () => {
+    expect(
+      resolveRecordDraftSubmitState({
+        type: 'FOOD',
+        value: { ...blank, first: '主食罐', second: '80' },
+        petId: null,
+        petCount: 0,
+        petsLoading: false,
+        petLoadError: '',
+      }),
+    ).toEqual({ canSubmit: false, reason: 'NO_PETS' });
+    expect(recordDraftSubmitBlockMessage('NO_PETS', 'FOOD')).toBe(
+      '请先添加猫咪档案，再保存单猫记录',
+    );
+    expect(
+      resolveRecordDraftSubmitState({
+        type: 'LITTER',
+        value: { ...blank, second: '公共猫砂盆已清理' },
+        petId: null,
+        petCount: 0,
+        petsLoading: false,
+        petLoadError: '网络失败',
+      }),
+    ).toEqual({ canSubmit: true, reason: null });
   });
 
   it('does not treat the initial blank record as dirty', () => {

@@ -189,6 +189,46 @@ export function isRecordDraftReady(
   if (type === 'LITTER') return Boolean(first || second);
   return Boolean(first);
 }
+export type RecordDraftSubmitBlockReason =
+  'LOADING_PETS' | 'PET_LOAD_ERROR' | 'NO_PETS' | 'INCOMPLETE' | null;
+export function resolveRecordDraftSubmitState({
+  type,
+  value,
+  petId,
+  petCount,
+  petsLoading,
+  petLoadError,
+}: {
+  type: ManualRecordType;
+  value: RecordFormValue;
+  petId: string | null;
+  petCount: number;
+  petsLoading: boolean;
+  petLoadError: string;
+}): { canSubmit: boolean; reason: RecordDraftSubmitBlockReason } {
+  if (petsLoading) return { canSubmit: false, reason: 'LOADING_PETS' };
+  if (recordRequiresPet(type)) {
+    if (petLoadError) return { canSubmit: false, reason: 'PET_LOAD_ERROR' };
+    if (petCount === 0) return { canSubmit: false, reason: 'NO_PETS' };
+  }
+  if (!isRecordDraftReady(type, value, petId)) return { canSubmit: false, reason: 'INCOMPLETE' };
+  return { canSubmit: true, reason: null };
+}
+export function recordDraftSubmitBlockMessage(
+  reason: RecordDraftSubmitBlockReason,
+  type: ManualRecordType,
+) {
+  switch (reason) {
+    case 'LOADING_PETS':
+      return '正在确认猫咪归属，请稍后再保存';
+    case 'PET_LOAD_ERROR':
+      return '猫咪列表加载失败，请先重试确认归属';
+    case 'NO_PETS':
+      return '请先添加猫咪档案，再保存单猫记录';
+    default:
+      return type === 'LITTER' ? '请填写猫砂盆或观察内容' : '请完整填写必填内容';
+  }
+}
 export function isRecordDraftDirty({
   type,
   value,
