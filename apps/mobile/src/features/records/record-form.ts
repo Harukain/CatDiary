@@ -9,6 +9,7 @@ export const recordTypes: Array<{ value: ManualRecordType; label: string }> = [
   { value: 'MEDICATION', label: '用药' },
   { value: 'LITTER', label: '铲屎' },
 ];
+const manualRecordTypeValues = new Set<ManualRecordType>(recordTypes.map((item) => item.value));
 export const stoolOptions = [
   { value: 'NORMAL', label: '正常' },
   { value: 'SOFT', label: '偏软' },
@@ -231,6 +232,11 @@ export function resolveInitialRecordPetId(
 ) {
   if (requestedPetId && pets.some((pet) => pet.id === requestedPetId)) return requestedPetId;
   return pets[0]?.id ?? null;
+}
+export function resolveInitialRecordType(requestedType?: string | null): ManualRecordType {
+  if (requestedType && manualRecordTypeValues.has(requestedType as ManualRecordType))
+    return requestedType as ManualRecordType;
+  return 'FOOD';
 }
 export function recordDraftOwnerLabel(
   type: ManualRecordType,

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -11,7 +11,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
+import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type TaskSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import { photoSource } from '../../src/features/photos/photo-source';
@@ -120,6 +120,38 @@ export default function HomeTab() {
             </View>
           ) : null}
         </View>
+        <View style={styles.quickSection}>
+          <View style={styles.profileHeader}>
+            <Title>快捷记录</Title>
+            <Text style={styles.quickHint}>写入前仍需确认猫咪归属</Text>
+          </View>
+          <View style={styles.quickGrid}>
+            <QuickAction
+              icon="restaurant-outline"
+              label="饮食"
+              detail="记录吃了什么"
+              onPress={() => router.push({ pathname: '/records/new', params: { type: 'FOOD' } })}
+            />
+            <QuickAction
+              icon="scale-outline"
+              label="体重"
+              detail="记录 kg 和时间"
+              onPress={() => router.push({ pathname: '/records/new', params: { type: 'WEIGHT' } })}
+            />
+            <QuickAction
+              icon="sparkles-outline"
+              label="铲屎"
+              detail="公共猫砂盆也可记"
+              onPress={() => router.push({ pathname: '/records/new', params: { type: 'LITTER' } })}
+            />
+            <QuickAction
+              icon="camera-outline"
+              label="照片"
+              detail="上传并备注"
+              onPress={() => router.push('/photos/new')}
+            />
+          </View>
+        </View>
         <Card>
           <View style={styles.profileHeader}>
             <Title>猫咪档案</Title>
@@ -183,6 +215,33 @@ export default function HomeTab() {
   );
 }
 
+function QuickAction({
+  icon,
+  label,
+  detail,
+  onPress,
+}: {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  detail: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}快捷记录`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+    >
+      <View style={styles.quickIcon}>
+        <Ionicons name={icon} size={20} color={colors.brand} />
+      </View>
+      <Text style={styles.quickLabel}>{label}</Text>
+      <Text style={styles.quickDetail}>{detail}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   content: { gap: spacing.xxl },
   heading: { gap: spacing.xs },
@@ -226,6 +285,29 @@ const styles = StyleSheet.create({
   taskPreviewTitle: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
   taskPreviewMeta: { ...typography.caption, color: colors.warningDark, marginTop: 1 },
   moreTasks: { ...typography.caption, color: colors.warningDark, paddingLeft: spacing.md },
+  quickSection: { gap: spacing.md },
+  quickHint: { ...typography.caption, color: colors.textSecondary },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  quickAction: {
+    flexBasis: '47%',
+    minHeight: 112,
+    borderRadius: radii.input,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    ...shadows.small,
+  },
+  quickIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+    marginBottom: spacing.xs,
+  },
+  quickLabel: { ...typography.h3, color: colors.ink },
+  quickDetail: { ...typography.caption, color: colors.textSecondary },
   profileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   managePets: {
     minHeight: 44,

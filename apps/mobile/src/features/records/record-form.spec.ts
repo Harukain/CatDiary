@@ -8,6 +8,7 @@ import {
   recordOwnerLabel,
   recordRequiresPet,
   resolveInitialRecordPetId,
+  resolveInitialRecordType,
   type RecordFormValue,
 } from './record-form';
 
@@ -51,6 +52,14 @@ describe('record form rules', () => {
     expect(recordDraftOwnerLabel('FOOD', pets, 'pet-b')).toBe('年糕');
     expect(recordDraftOwnerLabel('FOOD', pets, null)).toBe('未选择猫咪');
     expect(recordDraftOwnerLabel('LITTER', pets, null)).toBe('公共猫砂盆');
+  });
+
+  it('prefills record type from a valid route value and ignores invalid routes', () => {
+    expect(resolveInitialRecordType('WEIGHT')).toBe('WEIGHT');
+    expect(resolveInitialRecordType('LITTER')).toBe('LITTER');
+    expect(resolveInitialRecordType('PHOTO')).toBe('FOOD');
+    expect(resolveInitialRecordType('')).toBe('FOOD');
+    expect(resolveInitialRecordType(null)).toBe('FOOD');
   });
 
   it('does not treat the initial blank record as dirty', () => {

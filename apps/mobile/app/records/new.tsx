@@ -41,6 +41,7 @@ import {
   recordTitle,
   recordTypes,
   resolveInitialRecordPetId,
+  resolveInitialRecordType,
   stoolOptions,
   timePart,
   vomitOptions,
@@ -49,15 +50,16 @@ import {
 
 export default function NewRecordScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
+  const params = useLocalSearchParams<{ pet?: string; petId?: string; type?: string }>();
   const { session, activeFamily } = useSession();
   const initialOccurredDate = useRef(datePart()).current;
   const initialOccurredTime = useRef(timePart()).current;
+  const initialType = useRef(resolveInitialRecordType(paramValue(params.type))).current;
   const allowLeave = useRef(false);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
-  const [type, setType] = useState<ManualRecordType>('FOOD');
-  const [form, setForm] = useState<RecordFormValue>(blankRecordFormValue('FOOD'));
+  const [type, setType] = useState<ManualRecordType>(initialType);
+  const [form, setForm] = useState<RecordFormValue>(blankRecordFormValue(initialType));
   const [occurredDate, setOccurredDate] = useState(initialOccurredDate);
   const [occurredTime, setOccurredTime] = useState(initialOccurredTime);
   const [note, setNote] = useState('');
@@ -98,6 +100,7 @@ export default function NewRecordScreen() {
         abnormal,
         occurredDate,
         occurredTime,
+        initialType,
         initialOccurredDate,
         initialOccurredTime,
       }),
@@ -109,6 +112,7 @@ export default function NewRecordScreen() {
       note,
       occurredDate,
       occurredTime,
+      initialType,
       type,
     ],
   );
