@@ -39,6 +39,7 @@ import {
   recordDraftSubmitBlockMessage,
   recordDraftOwnerLabel,
   recordRequiresPet,
+  recordSaveFailureMessage,
   recordTitle,
   recordTypes,
   resolveInitialRecordPetId,
@@ -216,11 +217,15 @@ export default function NewRecordScreen() {
       router.back();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
-        await enqueueOfflineOperation(operation);
-        Alert.alert('已保存到本机', '联网后会自动同步到家庭时间线');
-        allowLeave.current = true;
-        router.back();
-      } else setError(cause instanceof Error ? cause.message : '保存失败');
+        try {
+          await enqueueOfflineOperation(operation);
+          Alert.alert('已保存到本机', '联网后会自动同步到家庭时间线');
+          allowLeave.current = true;
+          router.back();
+        } catch {
+          setError(recordSaveFailureMessage('offlineQueue'));
+        }
+      } else setError(recordSaveFailureMessage('server', cause));
     } finally {
       setBusy(false);
     }

@@ -229,6 +229,10 @@ export function recordDraftSubmitBlockMessage(
       return type === 'LITTER' ? '请填写猫砂盆或观察内容' : '请完整填写必填内容';
   }
 }
+export function recordSaveFailureMessage(stage: 'server' | 'offlineQueue', cause?: unknown) {
+  if (stage === 'offlineQueue') return '本机离线队列保存失败，请稍后重试，当前草稿仍保留在页面';
+  return cause instanceof Error ? cause.message : '保存失败';
+}
 export function isRecordDraftDirty({
   type,
   value,

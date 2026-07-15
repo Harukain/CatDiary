@@ -9,6 +9,7 @@ import {
   recordDraftOwnerLabel,
   recordOwnerLabel,
   recordRequiresPet,
+  recordSaveFailureMessage,
   resolveInitialRecordPetId,
   resolveInitialRecordType,
   resolveRecordDraftSubmitState,
@@ -117,6 +118,14 @@ describe('record form rules', () => {
         petLoadError: '网络失败',
       }),
     ).toEqual({ canSubmit: true, reason: null });
+  });
+
+  it('keeps save errors actionable without implying the record was stored', () => {
+    expect(recordSaveFailureMessage('server', new Error('服务暂时不可用'))).toBe('服务暂时不可用');
+    expect(recordSaveFailureMessage('server')).toBe('保存失败');
+    expect(recordSaveFailureMessage('offlineQueue')).toBe(
+      '本机离线队列保存失败，请稍后重试，当前草稿仍保留在页面',
+    );
   });
 
   it('does not treat the initial blank record as dirty', () => {

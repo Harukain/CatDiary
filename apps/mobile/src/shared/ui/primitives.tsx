@@ -2,13 +2,13 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
   type TextInputProps,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 
 export function Screen({ children }: PropsWithChildren) {

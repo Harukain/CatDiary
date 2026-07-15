@@ -98,14 +98,6 @@ export default function RecordsTab() {
             <Text style={styles.title}>记录时间线</Text>
             <Text style={styles.subtitle}>实际发生的生活与健康情况</Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="新增记录"
-            style={styles.add}
-            onPress={() => router.push('/records/new')}
-          >
-            <Ionicons name="add" size={24} color={colors.surface} />
-          </Pressable>
         </View>
         <ScrollView
           horizontal
@@ -298,17 +290,9 @@ function Insights({ records }: { records: RecordSummary[] }) {
 
 const styles = StyleSheet.create({
   content: { gap: spacing.lg },
-  heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heading: { gap: spacing.xs },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
-  add: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   filters: { gap: spacing.sm },
   filter: {
     borderRadius: radii.pill,
