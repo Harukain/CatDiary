@@ -87,3 +87,13 @@ export function devicePushRegistrationActionLabel(status: DevicePushRegistration
   if (status === 'registered') return '重新登记当前设备';
   return '登记当前设备';
 }
+
+export function devicePushRegistrationFailureRecovery(errorMessage: string) {
+  const message = errorMessage.trim();
+  if (!/权限|permission/i.test(message)) return null;
+  return {
+    title: '系统通知权限未开启',
+    body: '请在系统设置中允许猫伴日记发送通知，然后返回这里重新登记当前设备。',
+    actionLabel: '打开系统设置',
+  };
+}

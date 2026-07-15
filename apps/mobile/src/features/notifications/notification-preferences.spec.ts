@@ -3,6 +3,7 @@ import {
   canEditNotificationPreference,
   devicePushRegistrationActionLabel,
   devicePushRegistrationBody,
+  devicePushRegistrationFailureRecovery,
   devicePushRegistrationTitle,
   maskExpoPushToken,
   notificationPreferenceDependencyHint,
@@ -71,5 +72,16 @@ describe('notification preference rules', () => {
     expect(devicePushRegistrationActionLabel('idle')).toBe('登记当前设备');
     expect(devicePushRegistrationActionLabel('registered')).toBe('重新登记当前设备');
     expect(devicePushRegistrationActionLabel('registering')).toBe('登记中');
+  });
+
+  it('offers system settings recovery only for notification permission failures', () => {
+    expect(devicePushRegistrationFailureRecovery('未获得通知权限，可稍后在系统设置中开启')).toEqual(
+      {
+        title: '系统通知权限未开启',
+        body: '请在系统设置中允许猫伴日记发送通知，然后返回这里重新登记当前设备。',
+        actionLabel: '打开系统设置',
+      },
+    );
+    expect(devicePushRegistrationFailureRecovery('Network request failed')).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,7 @@ import {
   canEditNotificationPreference,
   devicePushRegistrationActionLabel,
   devicePushRegistrationBody,
+  devicePushRegistrationFailureRecovery,
   devicePushRegistrationTitle,
   maskExpoPushToken,
   notificationPreferenceDependencyHint,
@@ -52,6 +54,9 @@ export default function NotificationSettingsRoute() {
   const editingDisabled =
     !canEditNotificationPreference({ loading, savingKey: saving }) ||
     devicePushStatus === 'registering';
+  const devicePushRecovery = devicePushError
+    ? devicePushRegistrationFailureRecovery(devicePushError)
+    : null;
   const load = useCallback(async () => {
     if (!session || !activeFamily) {
       setLoading(false);
@@ -131,6 +136,15 @@ export default function NotificationSettingsRoute() {
       setDevicePushStatus('failed');
       setDevicePushError(cause instanceof Error ? cause.message : '当前设备推送登记失败');
       return false;
+    }
+  }
+  async function openDevicePushSettings() {
+    try {
+      await Linking.openSettings();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : '无法打开系统设置，请手动前往设置开启通知权限。',
+      );
     }
   }
   return (
@@ -233,6 +247,21 @@ export default function NotificationSettingsRoute() {
               </View>
             </View>
             {devicePushError ? <ErrorText>{devicePushError}</ErrorText> : null}
+            {devicePushRecovery ? (
+              <View style={styles.devicePushRecovery}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
+                <View style={styles.devicePushRecoveryBody}>
+                  <Text style={styles.devicePushRecoveryTitle}>{devicePushRecovery.title}</Text>
+                  <Text style={styles.devicePushRecoveryText}>{devicePushRecovery.body}</Text>
+                  <TextButton
+                    label={devicePushRecovery.actionLabel}
+                    danger
+                    disabled={devicePushStatus === 'registering' || Boolean(saving)}
+                    onPress={() => void openDevicePushSettings()}
+                  />
+                </View>
+              </View>
+            ) : null}
             {!preference.pushEnabled ? (
               <Text style={styles.settingHint}>
                 当前个人偏好里的“手机推送”是关闭状态；登记设备不会改变任务生成。
@@ -357,6 +386,17 @@ const styles = StyleSheet.create({
   devicePushCopy: { flex: 1, gap: spacing.xs },
   devicePushTitle: { ...typography.h3, color: colors.ink },
   devicePushBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 19 },
+  devicePushRecovery: {
+    borderRadius: radii.input,
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  devicePushRecoveryBody: { flex: 1, gap: spacing.xs },
+  devicePushRecoveryTitle: { ...typography.h3, color: colors.dangerDark },
+  devicePushRecoveryText: { ...typography.caption, color: colors.dangerDark },
   channelRow: {
     minHeight: 64,
     flexDirection: 'row',
