@@ -4,6 +4,7 @@ import {
   Alert,
   BackHandler,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,12 +32,14 @@ import {
 import {
   buildGroupedPhotoRecordInputs,
   isPhotoUploadDraftDirty,
+  photoPermissionDeniedCopy,
   photoUploadPreviewStatus,
   photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
   resolvePhotoUploadSubmitState,
   restorePhotoUploadQueueOwnership,
+  type PhotoPermissionSource,
 } from '../../src/features/photos/photo-form';
 import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
 import {
@@ -76,6 +79,8 @@ export default function NewPhotoRoute() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [permissionDeniedSource, setPermissionDeniedSource] =
+    useState<PhotoPermissionSource | null>(null);
   const [restoreOwnershipWarning, setRestoreOwnershipWarning] = useState('');
   const slotsLeft = remainingPhotoSlots(items.length);
   const photoLimitReached = slotsLeft === 0;
@@ -83,6 +88,9 @@ export default function NewPhotoRoute() {
   const invalidRestoredPhotoCount = items.filter(
     (item) => item.queued && !item.queued.petIds.length,
   ).length;
+  const permissionDeniedCopy = permissionDeniedSource
+    ? photoPermissionDeniedCopy(permissionDeniedSource)
+    : null;
   const loadPhotoContext = useCallback(() => {
     if (!session || !activeFamily) return;
     setPetsLoading(true);
@@ -237,6 +245,7 @@ export default function NewPhotoRoute() {
     ]);
   }
   async function chooseLibrary() {
+    setPermissionDeniedSource(null);
     if (petsLoading || petLoadError || !pets.length) {
       setError(photoUploadSubmitBlockMessage(submitState.reason));
       return;
@@ -247,9 +256,11 @@ export default function NewPhotoRoute() {
     }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError('需要相册权限才能选择照片');
+      setError('');
+      setPermissionDeniedSource('library');
       return;
     }
+    setError('');
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -264,6 +275,7 @@ export default function NewPhotoRoute() {
     }
   }
   async function takePhoto() {
+    setPermissionDeniedSource(null);
     if (petsLoading || petLoadError || !pets.length) {
       setError(photoUploadSubmitBlockMessage(submitState.reason));
       return;
@@ -274,11 +286,22 @@ export default function NewPhotoRoute() {
     }
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setError('需要相机权限才能拍照');
+      setError('');
+      setPermissionDeniedSource('camera');
       return;
     }
+    setError('');
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
     if (!result.canceled) addAssets(result.assets);
+  }
+  async function openPermissionSettings() {
+    try {
+      await Linking.openSettings();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : '无法打开系统设置，请手动前往设置开启权限。',
+      );
+    }
   }
   function update(id: string, patch: Partial<UploadItem>) {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -453,6 +476,21 @@ export default function NewPhotoRoute() {
                   ? '已达到 9 张上限，移除一张后可继续添加'
                   : `还能添加 ${slotsLeft} 张`}
         </Text>
+        {permissionDeniedCopy ? (
+          <View style={styles.permissionNotice}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
+            <View style={styles.permissionNoticeBody}>
+              <Text style={styles.permissionNoticeTitle}>{permissionDeniedCopy.title}</Text>
+              <Text style={styles.permissionNoticeText}>{permissionDeniedCopy.body}</Text>
+              <TextButton
+                label={permissionDeniedCopy.actionLabel}
+                danger
+                disabled={busy}
+                onPress={() => void openPermissionSettings()}
+              />
+            </View>
+          </View>
+        ) : null}
         {restoredQueueCount ? (
           <View style={styles.restoreNotice}>
             <Ionicons
@@ -659,6 +697,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   restoreNoticeText: { flex: 1, ...typography.caption, color: colors.warningDark },
+  permissionNotice: {
+    borderRadius: radii.input,
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  permissionNoticeBody: { flex: 1, gap: spacing.xs },
+  permissionNoticeTitle: { ...typography.h3, color: colors.dangerDark },
+  permissionNoticeText: { ...typography.caption, color: colors.dangerDark },
   picker: {
     flex: 1,
     minHeight: 100,

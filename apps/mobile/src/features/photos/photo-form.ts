@@ -219,6 +219,8 @@ export type PhotoUploadPreviewTone = 'neutral' | 'brand' | 'success' | 'danger';
 
 export type PhotoUploadPreviewState = 'READY' | 'UPLOADING' | 'DONE' | 'FAILED';
 
+export type PhotoPermissionSource = 'library' | 'camera';
+
 export function photoUploadPreviewStatus({
   state,
   progress = 0,
@@ -264,6 +266,21 @@ export function photoUploadPreviewStatus({
     text: '待上传',
     tone: 'neutral',
     accessibilityLabel: '照片待上传',
+  };
+}
+
+export function photoPermissionDeniedCopy(source: PhotoPermissionSource) {
+  if (source === 'camera') {
+    return {
+      title: '相机权限未开启',
+      body: '请在系统设置中允许猫伴日记使用相机，然后返回这里重新拍照。',
+      actionLabel: '打开系统设置',
+    };
+  }
+  return {
+    title: '相册权限未开启',
+    body: '请在系统设置中允许猫伴日记访问照片，然后返回这里重新选择。',
+    actionLabel: '打开系统设置',
   };
 }
 

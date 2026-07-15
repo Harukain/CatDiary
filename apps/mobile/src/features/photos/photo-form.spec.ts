@@ -5,6 +5,7 @@ import {
   isPhotoDetailDraftDirty,
   isPhotoUploadDraftDirty,
   photoAlbumGridLayout,
+  photoPermissionDeniedCopy,
   photoUploadPreviewStatus,
   photoUploadSubmitBlockMessage,
   remainingPhotoSlots,
@@ -351,6 +352,19 @@ describe('photo form pet context rules', () => {
       text: '已上传',
       tone: 'success',
       accessibilityLabel: '照片已上传',
+    });
+  });
+
+  it('keeps photo permission denial copy actionable by source', () => {
+    expect(photoPermissionDeniedCopy('library')).toEqual({
+      title: '相册权限未开启',
+      body: '请在系统设置中允许猫伴日记访问照片，然后返回这里重新选择。',
+      actionLabel: '打开系统设置',
+    });
+    expect(photoPermissionDeniedCopy('camera')).toEqual({
+      title: '相机权限未开启',
+      body: '请在系统设置中允许猫伴日记使用相机，然后返回这里重新拍照。',
+      actionLabel: '打开系统设置',
     });
   });
 
