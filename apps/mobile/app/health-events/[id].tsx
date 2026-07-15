@@ -1,18 +1,23 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type HealthEventSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import {
+  isHealthEventDraftDirty,
+  type HealthEventDraft,
+} from '../../src/features/health-events/health-event-form';
 import {
   Card,
   ErrorText,
@@ -29,8 +34,10 @@ export default function HealthEventDetailScreen() {
   const [event, setEvent] = useState<HealthEventSummary>();
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
+  const [initialDraft, setInitialDraft] = useState<HealthEventDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const allowLeave = useRef(false);
   const load = useCallback(async () => {
     if (!session || !activeFamily || !id) return;
     setError('');
@@ -39,6 +46,8 @@ export default function HealthEventDetailScreen() {
       setEvent(next);
       setTitle(next.title);
       setSummary(next.summary ?? '');
+      setInitialDraft({ title: next.title, summary: next.summary ?? '' });
+      allowLeave.current = false;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '加载失败');
     }
@@ -53,6 +62,71 @@ export default function HealthEventDetailScreen() {
     (event.createdById === session?.user.id ||
       activeFamily?.role === 'OWNER' ||
       activeFamily?.role === 'ADMIN');
+  const isDirty = useMemo(
+    () =>
+      !!initialDraft &&
+      isHealthEventDraftDirty(
+        {
+          title,
+          summary,
+        },
+        initialDraft,
+      ),
+    [initialDraft, summary, title],
+  );
+  const requestReturn = useCallback(() => {
+    if (busy) return;
+    if (!isDirty || allowLeave.current) {
+      router.back();
+      return;
+    }
+    Alert.alert('放弃未保存的健康事件修改？', '当前标题或情况摘要尚未保存，离开后会丢失修改。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => {
+          allowLeave.current = true;
+          router.back();
+        },
+      },
+    ]);
+  }, [busy, isDirty, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isDirty || allowLeave.current) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isDirty, requestReturn]);
+  const requestLinkRecord = useCallback(() => {
+    if (!event || busy) return;
+    const navigate = () =>
+      router.push({
+        pathname: '/health-events/link-record',
+        params: { eventId: event.id },
+      });
+    if (!isDirty) {
+      navigate();
+      return;
+    }
+    Alert.alert(
+      '先处理未保存修改？',
+      '继续关联记录会离开当前页面，未保存的标题或摘要修改不会保留。',
+      [
+        { text: '继续编辑', style: 'cancel' },
+        {
+          text: '放弃并关联',
+          style: 'destructive',
+          onPress: () => {
+            allowLeave.current = true;
+            navigate();
+          },
+        },
+      ],
+    );
+  }, [busy, event, isDirty, router]);
   async function save() {
     if (!event || !session || !activeFamily) return;
     setBusy(true);
@@ -64,6 +138,9 @@ export default function HealthEventDetailScreen() {
         version: event.version,
       });
       setEvent(next);
+      setTitle(next.title);
+      setSummary(next.summary ?? '');
+      setInitialDraft({ title: next.title, summary: next.summary ?? '' });
       Alert.alert('已保存', '健康事件摘要已经更新');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '保存失败');
@@ -130,16 +207,32 @@ export default function HealthEventDetailScreen() {
     );
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View>
-          <Text style={[styles.status, event.status === 'RECOVERED' && styles.recovered]}>
-            {event.status === 'ACTIVE' ? '观察中' : '已恢复'}
-          </Text>
-          <Text style={styles.title}>{event.title}</Text>
-          <Text style={styles.meta}>
-            {event.pet.name} ·{' '}
-            {new Date(event.startedAt).toLocaleString('zh-CN', { hour12: false })} 开始
-          </Text>
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="返回健康事件列表"
+            disabled={busy}
+            onPress={requestReturn}
+            style={({ pressed }) => [
+              styles.navButton,
+              busy && styles.navButtonDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <View style={styles.navCopy}>
+            <Text style={[styles.status, event.status === 'RECOVERED' && styles.recovered]}>
+              {event.status === 'ACTIVE' ? '观察中' : '已恢复'}
+            </Text>
+            <Text style={styles.title}>{event.title}</Text>
+            <Text style={styles.meta}>
+              {event.pet.name} ·{' '}
+              {new Date(event.startedAt).toLocaleString('zh-CN', { hour12: false })} 开始
+            </Text>
+          </View>
         </View>
         <Card>
           <Field
@@ -163,7 +256,7 @@ export default function HealthEventDetailScreen() {
             <PrimaryButton
               label="保存事件信息"
               busy={busy}
-              disabled={!title.trim()}
+              disabled={!title.trim() || !isDirty}
               onPress={save}
             />
           ) : (
@@ -174,15 +267,7 @@ export default function HealthEventDetailScreen() {
           <View style={styles.sectionHeading}>
             <Text style={styles.section}>关联记录</Text>
             {canEdit ? (
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/health-events/link-record',
-                    params: { eventId: event.id },
-                  })
-                }
-                style={styles.linkButton}
-              >
+              <Pressable onPress={requestLinkRecord} disabled={busy} style={styles.linkButton}>
                 <Ionicons name="add" size={17} color={colors.brand} />
                 <Text style={styles.linkButtonText}>继续关联</Text>
               </Pressable>
@@ -236,7 +321,7 @@ export default function HealthEventDetailScreen() {
             </Text>
           </View>
         ) : null}
-        <TextButton label="返回健康事件" onPress={() => router.back()} />
+        <TextButton label="返回健康事件" disabled={busy} onPress={requestReturn} />
       </ScrollView>
     </Screen>
   );
@@ -246,6 +331,10 @@ function relationLabel(relation: string) {
 }
 const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: 70 },
+  nav: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  navButtonDisabled: { opacity: 0.45 },
+  navCopy: { flex: 1 },
   status: { ...typography.caption, color: colors.dangerDark, fontWeight: '700' },
   recovered: { color: colors.successDark },
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
@@ -307,4 +396,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   doneText: { ...typography.secondary, color: colors.warningDark },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
