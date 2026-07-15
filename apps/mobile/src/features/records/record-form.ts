@@ -222,6 +222,39 @@ export function isRecordDraftDirty({
     occurredTime !== initialOccurredTime
   );
 }
+export function isRecordDetailDraftDirty({
+  value,
+  originalValue,
+  note,
+  originalNote,
+  abnormal,
+  originalAbnormal,
+  occurredDate,
+  originalOccurredDate,
+  occurredTime,
+  originalOccurredTime,
+}: {
+  value: RecordFormValue;
+  originalValue: RecordFormValue;
+  note: string;
+  originalNote?: string | null;
+  abnormal: boolean;
+  originalAbnormal: boolean;
+  occurredDate: string;
+  originalOccurredDate: string;
+  occurredTime: string;
+  originalOccurredTime: string;
+}) {
+  return (
+    value.first.trim() !== originalValue.first.trim() ||
+    value.second.trim() !== originalValue.second.trim() ||
+    value.blood !== originalValue.blood ||
+    note.trim() !== (originalNote ?? '').trim() ||
+    abnormal !== originalAbnormal ||
+    occurredDate !== originalOccurredDate ||
+    occurredTime !== originalOccurredTime
+  );
+}
 export function recordOwnerLabel(record: Pick<RecordSummary, 'pet' | 'type'>) {
   if (record.pet?.name) return record.pet.name;
   return record.type === 'LITTER' ? '公共猫砂盆' : '家庭';

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -10,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -31,6 +32,7 @@ import {
   datePart,
   fieldConfig,
   initialRecordForm,
+  isRecordDetailDraftDirty,
   isRecordDraftReady,
   parseOccurredAt,
   recordOwnerLabel,
@@ -85,6 +87,74 @@ export default function RecordDetailScreen() {
   const permissions = record
     ? getRecordActionPermissions(record, session?.user.id, activeFamily?.role)
     : null;
+  const originalForm = useMemo(() => (record ? initialRecordForm(record) : null), [record]);
+  const detailDirty =
+    !!record &&
+    !!type &&
+    !!originalForm &&
+    isRecordDetailDraftDirty({
+      value: form,
+      originalValue: originalForm,
+      note,
+      originalNote: record.note,
+      abnormal,
+      originalAbnormal: record.abnormal,
+      occurredDate,
+      originalOccurredDate: datePart(record.occurredAt),
+      occurredTime,
+      originalOccurredTime: timePart(record.occurredAt),
+    });
+  const requestReturn = useCallback(() => {
+    if (busy) {
+      Alert.alert('记录正在处理', '请等待当前操作完成，避免记录状态与服务器不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (!detailDirty) {
+      router.back();
+      return;
+    }
+    Alert.alert('放弃未保存的修改？', '记录内容尚未保存，离开后本次修改不会生效。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => router.back(),
+      },
+    ]);
+  }, [busy, detailDirty, router]);
+  const requestNavigate = useCallback(
+    (action: () => void) => {
+      if (busy) {
+        Alert.alert('记录正在处理', '请等待当前操作完成，避免记录状态与服务器不一致。', [
+          { text: '继续等待', style: 'cancel' },
+        ]);
+        return;
+      }
+      if (!detailDirty) {
+        action();
+        return;
+      }
+      Alert.alert('先处理未保存的修改？', '当前记录修改尚未保存。继续跳转会放弃本次修改。', [
+        { text: '继续编辑', style: 'cancel' },
+        {
+          text: '放弃并继续',
+          style: 'destructive',
+          onPress: action,
+        },
+      ]);
+    },
+    [busy, detailDirty],
+  );
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!busy && !detailDirty) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [busy, detailDirty, requestReturn]);
   async function save() {
     if (!record || !session || !activeFamily || !type) return;
     if (!permissions?.edit.allowed) {
@@ -112,6 +182,9 @@ export default function RecordDetailScreen() {
       });
       setRecord(next);
       setForm(initialRecordForm(next));
+      setOccurredDate(datePart(next.occurredAt));
+      setOccurredTime(timePart(next.occurredAt));
+      setNote(next.note ?? '');
       setAbnormal(next.abnormal);
       Alert.alert('已保存', '记录已经更新');
     } catch (cause) {
@@ -152,12 +225,14 @@ export default function RecordDetailScreen() {
   if (!record && !error)
     return (
       <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
         <ActivityIndicator color={colors.brand} />
       </Screen>
     );
   if (!record)
     return (
       <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
         <ErrorText>{error}</ErrorText>
         <TextButton label="返回" onPress={() => router.back()} />
       </Screen>
@@ -170,6 +245,7 @@ export default function RecordDetailScreen() {
   const canSave = type ? isRecordDraftReady(type, form, record.petId) : false;
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View>
           <Text style={styles.eyebrow}>
@@ -189,10 +265,12 @@ export default function RecordDetailScreen() {
             <PrimaryButton
               label="建立健康事件"
               onPress={() =>
-                router.push({
-                  pathname: '/health-events/new',
-                  params: { recordId: record.id, petId: record.petId ?? '', title: record.title },
-                })
+                requestNavigate(() =>
+                  router.push({
+                    pathname: '/health-events/new',
+                    params: { recordId: record.id, petId: record.petId ?? '', title: record.title },
+                  }),
+                )
               }
             />
           </View>
@@ -214,6 +292,7 @@ export default function RecordDetailScreen() {
                     value={occurredDate}
                     onChangeText={setOccurredDate}
                     maxLength={10}
+                    editable={!busy}
                     placeholder="YYYY-MM-DD"
                   />
                 </View>
@@ -223,6 +302,7 @@ export default function RecordDetailScreen() {
                     value={occurredTime}
                     onChangeText={setOccurredTime}
                     maxLength={5}
+                    editable={!busy}
                     placeholder="HH:mm"
                   />
                 </View>
@@ -232,6 +312,7 @@ export default function RecordDetailScreen() {
                 value={form.first}
                 onChangeText={(first) => setForm((current) => ({ ...current, first }))}
                 keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
+                editable={!busy}
               />
               {choices ? (
                 <View style={styles.optionBlock}>
@@ -242,6 +323,7 @@ export default function RecordDetailScreen() {
                         key={item.value}
                         label={item.label}
                         active={form.second === item.value}
+                        disabled={busy}
                         onPress={() => setForm((current) => ({ ...current, second: item.value }))}
                       />
                     ))}
@@ -253,6 +335,7 @@ export default function RecordDetailScreen() {
                   value={form.second}
                   onChangeText={(second) => setForm((current) => ({ ...current, second }))}
                   keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
+                  editable={!busy}
                 />
               ) : null}
               {type === 'STOOL' || type === 'VOMIT' ? (
@@ -264,6 +347,7 @@ export default function RecordDetailScreen() {
                     setForm((current) => ({ ...current, blood }));
                     if (blood) setAbnormal(true);
                   }}
+                  disabled={busy}
                   danger
                 />
               ) : null}
@@ -272,6 +356,7 @@ export default function RecordDetailScreen() {
                 body="会进入健康摘要并在时间线突出显示"
                 value={abnormal}
                 onChange={setAbnormal}
+                disabled={busy}
               />
               <Field
                 label="备注"
@@ -279,10 +364,16 @@ export default function RecordDetailScreen() {
                 onChangeText={setNote}
                 maxLength={500}
                 multiline
+                editable={!busy}
                 placeholder="补充观察或反应"
               />
               {error ? <ErrorText>{error}</ErrorText> : null}
-              <PrimaryButton label="保存修改" busy={busy} disabled={!canSave} onPress={save} />
+              <PrimaryButton
+                label="保存修改"
+                busy={busy}
+                disabled={!canSave || !detailDirty}
+                onPress={save}
+              />
             </>
           ) : (
             <>
@@ -295,7 +386,9 @@ export default function RecordDetailScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={photo.note ? `查看照片：${photo.note}` : '查看照片详情'}
                       onPress={() =>
-                        router.push({ pathname: '/photos/[id]', params: { id: photo.id } })
+                        requestNavigate(() =>
+                          router.push({ pathname: '/photos/[id]', params: { id: photo.id } }),
+                        )
                       }
                       style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
                     >
@@ -335,7 +428,7 @@ export default function RecordDetailScreen() {
         {showSeparateDeleteReason && permissions?.delete.reason ? (
           <PermissionNotice title="删除权限" body={permissions.delete.reason} />
         ) : null}
-        <TextButton label="返回时间线" onPress={() => router.back()} />
+        <TextButton label="返回时间线" disabled={busy} onPress={requestReturn} />
       </ScrollView>
     </Screen>
   );
@@ -348,9 +441,25 @@ function PermissionNotice({ title, body }: { title: string; body: string }) {
     </View>
   );
 }
-function Chip({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+function Chip({
+  active,
+  label,
+  disabled,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  disabled?: boolean;
+  onPress(): void;
+}) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive, disabled && styles.disabled]}
+    >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -361,15 +470,19 @@ function SwitchRow({
   value,
   onChange,
   danger,
+  disabled,
 }: {
   title: string;
   body: string;
   value: boolean;
   onChange(value: boolean): void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <View style={[styles.switchRow, danger && value && styles.dangerRow]}>
+    <View
+      style={[styles.switchRow, danger && value && styles.dangerRow, disabled && styles.disabled]}
+    >
       <View style={styles.switchCopy}>
         <Text style={styles.sectionTitle}>{title}</Text>
         <Text style={styles.hint}>{body}</Text>
@@ -377,6 +490,7 @@ function SwitchRow({
       <Switch
         value={value}
         onValueChange={onChange}
+        disabled={disabled}
         trackColor={{ true: danger ? colors.danger : colors.brand }}
       />
     </View>
@@ -404,6 +518,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.surface },
+  disabled: { opacity: 0.45 },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

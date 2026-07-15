@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   blankRecordFormValue,
   buildRecordData,
+  isRecordDetailDraftDirty,
   isRecordDraftDirty,
   isRecordDraftReady,
   recordDraftOwnerLabel,
@@ -96,5 +97,27 @@ describe('record form rules', () => {
     expect(isRecordDraftDirty({ ...base, note: '精神不错' })).toBe(true);
     expect(isRecordDraftDirty({ ...base, abnormal: true })).toBe(true);
     expect(isRecordDraftDirty({ ...base, occurredTime: '09:00' })).toBe(true);
+  });
+
+  it('detects record detail edits that need a leave confirmation', () => {
+    const base = {
+      value: { first: '1', second: 'UNKNOWN', blood: false },
+      originalValue: { first: '1', second: 'UNKNOWN', blood: false },
+      note: '精神正常',
+      originalNote: '精神正常',
+      abnormal: false,
+      originalAbnormal: false,
+      occurredDate: '2026-07-15',
+      originalOccurredDate: '2026-07-15',
+      occurredTime: '08:30',
+      originalOccurredTime: '08:30',
+    };
+
+    expect(isRecordDetailDraftDirty(base)).toBe(false);
+    expect(isRecordDetailDraftDirty({ ...base, note: '  精神正常  ' })).toBe(false);
+    expect(isRecordDetailDraftDirty({ ...base, value: { ...base.value, first: '2' } })).toBe(true);
+    expect(isRecordDetailDraftDirty({ ...base, abnormal: true })).toBe(true);
+    expect(isRecordDetailDraftDirty({ ...base, occurredDate: '2026-07-16' })).toBe(true);
+    expect(isRecordDetailDraftDirty({ ...base, occurredTime: '09:00' })).toBe(true);
   });
 });
