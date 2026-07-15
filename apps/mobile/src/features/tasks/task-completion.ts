@@ -30,6 +30,17 @@ export function initialTaskCompletionDraft(
   };
 }
 
+export function isTaskCompletionDraftDirty(
+  current: TaskCompletionDraft,
+  baseline: TaskCompletionDraft,
+) {
+  return (
+    current.actualAtLocal !== baseline.actualAtLocal ||
+    current.resultText !== baseline.resultText ||
+    current.note !== baseline.note
+  );
+}
+
 export function buildTaskCompletionInput(
   task: Pick<TaskSummary, 'type'>,
   draft: TaskCompletionDraft,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,10 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import type { CompleteTaskInput, TaskSummary } from '../auth/auth-api';
+import { resolveDraftExitDecision } from '../../shared/navigation/draft-exit';
 import { ErrorText, Field, PrimaryButton, TextButton } from '../../shared/ui/primitives';
 import {
   buildTaskCompletionInput,
   initialTaskCompletionDraft,
+  isTaskCompletionDraftDirty,
   isMedicalTask,
   type TaskCompletionDraft,
 } from './task-completion';
@@ -40,11 +43,16 @@ export function TaskCompletionSheet({
   const [draft, setDraft] = useState<TaskCompletionDraft>(() =>
     initialTaskCompletionDraft(task ?? { type: 'LITTER' }),
   );
+  const [baselineDraft, setBaselineDraft] = useState<TaskCompletionDraft>(() =>
+    initialTaskCompletionDraft(task ?? { type: 'LITTER' }),
+  );
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (visible && task) {
-      setDraft(initialTaskCompletionDraft(task));
+      const nextDraft = initialTaskCompletionDraft(task);
+      setDraft(nextDraft);
+      setBaselineDraft(nextDraft);
       setError('');
     }
   }, [task, visible]);
@@ -70,22 +78,45 @@ export function TaskCompletionSheet({
     onSubmit(validation.input);
   }
 
+  function requestCancel() {
+    const decision = resolveDraftExitDecision({
+      busy: !!busy,
+      isDirty: isTaskCompletionDraftDirty(draft, baselineDraft),
+    });
+    if (decision === 'wait') {
+      Alert.alert('任务完成正在保存', '请等待当前完成结果保存完成，避免任务和记录状态不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
+    if (decision === 'continue') {
+      onCancel();
+      return;
+    }
+    Alert.alert(
+      '放弃完成草稿？',
+      '你填写的实际时间、执行结果或备注尚未保存，离开后需要重新填写。',
+      [
+        { text: '继续填写', style: 'cancel' },
+        { text: '放弃', style: 'destructive', onPress: onCancel },
+      ],
+    );
+  }
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={() => {
-        if (!busy) onCancel();
-      }}
+      onRequestClose={requestCancel}
       statusBarTranslucent
     >
       <View accessibilityViewIsModal style={styles.root}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="关闭完成任务面板"
-          disabled={busy}
-          onPress={onCancel}
+          accessibilityHint={busy ? '完成结果保存中，点击会提示继续等待' : '关闭完成任务面板'}
+          onPress={requestCancel}
           style={StyleSheet.absoluteFill}
         />
         <KeyboardAvoidingView
@@ -110,9 +141,13 @@ export function TaskCompletionSheet({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="关闭"
-                disabled={busy}
-                onPress={onCancel}
-                style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+                accessibilityHint={busy ? '完成结果保存中，点击会提示继续等待' : '关闭完成任务面板'}
+                onPress={requestCancel}
+                style={({ pressed }) => [
+                  styles.close,
+                  busy && styles.closeBusy,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Ionicons name="close" size={20} color={busy ? colors.textTertiary : colors.ink} />
               </Pressable>
@@ -149,7 +184,7 @@ export function TaskCompletionSheet({
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
             <PrimaryButton label="保存完成结果" busy={busy} onPress={submit} />
-            <TextButton label="取消" disabled={busy} onPress={onCancel} />
+            <TextButton label={busy ? '保存中，请等待' : '取消'} onPress={requestCancel} />
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -188,6 +223,7 @@ const styles = StyleSheet.create({
   title: { ...typography.h2, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  closeBusy: { opacity: 0.55 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
   warning: {
     borderRadius: radii.banner,

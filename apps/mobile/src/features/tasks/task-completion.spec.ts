@@ -3,6 +3,7 @@ import {
   buildTaskCompletionInput,
   formatTaskCompletionResult,
   initialTaskCompletionDraft,
+  isTaskCompletionDraftDirty,
 } from './task-completion';
 
 describe('task completion payload', () => {
@@ -58,5 +59,18 @@ describe('task completion payload', () => {
     expect(formatTaskCompletionResult({ summary: '已清理' })).toBe('已清理');
     expect(formatTaskCompletionResult({ value: 1 })).toBe('{"value":1}');
     expect(formatTaskCompletionResult({})).toBe('');
+  });
+
+  it('detects edited completion drafts before closing the sheet', () => {
+    const baseline = initialTaskCompletionDraft({ type: 'LITTER' }, new Date(2026, 6, 15, 8, 30));
+
+    expect(isTaskCompletionDraftDirty(baseline, baseline)).toBe(false);
+    expect(isTaskCompletionDraftDirty({ ...baseline, note: '饭后清理' }, baseline)).toBe(true);
+    expect(isTaskCompletionDraftDirty({ ...baseline, resultText: '已补完成' }, baseline)).toBe(
+      true,
+    );
+    expect(
+      isTaskCompletionDraftDirty({ ...baseline, actualAtLocal: '2026-07-15 08:20' }, baseline),
+    ).toBe(true);
   });
 });
