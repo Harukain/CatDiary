@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
@@ -17,6 +18,10 @@ import {
   type AccountDeletionStatus,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
+import {
+  isAccountDeletionDraftDirty,
+  sanitizeDeletionCode,
+} from '../../src/features/account/account-deletion-form';
 import {
   Body,
   Card,
@@ -34,8 +39,13 @@ export default function AccountSettingsRoute() {
   const [status, setStatus] = useState<AccountDeletionStatus>();
   const [code, setCode] = useState('');
   const [maskedPhone, setMaskedPhone] = useState('');
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const draftDirty = useMemo(
+    () => isAccountDeletionDraftDirty({ code, maskedPhone }),
+    [code, maskedPhone],
+  );
   useEffect(() => {
     if (session)
       void authApi
@@ -43,13 +53,45 @@ export default function AccountSettingsRoute() {
         .then(setStatus)
         .catch((cause) => setError(cause instanceof Error ? cause.message : '账号状态加载失败'));
   }, [session]);
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((value) => Math.max(value - 1, 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
+  const requestReturn = useCallback(() => {
+    if (busy) return;
+    if (!draftDirty) {
+      router.back();
+      return;
+    }
+    Alert.alert('离开账号注销流程？', '当前验证码或已发送状态不会保留，离开后需要重新操作。', [
+      { text: '继续处理', style: 'cancel' },
+      {
+        text: '放弃并返回',
+        style: 'destructive',
+        onPress: () => router.back(),
+      },
+    ]);
+  }, [busy, draftDirty, router]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (busy) return true;
+      if (!draftDirty) return false;
+      requestReturn();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [busy, draftDirty, requestReturn]);
   async function sendCode() {
-    if (!session || busy) return;
+    if (!session || busy || cooldownSeconds > 0) return;
     setBusy(true);
     setError('');
     try {
       const result = await authApi.sendAccountDeletionCode(session.accessToken);
       setMaskedPhone(result.maskedPhone);
+      setCooldownSeconds(result.cooldownSeconds);
       Alert.alert('验证码已发送', `验证码已发送至 ${result.maskedPhone}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '验证码发送失败');
@@ -58,7 +100,8 @@ export default function AccountSettingsRoute() {
     }
   }
   function confirmRequest() {
-    if (code.length !== 6) return setError('请输入 6 位验证码');
+    const normalizedCode = sanitizeDeletionCode(code);
+    if (normalizedCode.length !== 6) return setError('请输入 6 位验证码');
     Alert.alert(
       '申请注销账号？',
       '提交后将退出所有设备，并进入 7 天冷静期。冷静期内重新登录可以取消注销。',
@@ -70,10 +113,11 @@ export default function AccountSettingsRoute() {
   }
   async function requestDeletion() {
     if (!session) return;
+    const normalizedCode = sanitizeDeletionCode(code);
     setBusy(true);
     setError('');
     try {
-      await authApi.requestAccountDeletion(session.accessToken, code);
+      await authApi.requestAccountDeletion(session.accessToken, normalizedCode);
       await signOut();
       router.replace('/(auth)/login');
     } catch (cause) {
@@ -103,8 +147,18 @@ export default function AccountSettingsRoute() {
   }
   return (
     <Screen>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.back}>
+        <Pressable
+          accessibilityLabel="返回"
+          disabled={busy}
+          onPress={requestReturn}
+          style={({ pressed }) => [
+            styles.back,
+            busy && styles.backDisabled,
+            pressed && styles.pressed,
+          ]}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <Text style={styles.navTitle}>账号与注销</Text>
@@ -156,7 +210,10 @@ export default function AccountSettingsRoute() {
                   <Field
                     label="短信验证码"
                     value={code}
-                    onChangeText={setCode}
+                    onChangeText={(value) => {
+                      setCode(sanitizeDeletionCode(value));
+                      setError('');
+                    }}
                     keyboardType="number-pad"
                     maxLength={6}
                     placeholder="6 位验证码"
@@ -164,11 +221,18 @@ export default function AccountSettingsRoute() {
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={busy}
+                  accessibilityState={{ disabled: busy || cooldownSeconds > 0 }}
+                  disabled={busy || cooldownSeconds > 0}
                   onPress={() => void sendCode()}
-                  style={styles.codeButton}
+                  style={({ pressed }) => [
+                    styles.codeButton,
+                    (busy || cooldownSeconds > 0) && styles.codeButtonDisabled,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <Text style={styles.codeButtonText}>获取验证码</Text>
+                  <Text style={styles.codeButtonText}>
+                    {cooldownSeconds > 0 ? `${cooldownSeconds}s 后重发` : '获取验证码'}
+                  </Text>
                 </Pressable>
               </View>
               {maskedPhone ? <Text style={styles.hint}>已发送至 {maskedPhone}</Text> : null}
@@ -193,6 +257,7 @@ export default function AccountSettingsRoute() {
 const styles = StyleSheet.create({
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backDisabled: { opacity: 0.45 },
   navTitle: { ...typography.h3, color: colors.ink },
   content: { gap: spacing.xl, paddingBottom: 104 },
   title: { ...typography.h1, color: colors.ink },
@@ -208,6 +273,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 1,
   },
+  codeButtonDisabled: { opacity: 0.5 },
   codeButtonText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   hint: { ...typography.caption, color: colors.textSecondary },
   notice: {
@@ -227,4 +293,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
