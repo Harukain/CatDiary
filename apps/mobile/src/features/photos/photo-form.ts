@@ -98,6 +98,37 @@ export function buildGroupedPhotoRecordInputs(input: {
   });
 }
 
+export type PhotoUploadQueueOwnershipItem = { petIds: string[] };
+
+export function restorePhotoUploadQueueOwnership<T extends PhotoUploadQueueOwnershipItem>({
+  items,
+  pets,
+  requestedPetId,
+}: {
+  items: T[];
+  pets: Array<Pick<PetOption, 'id'>>;
+  requestedPetId?: string | null;
+}) {
+  const validPetIds = new Set(pets.map((pet) => pet.id));
+  let invalidItemCount = 0;
+  let trimmedItemCount = 0;
+  const restoredItems = items.map((item) => {
+    const originalPetIds = unique(item.petIds);
+    const petIds = originalPetIds.filter((petId) => validPetIds.has(petId));
+    if (!petIds.length) invalidItemCount += 1;
+    if (petIds.length !== originalPetIds.length) trimmedItemCount += 1;
+    return { ...item, petIds };
+  });
+  const firstRestoredPetIds = restoredItems.find((item) => item.petIds.length)?.petIds ?? [];
+
+  return {
+    items: restoredItems,
+    initialPetIds: resolveInitialPhotoPetIds(pets, requestedPetId, firstRestoredPetIds),
+    invalidItemCount,
+    trimmedItemCount,
+  };
+}
+
 export function isPhotoUploadDraftDirty({
   itemCount,
   note,
@@ -133,7 +164,13 @@ export function remainingPhotoSlots(itemCount: number, limit = PHOTO_UPLOAD_LIMI
 }
 
 export type PhotoUploadSubmitBlockReason =
-  'LOADING_PETS' | 'PET_LOAD_ERROR' | 'NO_PETS' | 'NO_PHOTOS' | 'NO_SELECTED_PETS' | null;
+  | 'LOADING_PETS'
+  | 'PET_LOAD_ERROR'
+  | 'NO_PETS'
+  | 'NO_PHOTOS'
+  | 'INVALID_RESTORED_PHOTOS'
+  | 'NO_SELECTED_PETS'
+  | null;
 
 export function resolvePhotoUploadSubmitState({
   itemCount,
@@ -141,17 +178,20 @@ export function resolvePhotoUploadSubmitState({
   petCount,
   petsLoading,
   petLoadError,
+  invalidRestoredPhotoCount = 0,
 }: {
   itemCount: number;
   selectedPetCount: number;
   petCount: number;
   petsLoading: boolean;
   petLoadError: string;
+  invalidRestoredPhotoCount?: number;
 }): { canSubmit: boolean; reason: PhotoUploadSubmitBlockReason } {
   if (petsLoading) return { canSubmit: false, reason: 'LOADING_PETS' };
   if (petLoadError) return { canSubmit: false, reason: 'PET_LOAD_ERROR' };
   if (petCount === 0) return { canSubmit: false, reason: 'NO_PETS' };
   if (itemCount === 0) return { canSubmit: false, reason: 'NO_PHOTOS' };
+  if (invalidRestoredPhotoCount > 0) return { canSubmit: false, reason: 'INVALID_RESTORED_PHOTOS' };
   if (selectedPetCount === 0) return { canSubmit: false, reason: 'NO_SELECTED_PETS' };
   return { canSubmit: true, reason: null };
 }
@@ -166,6 +206,8 @@ export function photoUploadSubmitBlockMessage(reason: PhotoUploadSubmitBlockReas
       return '请先添加猫咪档案，再上传照片';
     case 'NO_PHOTOS':
       return '请先选择照片';
+    case 'INVALID_RESTORED_PHOTOS':
+      return '有恢复的照片原绑定猫咪已不可用，请移除后重新选择照片';
     case 'NO_SELECTED_PETS':
       return '请至少选择一只照片里的猫咪';
     default:

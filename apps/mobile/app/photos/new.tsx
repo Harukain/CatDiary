@@ -35,6 +35,7 @@ import {
   remainingPhotoSlots,
   resolveInitialPhotoPetIds,
   resolvePhotoUploadSubmitState,
+  restorePhotoUploadQueueOwnership,
 } from '../../src/features/photos/photo-form';
 import { resolvePhotoRecordReadiness } from '../../src/features/photos/photo-record';
 import {
@@ -74,13 +75,18 @@ export default function NewPhotoRoute() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [restoreOwnershipWarning, setRestoreOwnershipWarning] = useState('');
   const slotsLeft = remainingPhotoSlots(items.length);
   const photoLimitReached = slotsLeft === 0;
   const restoredQueueCount = items.filter((item) => item.queued).length;
+  const invalidRestoredPhotoCount = items.filter(
+    (item) => item.queued && !item.queued.petIds.length,
+  ).length;
   const loadPhotoContext = useCallback(() => {
     if (!session || !activeFamily) return;
     setPetsLoading(true);
     setPetLoadError('');
+    setRestoreOwnershipWarning('');
     void Promise.all([
       authApi.listPets(session.accessToken, activeFamily.id),
       listPhotoUploads(activeFamily.id),
@@ -88,22 +94,41 @@ export default function NewPhotoRoute() {
       .then(([rows, queued]) => {
         setPets(rows);
         if (queued[0]) {
-          const nextPetIds = resolveInitialPhotoPetIds(rows, routePetId, queued[0].petIds);
+          const restoredQueue = restorePhotoUploadQueueOwnership({
+            items: queued,
+            pets: rows,
+            requestedPetId: routePetId,
+          });
+          const nextPetIds = restoredQueue.initialPetIds;
+          const adjustedOnlyCount = Math.max(
+            0,
+            restoredQueue.trimmedItemCount - restoredQueue.invalidItemCount,
+          );
           setPetIds(nextPetIds);
           setInitialPetIds(nextPetIds);
-          setNote(queued[0].note);
+          setRestoreOwnershipWarning(
+            adjustedOnlyCount
+              ? `${adjustedOnlyCount} 张已恢复照片中已移除当前家庭不可用的猫咪归属。`
+              : '',
+          );
+          setNote(restoredQueue.items.find((item) => item.petIds.length)?.note ?? queued[0].note);
           setItems(
-            queued.map((item) => ({
-              id: item.id,
-              uri: item.fileUri,
-              name: item.fileName,
-              width: item.width,
-              height: item.height,
-              state: 'FAILED' as const,
-              progress: 0,
-              error: item.lastError ?? '等待恢复上传',
-              queued: item,
-            })),
+            restoredQueue.items.map((item) => {
+              const ownershipError = item.petIds.length
+                ? undefined
+                : '原绑定猫咪已不可用，请移除后重新选择照片。';
+              return {
+                id: item.id,
+                uri: item.fileUri,
+                name: item.fileName,
+                width: item.width,
+                height: item.height,
+                state: 'FAILED' as const,
+                progress: 0,
+                error: ownershipError ?? item.lastError ?? '等待恢复上传',
+                queued: item,
+              };
+            }),
           );
         } else {
           const nextPetIds = resolveInitialPhotoPetIds(rows, routePetId);
@@ -115,6 +140,7 @@ export default function NewPhotoRoute() {
         setPets([]);
         setPetIds([]);
         setInitialPetIds([]);
+        setRestoreOwnershipWarning('');
         setPetLoadError(cause instanceof Error ? cause.message : '照片归属加载失败');
       })
       .finally(() => setPetsLoading(false));
@@ -130,8 +156,16 @@ export default function NewPhotoRoute() {
         petCount: pets.length,
         petsLoading,
         petLoadError,
+        invalidRestoredPhotoCount,
       }),
-    [items.length, petIds.length, petLoadError, pets.length, petsLoading],
+    [
+      invalidRestoredPhotoCount,
+      items.length,
+      petIds.length,
+      petLoadError,
+      pets.length,
+      petsLoading,
+    ],
   );
   const canUpload = submitState.canSubmit;
   const fieldsDisabled =
@@ -420,10 +454,17 @@ export default function NewPhotoRoute() {
         </Text>
         {restoredQueueCount ? (
           <View style={styles.restoreNotice}>
-            <Ionicons name="cloud-upload-outline" size={18} color={colors.warningDark} />
+            <Ionicons
+              name={invalidRestoredPhotoCount ? 'alert-circle-outline' : 'cloud-upload-outline'}
+              size={18}
+              color={colors.warningDark}
+            />
             <Text style={styles.restoreNoticeText}>
-              已恢复 {restoredQueueCount}{' '}
-              张上次未完成的照片；重试时会沿用每张照片原本保存的猫咪归属和备注。
+              {invalidRestoredPhotoCount
+                ? `已恢复 ${restoredQueueCount} 张上次未完成的照片，其中 ${invalidRestoredPhotoCount} 张原绑定猫咪已不可用，请先移除后重新选择。`
+                : restoreOwnershipWarning
+                  ? `已恢复 ${restoredQueueCount} 张上次未完成的照片；${restoreOwnershipWarning}重试时会沿用每张照片当前有效的猫咪归属和备注。`
+                  : `已恢复 ${restoredQueueCount} 张上次未完成的照片；重试时会沿用每张照片原本保存的猫咪归属和备注。`}
             </Text>
           </View>
         ) : null}

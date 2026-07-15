@@ -10,6 +10,7 @@ import {
   resolveInitialPhotoPetIds,
   resolvePhotoUploadSubmitState,
   resolvePhotoFilterPetId,
+  restorePhotoUploadQueueOwnership,
   samePhotoPetSelection,
 } from './photo-form';
 
@@ -158,6 +159,37 @@ describe('photo form pet context rules', () => {
     ]);
   });
 
+  it('restores queued photo ownership with only pets that still belong to the family', () => {
+    const restored = restorePhotoUploadQueueOwnership({
+      pets,
+      requestedPetId: 'pet-a',
+      items: [
+        { id: 'queue-a', petIds: ['missing', 'pet-b', 'pet-b'] },
+        { id: 'queue-b', petIds: ['missing'] },
+      ],
+    });
+
+    expect(restored.items).toEqual([
+      { id: 'queue-a', petIds: ['pet-b'] },
+      { id: 'queue-b', petIds: [] },
+    ]);
+    expect(restored.initialPetIds).toEqual(['pet-b']);
+    expect(restored.invalidItemCount).toBe(1);
+    expect(restored.trimmedItemCount).toBe(2);
+  });
+
+  it('falls back to route ownership only when every queued photo lost valid ownership', () => {
+    const restored = restorePhotoUploadQueueOwnership({
+      pets,
+      requestedPetId: 'pet-c',
+      items: [{ id: 'queue-a', petIds: ['missing'] }],
+    });
+
+    expect(restored.items).toEqual([{ id: 'queue-a', petIds: [] }]);
+    expect(restored.initialPetIds).toEqual(['pet-c']);
+    expect(restored.invalidItemCount).toBe(1);
+  });
+
   it('detects photo upload drafts that need a leave confirmation', () => {
     const base = { itemCount: 0, note: '', petIds: ['pet-a'], initialPetIds: ['pet-a'] };
 
@@ -220,6 +252,22 @@ describe('photo form pet context rules', () => {
       }),
     ).toEqual({ canSubmit: false, reason: 'NO_PETS' });
     expect(photoUploadSubmitBlockMessage('NO_PETS')).toBe('请先添加猫咪档案，再上传照片');
+  });
+
+  it('blocks restored photos whose original pet ownership is no longer valid', () => {
+    expect(
+      resolvePhotoUploadSubmitState({
+        itemCount: 1,
+        selectedPetCount: 1,
+        petCount: 2,
+        petsLoading: false,
+        petLoadError: '',
+        invalidRestoredPhotoCount: 1,
+      }),
+    ).toEqual({ canSubmit: false, reason: 'INVALID_RESTORED_PHOTOS' });
+    expect(photoUploadSubmitBlockMessage('INVALID_RESTORED_PHOTOS')).toBe(
+      '有恢复的照片原绑定猫咪已不可用，请移除后重新选择照片',
+    );
   });
 
   it('requires both at least one photo and at least one selected pet before uploading', () => {
