@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   blankRecordFormValue,
+  buildPendingRecordSummary,
   buildRecordData,
+  isPendingLocalRecord,
   isRecordDetailDraftDirty,
   isRecordDraftDirty,
   isRecordDraftReady,
@@ -144,6 +146,44 @@ describe('record form rules', () => {
       text: '已保存到本机，联网后会自动同步到家庭时间线。',
     });
     expect(recordTimelineNoticeState('/records/new')).toBeNull();
+  });
+
+  it('builds a local pending record that can appear in the offline timeline', () => {
+    const record = buildPendingRecordSummary(
+      {
+        clientId: 'client-record-1',
+        petId: 'pet-a',
+        type: 'FOOD',
+        title: '饮食记录 · 主食罐',
+        occurredAt: '2026-07-15T02:30:00.000Z',
+        abnormal: false,
+        data: { foodName: '主食罐', amount: 85, unit: 'g' },
+        note: '吃完了',
+      },
+      {
+        pets: [
+          { id: 'pet-a', name: '福宝' },
+          { id: 'pet-b', name: '年糕' },
+        ],
+        author: { id: 'user-a', displayName: 'Haruka' },
+      },
+    );
+
+    expect(record).toMatchObject({
+      id: 'client-record-1',
+      clientId: 'client-record-1',
+      petId: 'pet-a',
+      authorId: 'user-a',
+      type: 'FOOD',
+      source: 'MANUAL',
+      status: 'ACTIVE',
+      version: 0,
+      pet: { id: 'pet-a', name: '福宝' },
+      author: { id: 'user-a', displayName: 'Haruka' },
+    });
+    expect(recordOwnerLabel(record)).toBe('福宝');
+    expect(isPendingLocalRecord(record)).toBe(true);
+    expect(isPendingLocalRecord({ ...record, id: 'server-record-1', version: 1 })).toBe(false);
   });
 
   it('does not treat the initial blank record as dirty', () => {

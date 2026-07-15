@@ -16,6 +16,7 @@ import {
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
 import {
+  isPendingLocalRecord,
   recordOwnerLabel,
   recordTimelineNoticeState,
 } from '../../src/features/records/record-form';
@@ -235,7 +236,15 @@ function RecordItem({
         style={({ pressed }) => [styles.recordCard, pressed && styles.pressed]}
       >
         <View style={styles.recordTop}>
-          <Text style={styles.recordType}>{recordTypeLabel(record.type)}</Text>
+          <View style={styles.recordTypeRow}>
+            <Text style={styles.recordType}>{recordTypeLabel(record.type)}</Text>
+            {isPendingLocalRecord(record) ? (
+              <View style={styles.pendingPill}>
+                <Ionicons name="cloud-upload-outline" size={12} color={colors.warningDark} />
+                <Text style={styles.pendingText}>本机待同步</Text>
+              </View>
+            ) : null}
+          </View>
           <Text
             style={styles.recordTime}
           >{`${when.getMonth() + 1}月${when.getDate()}日 ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`}</Text>
@@ -414,9 +423,26 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
-  recordTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  recordTop: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  recordTypeRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   recordType: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   recordTime: { ...typography.caption, color: colors.textTertiary },
+  pendingPill: {
+    minHeight: 24,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.warningSoft,
+  },
+  pendingText: { ...typography.caption, color: colors.warningDark, fontWeight: '600' },
   recordTitle: { ...typography.h3, color: colors.ink },
   recordMeta: { ...typography.secondary, color: colors.textSecondary },
   photoStrip: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },

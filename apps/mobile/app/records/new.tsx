@@ -26,11 +26,12 @@ import {
   TextButton,
 } from '../../src/shared/ui/primitives';
 import {
-  enqueueOfflineOperation,
+  enqueueOfflineRecordOperation,
   isNetworkFailure,
 } from '../../src/features/offline/offline-queue';
 import {
   blankRecordFormValue,
+  buildPendingRecordSummary,
   buildRecordData,
   datePart,
   fieldConfig,
@@ -222,7 +223,16 @@ export default function NewRecordScreen() {
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         try {
-          await enqueueOfflineOperation(operation);
+          await enqueueOfflineRecordOperation(
+            operation,
+            buildPendingRecordSummary(input, {
+              pets,
+              author: {
+                id: session.user.id,
+                displayName: session.user.displayName,
+              },
+            }),
+          );
           allowLeave.current = true;
           router.replace({
             pathname: recordTimelineRoute,

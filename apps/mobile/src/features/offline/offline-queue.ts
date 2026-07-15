@@ -114,6 +114,21 @@ export async function removeCachedTask(taskId: string) {
 
 export async function enqueueOfflineOperation(operation: OfflineOperation) {
   const db = await database();
+  await insertOfflineOperation(db, operation);
+}
+
+export async function enqueueOfflineRecordOperation(
+  operation: OfflineOperation,
+  record: RecordSummary,
+) {
+  const db = await database();
+  await db.withTransactionAsync(async () => {
+    await insertOfflineOperation(db, operation);
+    await upsertRecordCache(db, operation.familyId, record);
+  });
+}
+
+async function insertOfflineOperation(db: SQLite.SQLiteDatabase, operation: OfflineOperation) {
   await db.runAsync(
     `INSERT OR IGNORE INTO offline_operations
       (id, family_id, path, body_json, idempotency_key, status, created_at)
@@ -152,7 +167,10 @@ export async function flushOfflineOperations(
     };
     try {
       await send(accessToken, operation);
-      await db.runAsync('DELETE FROM offline_operations WHERE id = ?', row.id);
+      await db.withTransactionAsync(async () => {
+        await db.runAsync('DELETE FROM offline_operations WHERE id = ?', row.id);
+        await db.runAsync('DELETE FROM record_cache WHERE id = ?', row.id);
+      });
       synced += 1;
     } catch (error) {
       if (!(error instanceof AuthApiError)) break;
@@ -181,15 +199,7 @@ export async function cacheRecords(familyId: string, records: RecordSummary[]) {
   const db = await database();
   await db.withTransactionAsync(async () => {
     for (const record of records) {
-      await db.runAsync(
-        `INSERT OR REPLACE INTO record_cache (id, family_id, pet_id, occurred_at, record_json, cached_at) VALUES (?, ?, ?, ?, ?, ?)`,
-        record.id,
-        familyId,
-        record.petId,
-        record.occurredAt,
-        JSON.stringify(record),
-        Date.now(),
-      );
+      await upsertRecordCache(db, familyId, record);
     }
     await db.runAsync(
       `DELETE FROM record_cache WHERE family_id = ? AND occurred_at < ?`,
@@ -197,6 +207,22 @@ export async function cacheRecords(familyId: string, records: RecordSummary[]) {
       new Date(Date.now() - 90 * 86_400_000).toISOString(),
     );
   });
+}
+
+async function upsertRecordCache(
+  db: SQLite.SQLiteDatabase,
+  familyId: string,
+  record: RecordSummary,
+) {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO record_cache (id, family_id, pet_id, occurred_at, record_json, cached_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    record.id,
+    familyId,
+    record.petId,
+    record.occurredAt,
+    JSON.stringify(record),
+    Date.now(),
+  );
 }
 
 export async function getCachedRecords(familyId: string, petId?: string) {

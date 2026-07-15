@@ -254,6 +254,44 @@ export function recordTimelineNoticeState(
     return { tone: 'warning', text: '已保存到本机，联网后会自动同步到家庭时间线。' };
   return null;
 }
+export function buildPendingRecordSummary(
+  input: {
+    clientId: string;
+    petId: string | null;
+    type: ManualRecordType;
+    title: string;
+    occurredAt: string;
+    abnormal: boolean;
+    data: Record<string, unknown>;
+    note?: string;
+  },
+  context: {
+    pets: PetOption[];
+    author: { id: string; displayName: string | null };
+  },
+): RecordSummary {
+  const pet = input.petId ? context.pets.find((item) => item.id === input.petId) : null;
+  return {
+    id: input.clientId,
+    clientId: input.clientId,
+    petId: input.petId,
+    authorId: context.author.id,
+    type: input.type,
+    title: input.title,
+    source: 'MANUAL',
+    status: 'ACTIVE',
+    abnormal: input.abnormal,
+    occurredAt: input.occurredAt,
+    data: input.data,
+    note: input.note ?? null,
+    version: 0,
+    pet: pet ? { id: pet.id, name: pet.name } : null,
+    author: context.author,
+  };
+}
+export function isPendingLocalRecord(record: Pick<RecordSummary, 'clientId' | 'id' | 'version'>) {
+  return record.version === 0 && record.id === record.clientId;
+}
 export function isRecordDraftDirty({
   type,
   value,
