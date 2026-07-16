@@ -67,6 +67,18 @@ EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
 
 在手机的 Development Build 中选择该 Metro 开发服务器；首次验收前用手机浏览器访问 `http://开发机局域网IP:3000/api/v1/health/live`，确认 API 连通。Preview/Production 不允许此方式，必须使用正式 HTTPS API。
 
+### iOS 真机稳定调试
+
+iPhone 真机不能访问 Mac 上的 `localhost`、`127.0.0.1` 或 Android Emulator 专用的 `10.0.2.2`。首次真机回归前使用仓库内预检脚本检查 Xcode 命令行工具、已信任设备、本机 Metro、局域网 Metro 和局域网 API：
+
+```bash
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+IOS_METRO_URL='http://开发机局域网IP:8081' \
+pnpm ios:preflight
+```
+
+若没有设置 `IOS_METRO_URL`，脚本仍会检查本机 Metro 和 API，并输出可尝试的局域网 IPv4；但无法生成 iPhone 可直接打开的 Development Client 深链。预检通过后，在 iPhone 的 Development Build 中选择该 Metro 项目；如果自动发现失败，可把脚本输出的 `exp+catdiary://...` 深链复制到 iPhone Safari 打开。
+
 ### Android USB 稳定调试（推荐用于局域网不稳定时）
 
 保持 USB 调试已授权。该模式下，Metro 与 API 都通过 ADB 转发到开发机本机，避免手机 Wi-Fi、热点隔离或 VPN 影响数据请求：

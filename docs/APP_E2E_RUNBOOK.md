@@ -20,8 +20,27 @@
 
 - 已安装 Maestro CLI。
 - Android 或 iOS Development Build 已安装并可打开 `com.haruka.catdiary`。
-- 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix --launch`，让脚本检查 USB reverse 后直接打开 Development Build 并加载当前 Metro 项目。
+- 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix --launch`，让脚本检查 USB reverse 后直接打开 Development Build 并加载当前 Metro 项目；iPhone 真机可先运行 `pnpm ios:preflight`，确认 Xcode 命令行工具、已信任设备、局域网 API 和 Metro 连通。
 - API 处于开发或测试环境，验证码为 `123456`。
+
+## iOS Development Build 真机预检
+
+iPhone 真机不能访问 Mac 上的 `localhost`、`127.0.0.1` 或 Android Emulator 专用的 `10.0.2.2`。真机验收前，先让 iPhone 与 Mac 接入同一 Wi-Fi，并使用 Mac 的局域网 IPv4 启动 Metro：
+
+```bash
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+  pnpm --filter @cat-diary/mobile exec expo start --dev-client --lan --clear --port 8081
+```
+
+随后在另一个终端执行：
+
+```bash
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+IOS_METRO_URL='http://开发机局域网IP:8081' \
+pnpm ios:preflight
+```
+
+该脚本只做只读检查：Xcode 命令行工具、可见且已信任的 iPhone/iPad、本机 Metro、iPhone 可访问的 Metro、以及 iPhone 可访问的 API `/health/live`。预检通过后，如果 Development Build 没有自动发现项目，可复制脚本输出的 `exp+catdiary://...` 深链到 iPhone Safari 打开。
 
 建议使用尚未登录过的新手机号，避免直接进入已有家庭。单独验证登录建档流程时执行：
 

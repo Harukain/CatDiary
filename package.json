@@ -18,6 +18,7 @@
     "test:privacy-manifest": "./scripts/verify-ios-privacy-manifest.sh",
     "eas:check": "node scripts/check-eas-readiness.mjs",
     "eas": "pnpm --dir apps/mobile eas",
+    "ios:preflight": "node scripts/ios-dev-preflight.mjs",
     "android:preflight": "node scripts/android-dev-preflight.mjs",
     "acceptance:audit": "node scripts/verify-external-acceptance.mjs",
     "acceptance:gate": "node scripts/verify-external-acceptance.mjs --strict",
