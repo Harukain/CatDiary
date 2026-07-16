@@ -10,12 +10,15 @@ pnpm db:validate
 pnpm verify
 pnpm test:integration
 pnpm test:restore
+pnpm acceptance:gate
 pnpm audit --audit-level high
 ```
 
 `pnpm test:integration` 会先自动执行 `prisma migrate deploy` 和 `prisma migrate status`，迁移失败时不会启动 API/Worker，避免新代码连接旧数据库结构。
 
 CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gitleaks 密钥扫描。
+
+`pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项；不要把 Secret、Token、密码或私钥写入清单。
 
 当前依赖审计无高危或严重漏洞。Expo 构建工具链间接依赖的 `uuid@7` 有 1 个中危公告；它位于本地原生工程配置生成链路，不进入业务 API 运行时，待 Expo 上游升级后移除。禁止用跨大版本强制 override 破坏 Expo 工具链。
 

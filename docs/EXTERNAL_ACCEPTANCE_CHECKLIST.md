@@ -2,6 +2,15 @@
 
 本清单只记录标识和验收结果，不填写任何 Secret、Token、密码或私钥。敏感值仅进入 EAS Secret、GitHub Environment Secret 或腾讯云密钥管理服务。
 
+可使用仓库脚本审计当前缺口：
+
+```bash
+pnpm acceptance:audit
+pnpm acceptance:gate
+```
+
+`acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
+
 ## 1. 需要确认的非敏感信息
 
 - [x] Expo/EAS 组织：`harukains-team`

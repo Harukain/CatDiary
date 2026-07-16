@@ -17,6 +17,8 @@
     "eas:check": "node scripts/check-eas-readiness.mjs",
     "eas": "pnpm --dir apps/mobile eas",
     "android:preflight": "node scripts/android-dev-preflight.mjs",
+    "acceptance:audit": "node scripts/verify-external-acceptance.mjs",
+    "acceptance:gate": "node scripts/verify-external-acceptance.mjs --strict",
     "queue:ops": "pnpm --filter @cat-diary/domain build && pnpm --filter @cat-diary/worker build && pnpm --filter @cat-diary/worker queue:ops",
     "openapi:check": "node scripts/verify-openapi.mjs",
     "openapi:update": "UPDATE_OPENAPI=1 node scripts/verify-openapi.mjs",
