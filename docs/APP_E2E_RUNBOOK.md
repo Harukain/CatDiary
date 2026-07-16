@@ -33,7 +33,7 @@ ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8082 pnpm android:smoke
 
 该命令会执行 Android 预检、清空当前设备 logcat、发送 Development Client 深链、确认 `com.haruka.catdiary` 进程存活，并在观察窗口内拦截 `AndroidRuntime`、`FATAL EXCEPTION` 和常见 `ReactNativeJS` 启动崩溃。它只能证明“当前真机能加载且未立即崩溃”，不替代下面的 Maestro 主流程、权限、照片、推送和离线验收。
 
-如果需要把这次轻量冒烟写入本轮真机验收草稿，先生成草稿，再让 smoke 输出脱敏 JSON，最后合并 Android 设备预检与崩溃日志字段：
+如果需要把这次轻量冒烟写入本轮真机验收草稿，先生成草稿，再让 smoke 输出脱敏 JSON，最后合并 Android 设备信息、App 版本、预检与崩溃日志字段：
 
 ```bash
 pnpm acceptance:evidence-draft -- \
@@ -48,7 +48,7 @@ pnpm acceptance:android-smoke-evidence -- \
   --smoke-file docs/device-acceptance/2026-07-17-android-smoke.json
 ```
 
-`acceptance:android-smoke-evidence` 只更新 Android `deviceRuns` 里的预检状态和 JS/原生启动崩溃检查结果，不会把 14 条 MVP 主流程、权限、照片、推送、飞书或离线验收标记为通过。
+`acceptance:android-smoke-evidence` 只更新 Android `deviceRuns` 里的设备型号、系统版本、屏幕、App version/runtimeVersion、预检状态和 JS/原生启动崩溃检查结果，不会把 14 条 MVP 主流程、权限、照片、推送、飞书或离线验收标记为通过。
 
 ## iOS Development Build 真机预检
 

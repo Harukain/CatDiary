@@ -171,7 +171,7 @@ pnpm acceptance:android-smoke-evidence -- \
   --smoke-file docs/device-acceptance/2026-07-17-android-smoke.json
 ```
 
-该合并只会更新 Android 设备预检和启动崩溃检查，不会勾选 MVP 主流程或权限、照片、推送、飞书、离线专项。
+该合并只会更新 Android 设备信息、App 版本、设备预检和启动崩溃检查，不会勾选 MVP 主流程或权限、照片、推送、飞书、离线专项。
 
 如果要在预检通过后直接打开 Android Development Build 并加载当前 Metro 项目，使用：
 

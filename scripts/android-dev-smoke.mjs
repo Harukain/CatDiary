@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 const PACKAGE_NAME = 'com.haruka.catdiary';
@@ -164,6 +164,123 @@ function pidOf(serial) {
   }
 }
 
+function readAndroidDeviceMetadata(serial) {
+  const manufacturer = adb(serial, ['shell', 'getprop', 'ro.product.manufacturer']);
+  const model = adb(serial, ['shell', 'getprop', 'ro.product.model']);
+  const release = adb(serial, ['shell', 'getprop', 'ro.build.version.release']);
+  const sdk = adb(serial, ['shell', 'getprop', 'ro.build.version.sdk']);
+  const size = parseWmSize(adb(serial, ['shell', 'wm', 'size']));
+  const density = parseWmDensity(adb(serial, ['shell', 'wm', 'density']));
+  const screen = [size, density].filter(Boolean).join(' / ');
+
+  return {
+    model: requireNonEmpty(formatDeviceModel(manufacturer, model), 'Android 设备型号'),
+    osVersion: requireNonEmpty(formatAndroidVersion(release, sdk), 'Android 系统版本'),
+    screen: requireNonEmpty(screen, 'Android 屏幕信息'),
+  };
+}
+
+function readAndroidAppBuildMetadata(serial) {
+  const config = readMobileAppConfigVersion();
+  const packageInfo = adb(serial, ['shell', 'dumpsys', 'package', PACKAGE_NAME]);
+  const version = parsePackageVersionName(packageInfo) || config.appVersion;
+  const runtimeVersion =
+    config.runtimeVersionPolicy === 'appVersion' ? version : config.runtimeVersion;
+  const versionCode = parsePackageVersionCode(packageInfo);
+
+  return {
+    profile: 'development',
+    version: requireNonEmpty(version, 'Android App version'),
+    runtimeVersion: requireNonEmpty(runtimeVersion, 'Android App runtimeVersion'),
+    ...(versionCode ? { versionCode } : {}),
+  };
+}
+
+function readMobileAppConfigVersion() {
+  const appJsonPath = resolve(root, 'apps/mobile/app.json');
+  const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
+  const appVersion = requireNonEmpty(appJson?.expo?.version, 'apps/mobile/app.json expo.version');
+  const runtimeVersion = appJson?.expo?.runtimeVersion;
+
+  if (runtimeVersion?.policy === 'appVersion') {
+    return {
+      appVersion,
+      runtimeVersion: appVersion,
+      runtimeVersionPolicy: 'appVersion',
+    };
+  }
+
+  if (typeof runtimeVersion === 'string' && runtimeVersion.trim().length > 0) {
+    return {
+      appVersion,
+      runtimeVersion: runtimeVersion.trim(),
+      runtimeVersionPolicy: 'custom',
+    };
+  }
+
+  throw new Error('apps/mobile/app.json 必须配置 runtimeVersion 或 runtimeVersion.policy');
+}
+
+function formatDeviceModel(manufacturer, model) {
+  const normalizedManufacturer = String(manufacturer ?? '').trim();
+  const normalizedModel = String(model ?? '').trim();
+  if (!normalizedManufacturer) return normalizedModel;
+  if (!normalizedModel) return normalizedManufacturer;
+  if (normalizedModel.toLowerCase().includes(normalizedManufacturer.toLowerCase())) {
+    return normalizedModel;
+  }
+  return `${normalizedManufacturer} ${normalizedModel}`;
+}
+
+function formatAndroidVersion(release, sdk) {
+  const normalizedRelease = String(release ?? '').trim();
+  const normalizedSdk = String(sdk ?? '').trim();
+  if (!normalizedRelease) return normalizedSdk ? `Android API ${normalizedSdk}` : '';
+  return normalizedSdk
+    ? `Android ${normalizedRelease} (API ${normalizedSdk})`
+    : `Android ${normalizedRelease}`;
+}
+
+function parseWmSize(output) {
+  return parseFirstMatch(
+    output,
+    /Physical size:\s*([0-9]+x[0-9]+)/i,
+    /Override size:\s*([0-9]+x[0-9]+)/i,
+  );
+}
+
+function parseWmDensity(output) {
+  const value = parseFirstMatch(
+    output,
+    /Physical density:\s*([0-9]+)/i,
+    /Override density:\s*([0-9]+)/i,
+  );
+  return value ? `${value}dpi` : '';
+}
+
+function parsePackageVersionName(output) {
+  return parseFirstMatch(output, /\bversionName=([^\s]+)/);
+}
+
+function parsePackageVersionCode(output) {
+  return parseFirstMatch(output, /\bversionCode=([0-9]+)/);
+}
+
+function parseFirstMatch(output, ...patterns) {
+  const source = String(output ?? '');
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return '';
+}
+
+function requireNonEmpty(value, label) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) throw new Error(`${label} 为空，无法写入可用真机 smoke 证据`);
+  return normalized;
+}
+
 function suspiciousLogLines(logcat) {
   return logcat
     .split('\n')
@@ -249,6 +366,10 @@ function writeEvidenceFile(outputPath, result) {
     packageName: PACKAGE_NAME,
     device: {
       identifier: redactDeviceIdentifier(result.serial),
+      ...readAndroidDeviceMetadata(result.serial),
+    },
+    appBuild: {
+      ...readAndroidAppBuildMetadata(result.serial),
     },
     appRuntime: {
       apiPort: API_PORT,
@@ -353,15 +474,35 @@ function runSelfCheck() {
 
   const crashMatches = suspiciousLogLines(sampleCrash).length >= 2;
   const cleanMatches = suspiciousLogLines(sampleClean).length === 0;
+  const parsesScreenSize =
+    parseWmSize('Physical size: 1080x2376\nOverride size: 720x1584') === '1080x2376';
+  const parsesScreenDensity =
+    parseWmDensity('Physical density: 440\nOverride density: 320') === '440dpi';
+  const parsesVersionName =
+    parsePackageVersionName('versionCode=1000000 minSdk=23 targetSdk=35\nversionName=1.0.0') ===
+    '1.0.0';
+  const parsesVersionCode =
+    parsePackageVersionCode('versionCode=1000000 minSdk=23 targetSdk=35') === '1000000';
 
-  if (!crashMatches || !cleanMatches) {
-    throw new Error('Android smoke 崩溃识别规则自检失败');
+  if (
+    !crashMatches ||
+    !cleanMatches ||
+    !parsesScreenSize ||
+    !parsesScreenDensity ||
+    !parsesVersionName ||
+    !parsesVersionCode
+  ) {
+    throw new Error('Android smoke 崩溃识别或元数据解析规则自检失败');
   }
 
   console.log(
     `ANDROID_SMOKE_SELF_CHECK_OK ${JSON.stringify({
       crashMatches,
       cleanMatches,
+      parsesScreenSize,
+      parsesScreenDensity,
+      parsesVersionName,
+      parsesVersionCode,
       defaultDurationMs: DEFAULT_DURATION_MS,
     })}`,
   );

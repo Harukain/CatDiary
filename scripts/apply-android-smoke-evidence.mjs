@@ -57,7 +57,16 @@ function applyAndroidSmokeEvidence({ file, smokeFile, json: _json }) {
   androidRun.checkedAt = smoke.createdAt;
   androidRun.device = {
     ...androidRun.device,
+    model: smoke.device.model,
+    osVersion: smoke.device.osVersion,
+    screen: smoke.device.screen,
     identifier: smoke.device.identifier,
+  };
+  androidRun.appBuild = {
+    ...androidRun.appBuild,
+    ...(smoke.appBuild.profile ? { profile: smoke.appBuild.profile } : {}),
+    version: smoke.appBuild.version,
+    runtimeVersion: smoke.appBuild.runtimeVersion,
   };
 
   if (smoke.preflight.status === 'passed') {
@@ -92,6 +101,9 @@ function applyAndroidSmokeEvidence({ file, smokeFile, json: _json }) {
     androidPreflightStatus: androidRun.preflight.status,
     androidJsCrashFree: androidRun.logs.jsCrashFree,
     androidNativeCrashFree: androidRun.logs.nativeCrashFree,
+    androidDeviceModel: androidRun.device.model,
+    androidAppVersion: androidRun.appBuild.version,
+    androidRuntimeVersion: androidRun.appBuild.runtimeVersion,
   };
 }
 
@@ -134,6 +146,20 @@ function validateSmokeEvidence(smoke) {
   if (!/^redacted/.test(String(smoke.device?.identifier ?? ''))) {
     throw new Error('Android smoke 证据 device.identifier 必须脱敏');
   }
+  requireSmokeString(smoke.device, 'model', 'device');
+  requireSmokeString(smoke.device, 'osVersion', 'device');
+  requireSmokeString(smoke.device, 'screen', 'device');
+  requireSmokeString(smoke.appBuild, 'version', 'appBuild');
+  requireSmokeString(smoke.appBuild, 'runtimeVersion', 'appBuild');
+  if (smoke.appBuild?.profile !== undefined) {
+    requireSmokeString(smoke.appBuild, 'profile', 'appBuild');
+  }
+  if (smoke.appBuild?.versionCode !== undefined) {
+    const versionCode = String(smoke.appBuild.versionCode);
+    if (!/^[0-9]+$/.test(versionCode)) {
+      throw new Error('Android smoke 证据 appBuild.versionCode 必须是数字字符串');
+    }
+  }
   if (!Number.isInteger(smoke.appRuntime?.observedMs) || smoke.appRuntime.observedMs <= 0) {
     throw new Error('Android smoke 证据 appRuntime.observedMs 必须是正整数');
   }
@@ -143,6 +169,17 @@ function validateSmokeEvidence(smoke) {
       throw new Error(`Android smoke 证据 appRuntime.${key} 必须是 1-65535 的整数`);
     }
   }
+}
+
+function requireSmokeString(object, key, prefix) {
+  const value = object?.[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Android smoke 证据 ${prefix}.${key} 必须是非空字符串`);
+  }
+  if (/待填写|待确认|<[^>]+>/.test(value)) {
+    throw new Error(`Android smoke 证据 ${prefix}.${key} 不能包含占位内容`);
+  }
+  return value.trim();
 }
 
 function runSelfCheck() {
@@ -175,6 +212,13 @@ function runSelfCheck() {
     const checks = {
       appliesEvidence: applied.status === 0,
       androidPreflightPassed: androidRun?.preflight?.status === 'passed',
+      androidDeviceMetadataApplied:
+        androidRun?.device?.model === 'OPPO PKG110' &&
+        androidRun?.device?.osVersion === 'Android 15 (API 35)' &&
+        androidRun?.device?.screen === '1080x2376 / 440dpi',
+      androidAppBuildApplied:
+        androidRun?.appBuild?.version === '1.0.0' &&
+        androidRun?.appBuild?.runtimeVersion === '1.0.0',
       androidLogsCrashFree:
         androidRun?.logs?.jsCrashFree === true && androidRun?.logs?.nativeCrashFree === true,
       doesNotMarkMvpFlowsPassed: after.mvpFlows.every((item) => item.status === 'pending'),
@@ -207,6 +251,15 @@ function smokeFixture(sourceCommit) {
     packageName: 'com.haruka.catdiary',
     device: {
       identifier: 'redacted-last4-40dd',
+      model: 'OPPO PKG110',
+      osVersion: 'Android 15 (API 35)',
+      screen: '1080x2376 / 440dpi',
+    },
+    appBuild: {
+      profile: 'development',
+      version: '1.0.0',
+      runtimeVersion: '1.0.0',
+      versionCode: '1000000',
     },
     appRuntime: {
       apiPort: 3310,
@@ -323,7 +376,7 @@ Options:
   --self-check        只运行脚本自检，不读取真实设备。
 
 说明：
-  本工具只更新 Android deviceRuns 中的预检状态和崩溃日志状态。
+  本工具只更新 Android deviceRuns 中的设备信息、App 版本、预检状态和崩溃日志状态。
   它不会把 14 条 MVP 主流程、权限、照片、推送、飞书或离线验收标记为通过。
 `);
 }
