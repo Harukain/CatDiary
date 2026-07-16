@@ -165,6 +165,7 @@
 - API/Worker 独立生产镜像、非 root/健康检查/Prisma 生成、Preview Compose 与 Trivy CI 门禁已完成；两个容器真实连接 PostgreSQL/Redis 冒烟通过。
 - 腾讯云 SMS 3.0 随机验证码与 Redis 一次性校验已实现；Worker/API 生产环境均拒绝开发默认密钥和缺失的外部服务配置。
 - 生产环境安全预检：新增 `pnpm test:production-env`，构建后复用 API/Worker 真实环境校验函数，持续验证生产环境拒绝固定开发验证码、开发默认密钥、缺失 COS/SMS 配置、Worker 缺失私有对象存储以及生产 Swagger。
+- Preview 外部探针：新增 `pnpm preview:probe`，在真实 Preview HTTPS API 部署后自动验证 live/ready、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读以及固定开发验证码不会被接受；该命令不发送真实短信，便于勾选 Preview 环境验收项前取得证据。
 - Expo Receipt 的成功、尚未生成和设备失效三条分支已通过单元测试；第 16 个迁移已在本地 PostgreSQL 应用，完整 API/Worker 集成回归通过。
 - 集成测试入口会在启动 API/Worker 前自动执行 `prisma migrate deploy` 与 `migrate status`，避免代码先于数据库结构启动；Receipt 失败重试使用最新有效 Token 的分支已加入 API 单元测试。
 - 会话/推送 Token 真实集成已覆盖两台设备注册、远程撤销只影响目标设备、当前设备退出以及全部设备退出，数据库 active 状态全部符合预期。

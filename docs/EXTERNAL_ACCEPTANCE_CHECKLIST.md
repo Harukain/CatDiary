@@ -117,6 +117,16 @@ adb shell am start -a android.intent.action.VIEW \
 
 ## 4. Preview 环境
 
+部署 Preview API 后先执行：
+
+```bash
+PREVIEW_API_URL='https://preview.example.com/api/v1' \
+PREVIEW_METRICS_TOKEN='从密钥管理临时注入，不写入本文档' \
+pnpm preview:probe
+```
+
+该命令只记录验收动作，不要求把 Token、Secret 或真实域名写入清单。
+
 - [ ] 独立 PostgreSQL、Redis、COS、短信和推送配置
 - [ ] `NODE_ENV=production` 且固定验证码无法启动
 - [ ] 真实手机号收到随机 6 位验证码，成功验证后不可重复使用

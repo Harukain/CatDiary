@@ -20,6 +20,16 @@ CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gi
 
 `pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项；不要把 Secret、Token、密码或私钥写入清单。
 
+Preview API 部署后，先运行以下外部探针再勾选 Preview 环境相关项：
+
+```bash
+PREVIEW_API_URL='https://preview.example.com/api/v1' \
+PREVIEW_METRICS_TOKEN='从密钥管理临时注入，不写入文档' \
+pnpm preview:probe
+```
+
+该探针会验证 Preview API 使用非本地 HTTPS、API live/ready 正常、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读取，以及固定开发验证码 `123456` 不会被接受。它不会触发真实短信发送；固定验证码检查只调用验证码校验接口，若 Preview 误开开发验证码会失败。
+
 当前依赖审计无高危或严重漏洞。Expo 构建工具链间接依赖的 `uuid@7` 有 1 个中危公告；它位于本地原生工程配置生成链路，不进入业务 API 运行时，待 Expo 上游升级后移除。禁止用跨大版本强制 override 破坏 Expo 工具链。
 
 ## 2. 服务端环境
