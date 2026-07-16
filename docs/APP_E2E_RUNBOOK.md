@@ -18,7 +18,7 @@
 
 - 已安装 Maestro CLI。
 - Android 或 iOS Development Build 已安装并可打开 `com.haruka.catdiary`。
-- 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix`。
+- 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix --launch`，让脚本检查 USB reverse 后直接打开 Development Build 并加载当前 Metro 项目。
 - API 处于开发或测试环境，验证码为 `123456`。
 
 建议使用尚未登录过的新手机号，避免直接进入已有家庭。单独验证登录建档流程时执行：

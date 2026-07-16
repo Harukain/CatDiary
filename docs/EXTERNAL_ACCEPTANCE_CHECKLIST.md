@@ -93,6 +93,12 @@ adb devices -l
 pnpm android:preflight -- --fix
 ```
 
+如果要在预检通过后直接打开 Android Development Build 并加载当前 Metro 项目，使用：
+
+```bash
+pnpm android:preflight -- --fix --launch
+```
+
 在设备上打开 Development Build 后，通过 Metro 的开发链接载入项目；若启动器没有自动选择项目，可使用以下深链：
 
 ```bash

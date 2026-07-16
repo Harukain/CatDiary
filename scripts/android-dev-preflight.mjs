@@ -5,7 +5,27 @@ const REQUIRED_REVERSES = [
   ['tcp:8081', 'tcp:8081', 'Metro 8081'],
   ['tcp:3000', 'tcp:3000', 'API 3000'],
 ];
+const DEV_CLIENT_URL = 'exp+catdiary://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081';
 const fix = process.argv.includes('--fix');
+const launch = process.argv.includes('--launch');
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`Android Development Build 调试预检
+
+Usage:
+  pnpm android:preflight
+  pnpm android:preflight -- --fix
+  pnpm android:preflight -- --fix --launch
+
+Options:
+  --fix      自动配置 adb reverse tcp:8081 和 tcp:3000。
+  --launch   预检通过后用 Expo Development Client 深链打开当前项目。
+
+Environment:
+  ANDROID_SERIAL=<serial>  多台设备时指定目标设备。
+`);
+  process.exit(0);
+}
 
 let failed = false;
 
@@ -94,6 +114,24 @@ function ensureReverse(serial, local, remote, label) {
   ok(`${label} reverse 已配置：${expected}`);
 }
 
+function launchDevelopmentClient(serial) {
+  try {
+    adb(serial, [
+      'shell',
+      'am',
+      'start',
+      '-a',
+      'android.intent.action.VIEW',
+      '-d',
+      DEV_CLIENT_URL,
+      PACKAGE_NAME,
+    ]);
+    ok(`已向 ${PACKAGE_NAME} 发送 Development Client 深链：${DEV_CLIENT_URL}`);
+  } catch (error) {
+    fail(`Development Client 深链启动失败：${error.message}`);
+  }
+}
+
 async function checkHttp(url, label, expectedText) {
   const controller = new globalThis.AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), 2500);
@@ -166,7 +204,18 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n预检通过。可在 Android Development Build 中加载 Metro 项目并开始真机回归。');
+  if (launch) launchDevelopmentClient(device.serial);
+
+  if (failed) {
+    console.log('\n预检通过，但 Development Client 启动失败。按上方失败项修复后重试。');
+    process.exit(1);
+  }
+
+  console.log(
+    launch
+      ? '\n预检通过，已请求 Android Development Build 加载 Metro 项目。'
+      : '\n预检通过。可在 Android Development Build 中加载 Metro 项目并开始真机回归；需要自动打开时执行 pnpm android:preflight -- --fix --launch。',
+  );
 }
 
 await main();
