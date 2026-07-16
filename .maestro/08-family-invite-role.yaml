@@ -1,0 +1,148 @@
+appId: com.haruka.catdiary
+name: '08 家庭邀请与角色调整'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_OWNER_PHONE: '13900139081'
+  CATDIARY_E2E_MEMBER_PHONE: '13900139082'
+  CATDIARY_E2E_FAMILY: 'Maestro 协作验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 协作验收猫'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- eraseText
+- inputText: ${CATDIARY_E2E_OWNER_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.family-members.button
+    direction: DOWN
+- tapOn:
+    id: me.family-members.button
+- assertVisible:
+    id: family-members.title
+- tapOn:
+    id: family-members.invite-phone.input
+- inputText: ${CATDIARY_E2E_MEMBER_PHONE}
+- tapOn:
+    id: family-members.invite-submit.button
+- assertVisible:
+    id: family-members.dev-invite.link
+- copyTextFrom:
+    id: family-members.dev-invite.link
+- tapOn:
+    id: family-members.back.button
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.sign-out.button
+    direction: DOWN
+- tapOn:
+    id: me.sign-out.button
+- tapOn: 退出并清除本机数据
+- assertVisible:
+    id: login.phone.input
+- openLink: ${maestro.copiedText}
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- eraseText
+- inputText: ${CATDIARY_E2E_MEMBER_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: family-invite.title
+- tapOn:
+    id: family-invite.accept.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.sign-out.button
+    direction: DOWN
+- tapOn:
+    id: me.sign-out.button
+- tapOn: 退出并清除本机数据
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- eraseText
+- inputText: ${CATDIARY_E2E_OWNER_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.family-members.button
+    direction: DOWN
+- tapOn:
+    id: me.family-members.button
+- assertVisible:
+    id: family-members.title
+- assertVisible:
+    id: family-members.member.role.button
+- tapOn:
+    id: family-members.member.role.button
+- tapOn: 设为管理员
+- extendedWaitUntil:
+    visible:
+      id: family-members.success.text
+    timeout: 30000

@@ -156,6 +156,7 @@ const checks = {
   privacyPolicyUrl: config.extra.privacyPolicyUrl === legalUrls.EXPO_PUBLIC_PRIVACY_POLICY_URL,
   termsUrl: config.extra.termsUrl === legalUrls.EXPO_PUBLIC_TERMS_URL,
   runtimeVersion: config.runtimeVersion?.policy === 'appVersion',
+  deepLinkScheme: config.scheme === 'catdiary',
   iosBundle: config.ios.bundleIdentifier === 'com.haruka.catdiary',
   androidPackage: config.android.package === 'com.haruka.catdiary',
   encryptionDeclaration: productionPrebuild.config.ios.config.usesNonExemptEncryption === false,

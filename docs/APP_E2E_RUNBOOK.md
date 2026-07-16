@@ -1,6 +1,6 @@
 # App E2E 验收运行说明
 
-当前已提供七条通用 Maestro 冒烟流程，另有一条 Android 专用离线同步流程：
+当前已提供八条通用 Maestro 冒烟流程，另有一条 Android 专用离线同步流程：
 
 - `.maestro/01-login-onboarding.yaml`：覆盖开发文档中的 App E2E 主流程 1～2，手机号登录、创建家庭和创建第一只猫。
 - `.maestro/02-create-plan-complete-task.yaml`：覆盖 App E2E 主流程 4～5，创建照顾计划、生成任务、完成任务并在记录时间线查看生成记录。
@@ -9,6 +9,7 @@
 - `.maestro/05-logout-all.yaml`：覆盖 App E2E 主流程 14，从“我的 → 账号与注销”执行退出全部设备并回到登录页。
 - `.maestro/06-medical-next-reminder.yaml`：覆盖 App E2E 主流程 11，新增疫苗医疗档案、填写下次日期，并在医疗档案列表和单猫档案聚合中查看。
 - `.maestro/07-data-export-medical-summary.yaml`：覆盖 App E2E 主流程 13，生成单猫就医摘要，并生成家庭数据导出文件到可分享状态。
+- `.maestro/08-family-invite-role.yaml`：覆盖 App E2E 主流程 3，创建者生成手机号绑定邀请，被邀请账号通过深链接接受邀请，创建者重新登录后把该成员调整为管理员。
 - `.maestro-android/08-offline-record-sync.yaml`：覆盖 App E2E 主流程 6，Android 真机或模拟器上断网新增饮食记录，本机时间线展示“待同步”，恢复联网后自动重放并显示同步完成。
 
 运行前提：
@@ -97,6 +98,18 @@ maestro test .maestro/07-data-export-medical-summary.yaml
 
 该流程会创建一条疫苗医疗档案，点击“生成摘要”并等待摘要生成到可分享状态；随后进入“我的 → 数据导出”，生成 JSON 家庭导出并等待服务端异步任务变为可分享状态。流程不会点击系统分享按钮，避免原生分享面板在不同 iOS/Android 设备上造成自动化不稳定；分享按钮本身会在真机手工验收中单独点击确认。
 
+第八条流程会验证家庭邀请和角色调整：
+
+```bash
+CATDIARY_E2E_OWNER_PHONE=13900139083 \
+CATDIARY_E2E_MEMBER_PHONE=13900139084 \
+CATDIARY_E2E_FAMILY='Maestro 协作验收家庭' \
+CATDIARY_E2E_PET='Maestro 协作验收猫' \
+maestro test .maestro/08-family-invite-role.yaml
+```
+
+该流程会创建家庭和猫咪，由创建者在“我的 → 家庭成员”生成邀请，复制开发环境展示的 `catdiary:///family-invites/...` 深链；退出后用被邀请手机号登录并接受邀请；最后重新登录创建者账号，将该成员调整为管理员。该流程依赖 App 原生 scheme `catdiary`，移动配置门禁会校验该 scheme 不被移除。
+
 Android 离线流程会验证断网新增记录和恢复同步：
 
 ```bash
@@ -112,7 +125,7 @@ pnpm e2e:maestro:android-offline
 
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
-`pnpm e2e:maestro` 会运行 `.maestro/` 目录下的七条通用流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。Android 离线流程独立执行，不纳入默认通用目录，避免 iOS 或非离线环境误跑。
+`pnpm e2e:maestro` 会运行 `.maestro/` 目录下的八条通用流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。Android 离线流程独立执行，不纳入默认通用目录，避免 iOS 或非离线环境误跑。
 
 ## 照片上传与相册真机验收
 
@@ -130,4 +143,4 @@ pnpm e2e:maestro:android-offline
 
 如果要覆盖拍照路径，将第 3 步改为 `photo-new.take-photo.button`，并额外验证首次拒绝相机权限后的 `photo-new.permission.notice`。
 
-这些流程运行通过后，只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期、Android 离线记录同步、数据导出、就医摘要和退出全部设备的自动化冒烟通过；照片上传、推送、相机/相册权限、照片队列恢复、系统分享面板、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+这些流程运行通过后，只能证明登录建档、家庭邀请与角色调整、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期、Android 离线记录同步、数据导出、就医摘要和退出全部设备的自动化冒烟通过；照片上传、推送、相机/相册权限、照片队列恢复、系统分享面板、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { authApi, AuthApiError } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -45,11 +46,26 @@ export default function AcceptInviteRoute() {
     <Screen>
       <BrandHeader title="家庭邀请" subtitle="加入后可共同完成任务并记录猫咪日常" />
       <Card>
-        <Title>确认加入家庭</Title>
+        <View testID="family-invite.title">
+          <Title>确认加入家庭</Title>
+        </View>
         <Body>系统会校验邀请绑定的手机号。加入后可以查看该家庭的猫咪、任务和记录。</Body>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <PrimaryButton label="接受邀请" busy={busy} onPress={accept} />
-        <TextButton label="暂不加入" onPress={() => router.replace('/')} />
+        {error ? (
+          <View testID="family-invite.error.text">
+            <ErrorText>{error}</ErrorText>
+          </View>
+        ) : null}
+        <PrimaryButton
+          testID="family-invite.accept.button"
+          label="接受邀请"
+          busy={busy}
+          onPress={accept}
+        />
+        <TextButton
+          testID="family-invite.dismiss.button"
+          label="暂不加入"
+          onPress={() => router.replace('/')}
+        />
       </Card>
     </Screen>
   );

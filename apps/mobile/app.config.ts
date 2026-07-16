@@ -21,6 +21,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: config.name ?? '猫伴日记',
     slug: config.slug ?? 'cat-diary',
+    scheme: config.scheme ?? 'catdiary',
     ios: {
       ...config.ios,
       bundleIdentifier: 'com.haruka.catdiary',

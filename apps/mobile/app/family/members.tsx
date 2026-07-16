@@ -171,6 +171,7 @@ export default function MembersRoute() {
     <Screen>
       <View style={styles.nav}>
         <Pressable
+          testID="family-members.back.button"
           accessibilityRole="button"
           accessibilityLabel="返回"
           onPress={() => router.back()}
@@ -178,7 +179,9 @@ export default function MembersRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>家庭成员</Text>
+        <Text testID="family-members.title" style={styles.navTitle}>
+          家庭成员
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -189,8 +192,16 @@ export default function MembersRoute() {
               ? '管理员可以邀请、调整角色和移除成员。家庭必须至少保留一名管理员。'
               : '你可以查看家庭成员。邀请、角色调整和移除需要家庭管理员操作。'}
           </Body>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          {success ? <SuccessText>{success}</SuccessText> : null}
+          {error ? (
+            <View testID="family-members.error.text">
+              <ErrorText>{error}</ErrorText>
+            </View>
+          ) : null}
+          {success ? (
+            <View testID="family-members.success.text">
+              <SuccessText>{success}</SuccessText>
+            </View>
+          ) : null}
           <View>
             {loading ? (
               <View style={styles.loading}>
@@ -211,17 +222,22 @@ export default function MembersRoute() {
                 const removeBusy = operation === memberOperationKey('remove', member.id);
                 const disabled = busy || loading;
                 return (
-                  <View key={member.id} style={styles.member}>
+                  <View key={member.id} testID="family-members.member.item" style={styles.member}>
                     <View style={styles.avatar}>
                       <Text style={styles.avatarText}>{memberName.slice(0, 1)}</Text>
                     </View>
                     <View style={styles.memberBody}>
-                      <Text style={styles.memberName}>{memberName}</Text>
-                      <Text style={styles.role}>{roleLabel(member.role)}</Text>
+                      <Text testID="family-members.member.name" style={styles.memberName}>
+                        {memberName}
+                      </Text>
+                      <Text testID="family-members.member.role" style={styles.role}>
+                        {roleLabel(member.role)}
+                      </Text>
                     </View>
                     {canOperate ? (
                       <View style={styles.actions}>
                         <Pressable
+                          testID="family-members.member.role.button"
                           accessibilityRole="button"
                           accessibilityLabel={
                             member.role === 'MEMBER'
@@ -243,6 +259,7 @@ export default function MembersRoute() {
                           </Text>
                         </Pressable>
                         <Pressable
+                          testID="family-members.member.remove.button"
                           accessibilityRole="button"
                           accessibilityLabel={`移除 ${memberName}`}
                           accessibilityState={{ disabled }}
@@ -276,6 +293,7 @@ export default function MembersRoute() {
           <Card>
             <Title>邀请家人</Title>
             <Field
+              testID="family-members.invite-phone.input"
               label="手机号"
               keyboardType="number-pad"
               maxLength={11}
@@ -288,15 +306,17 @@ export default function MembersRoute() {
               }}
             />
             <PrimaryButton
+              testID="family-members.invite-submit.button"
               label="生成邀请"
               busy={operation === 'invite'}
               disabled={!phoneValid || busy || loading}
               onPress={invite}
             />
             {devToken ? (
-              <View style={styles.devInvite}>
+              <View testID="family-members.dev-invite" style={styles.devInvite}>
                 <Text style={styles.devTitle}>开发邀请已创建</Text>
                 <Text
+                  testID="family-members.dev-invite.link"
                   selectable
                   style={styles.token}
                 >{`catdiary:///family-invites/${devToken}`}</Text>

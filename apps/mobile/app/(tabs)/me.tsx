@@ -123,6 +123,7 @@ export default function MeTab() {
           </Row>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
+              testID="me.family-members.button"
               accessibilityRole="button"
               onPress={() => router.push('/family/members')}
               style={styles.rowPress}
@@ -171,7 +172,7 @@ export default function MeTab() {
             onPress={() => router.push('/settings/notifications')}
           />
         </Card>
-        <TextButton label="退出登录" onPress={() => confirmSignOut()} />
+        <TextButton testID="me.sign-out.button" label="退出登录" onPress={() => confirmSignOut()} />
       </ScrollView>
     </Screen>
   );
