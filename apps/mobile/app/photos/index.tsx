@@ -78,10 +78,13 @@ export default function PhotosRoute() {
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <View>
-          <Text style={styles.title}>猫咪相册</Text>
+          <Text testID="photos.title" style={styles.title}>
+            猫咪相册
+          </Text>
           <Text style={styles.subtitle}>把一起生活的小片段收好</Text>
         </View>
         <Pressable
+          testID="photos.add.button"
           accessibilityLabel="上传照片"
           onPress={() =>
             router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
@@ -97,12 +100,18 @@ export default function PhotosRoute() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filters}
         >
-          <Filter label="全部" active={!petId} onPress={() => setPetId('')} />
+          <Filter
+            label="全部"
+            active={!petId}
+            testID="photos.filter.all"
+            onPress={() => setPetId('')}
+          />
           {pets.map((pet) => (
             <Filter
               key={pet.id}
               label={pet.name}
               active={petId === pet.id}
+              testID="photos.filter.pet"
               onPress={() => setPetId(pet.id)}
             />
           ))}
@@ -116,6 +125,7 @@ export default function PhotosRoute() {
             {photos.map((photo, index) => (
               <Pressable
                 key={photo.id}
+                testID="photos.item"
                 accessibilityRole="button"
                 accessibilityLabel={`${photo.pets.map((entry) => entry.pet.name).join('、')}的照片`}
                 onPress={() => router.push({ pathname: '/photos/[id]', params: { id: photo.id } })}
@@ -155,6 +165,7 @@ export default function PhotosRoute() {
             </Body>
             <PrimaryButton
               label="上传照片"
+              testID="photos.empty.upload.button"
               onPress={() =>
                 router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
               }
@@ -166,9 +177,20 @@ export default function PhotosRoute() {
   );
 }
 
-function Filter({ label, active, onPress }: { label: string; active: boolean; onPress(): void }) {
+function Filter({
+  label,
+  active,
+  testID,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  testID?: string;
+  onPress(): void;
+}) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       onPress={onPress}

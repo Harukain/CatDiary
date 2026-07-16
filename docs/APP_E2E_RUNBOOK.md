@@ -50,4 +50,20 @@ maestro test .maestro/03-vomit-health-event.yaml
 
 `pnpm e2e:maestro` 会运行 `.maestro/` 目录下的全部流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。
 
-这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录和健康事件关联的自动化冒烟通过；推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+## 照片上传与相册真机验收
+
+产品主流程 9「上传照片并按猫筛选」涉及系统相册、相机和媒体权限，当前不放入默认 `.maestro/` 自动运行目录，避免因设备媒体库、系统授权弹窗或原生选择器状态导致整套冒烟流程不稳定。该流程在真机上按以下步骤验收：
+
+1. 使用 `.maestro/01-login-onboarding.yaml` 或手工登录创建一个只有一只猫的新家庭。
+2. 点击中央 `+`，选择 `quick-add.action.photo` 进入添加照片页，确认出现 `photo-new.title`。
+3. 点击 `photo-new.pick-library.button`，首次运行时选择允许相册权限；也需要单独验证拒绝权限后页面出现 `photo-new.permission.notice`，并且 `photo-new.permission.settings.button` 可跳转系统设置。
+4. 在系统相册中选择 1 张小于 10MB 的图片，返回 App 后确认出现 `photo-new.preview.item`。
+5. 确认至少有一个 `photo-new.pet.item` 被选中，填写 `photo-new.note.input`，点击 `photo-new.submit.button`。
+6. 上传完成后进入 `photos.title`，确认存在 `photos.item`。
+7. 点击 `photos.filter.pet` 后仍能看到该猫的照片；点击 `photos.filter.all` 可回到全部照片。
+8. 点击 `photos.item` 进入 `photo-detail.title`，修改 `photo-detail.note.input` 后点击 `photo-detail.save.button`，再返回相册确认详情可再次打开。
+9. 管理员账号在详情页验证 `photo-detail.set-avatar.button` 可以把照片设为猫咪头像；删除行为使用 `photo-detail.delete.button` 单独验证软删除提示。
+
+如果要覆盖拍照路径，将第 3 步改为 `photo-new.take-photo.button`，并额外验证首次拒绝相机权限后的 `photo-new.permission.notice`。
+
+这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录和健康事件关联的自动化冒烟通过；照片上传、推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

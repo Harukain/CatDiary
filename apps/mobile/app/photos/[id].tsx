@@ -167,7 +167,9 @@ export default function PhotoDetailRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.title}>照片详情</Text>
+        <Text testID="photo-detail.title" style={styles.title}>
+          照片详情
+        </Text>
         <View style={styles.navButton} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -176,6 +178,7 @@ export default function PhotoDetailRoute() {
         ) : photo && session && activeFamily ? (
           <>
             <AuthenticatedImage
+              testID="photo-detail.image"
               source={photoSource(photo, session.accessToken, activeFamily.id)}
               style={styles.hero}
               resizeMode="cover"
@@ -186,6 +189,7 @@ export default function PhotoDetailRoute() {
                 {pets.map((pet) => (
                   <Pressable
                     key={pet.id}
+                    testID="photo-detail.pet.item"
                     accessibilityRole="button"
                     accessibilityState={{ selected: petIds.includes(pet.id), disabled: busy }}
                     disabled={busy}
@@ -212,12 +216,14 @@ export default function PhotoDetailRoute() {
                 multiline
                 editable={!busy}
                 placeholder="写下这一刻"
+                testID="photo-detail.note.input"
               />
               {error ? <ErrorText>{error}</ErrorText> : null}
               <PrimaryButton
                 label="保存修改"
                 disabled={!changed || !petIds.length}
                 busy={busy}
+                testID="photo-detail.save.button"
                 onPress={() => void save()}
               />
               {canManageAvatar ? (
@@ -229,12 +235,19 @@ export default function PhotoDetailRoute() {
                       key={petId}
                       label={`设为 ${pets.find((pet) => pet.id === petId)?.name ?? '猫咪'} 的头像`}
                       disabled={busy}
+                      testID="photo-detail.set-avatar.button"
                       onPress={() => void setAvatar(petId)}
                     />
                   ))}
                 </View>
               ) : null}
-              <TextButton label="删除照片" danger disabled={busy} onPress={confirmDelete} />
+              <TextButton
+                label="删除照片"
+                danger
+                disabled={busy}
+                testID="photo-detail.delete.button"
+                onPress={confirmDelete}
+              />
             </View>
           </>
         ) : error ? (

@@ -446,7 +446,9 @@ export default function NewPhotoRoute() {
           <Ionicons name="close" size={23} color={colors.ink} />
         </Pressable>
         <View>
-          <Text style={styles.title}>添加照片</Text>
+          <Text testID="photo-new.title" style={styles.title}>
+            添加照片
+          </Text>
           <Text style={styles.subtitle}>最多选择 9 张，上传前会自动压缩</Text>
         </View>
       </View>
@@ -456,12 +458,14 @@ export default function NewPhotoRoute() {
             icon="images-outline"
             label="从相册选择"
             disabled={!canPickPhotos}
+            testID="photo-new.pick-library.button"
             onPress={() => void chooseLibrary()}
           />
           <PickerButton
             icon="camera-outline"
             label="拍一张"
             disabled={!canPickPhotos}
+            testID="photo-new.take-photo.button"
             onPress={() => void takePhoto()}
           />
         </View>
@@ -477,7 +481,7 @@ export default function NewPhotoRoute() {
                   : `还能添加 ${slotsLeft} 张`}
         </Text>
         {permissionDeniedCopy ? (
-          <View style={styles.permissionNotice}>
+          <View testID="photo-new.permission.notice" style={styles.permissionNotice}>
             <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
             <View style={styles.permissionNoticeBody}>
               <Text style={styles.permissionNoticeTitle}>{permissionDeniedCopy.title}</Text>
@@ -486,13 +490,14 @@ export default function NewPhotoRoute() {
                 label={permissionDeniedCopy.actionLabel}
                 danger
                 disabled={busy}
+                testID="photo-new.permission.settings.button"
                 onPress={() => void openPermissionSettings()}
               />
             </View>
           </View>
         ) : null}
         {restoredQueueCount ? (
-          <View style={styles.restoreNotice}>
+          <View testID="photo-new.restore.notice" style={styles.restoreNotice}>
             <Ionicons
               name={invalidRestoredPhotoCount ? 'alert-circle-outline' : 'cloud-upload-outline'}
               size={18}
@@ -518,7 +523,7 @@ export default function NewPhotoRoute() {
               });
               const shouldShowStatus = item.state !== 'READY' || Boolean(item.error);
               return (
-                <View key={item.id} style={styles.previewCard}>
+                <View key={item.id} testID="photo-new.preview.item" style={styles.previewCard}>
                   <View
                     accessible
                     accessibilityRole="image"
@@ -536,6 +541,7 @@ export default function NewPhotoRoute() {
                     ) : null}
                     {(item.state === 'READY' || item.state === 'FAILED') && !busy ? (
                       <Pressable
+                        testID="photo-new.preview.remove.button"
                         accessibilityLabel="移除照片"
                         onPress={() => void removeItem(item)}
                         style={styles.remove}
@@ -586,6 +592,7 @@ export default function NewPhotoRoute() {
           <View style={styles.chips}>
             {pets.map((pet) => (
               <Pressable
+                testID="photo-new.pet.item"
                 key={pet.id}
                 accessibilityRole="button"
                 accessibilityState={{
@@ -620,6 +627,7 @@ export default function NewPhotoRoute() {
           maxLength={500}
           multiline
           editable={!fieldsDisabled}
+          testID="photo-new.note.input"
         />
         {error ? <ErrorText>{error}</ErrorText> : null}
         <PrimaryButton
@@ -630,9 +638,15 @@ export default function NewPhotoRoute() {
           }
           disabled={!canUpload}
           busy={busy}
+          testID="photo-new.submit.button"
           onPress={() => void upload()}
         />
-        <TextButton label="取消" disabled={busy} onPress={requestClose} />
+        <TextButton
+          label="取消"
+          disabled={busy}
+          testID="photo-new.cancel.button"
+          onPress={requestClose}
+        />
       </ScrollView>
     </Screen>
   );
@@ -651,15 +665,18 @@ function PickerButton({
   icon,
   label,
   disabled,
+  testID,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   disabled?: boolean;
+  testID?: string;
   onPress(): void;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}

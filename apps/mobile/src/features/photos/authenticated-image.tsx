@@ -21,6 +21,7 @@ interface AuthenticatedImageProps {
   style?: StyleProp<ImageStyle>;
   resizeMode?: ImageResizeMode;
   accessibilityLabel?: string;
+  testID?: string;
 }
 
 export function AuthenticatedImage({
@@ -28,6 +29,7 @@ export function AuthenticatedImage({
   style,
   resizeMode = 'cover',
   accessibilityLabel,
+  testID,
 }: AuthenticatedImageProps) {
   const [localUri, setLocalUri] = useState(source.headers ? '' : source.uri);
   const [failed, setFailed] = useState(false);
@@ -81,7 +83,7 @@ export function AuthenticatedImage({
   }, [cacheUri, requestKey, source.headers, source.uri]);
 
   return (
-    <View style={[styles.frame, style]}>
+    <View testID={testID} style={[styles.frame, style]}>
       {localUri ? (
         <Image
           accessibilityLabel={accessibilityLabel}
