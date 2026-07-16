@@ -42,6 +42,7 @@ jobs:
       - run: pnpm lint:eslint
       - run: pnpm test:e2e-flows
       - run: pnpm acceptance:evidence-template
+      - run: pnpm test:device-evidence
       - run: pnpm test:preview-probe
       - run: pnpm db:validate
       - run: pnpm exec prisma migrate deploy

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
 import { REQUIRED_DEVICE_CHECKS, REQUIRED_MVP_FLOWS } from './acceptance-definitions.mjs';
 
@@ -130,6 +131,7 @@ function validateTopLevel(value) {
   if (value.evidenceType !== 'cat-diary-device-acceptance')
     fail('evidenceType 必须为 cat-diary-device-acceptance');
   requireString(value, 'sourceCommit');
+  validateSourceCommit(value.sourceCommit);
   requireString(value, 'createdAt');
   if (!value.environment || typeof value.environment !== 'object')
     fail('environment 必须是 object');
@@ -137,6 +139,33 @@ function validateTopLevel(value) {
   if (!Array.isArray(value.mvpFlows)) fail('mvpFlows 必须是数组');
   if (!Array.isArray(value.deviceChecks)) fail('deviceChecks 必须是数组');
   if (!Array.isArray(value.openIssues)) fail('openIssues 必须是数组');
+}
+
+function validateSourceCommit(sourceCommit) {
+  if (allowTemplate && /待填写|待确认|<[^>]+>/.test(String(sourceCommit))) return;
+  if (!/^[a-f0-9]{40}$/i.test(String(sourceCommit ?? ''))) {
+    fail('sourceCommit 必须填写 40 位 Git commit SHA');
+    return;
+  }
+  if (!requirePassed) return;
+  const currentHead = readCurrentGitHead();
+  if (!currentHead) {
+    fail('严格模式无法读取当前 Git HEAD，不能确认真机证据对应当前代码');
+    return;
+  }
+  if (sourceCommit.toLowerCase() !== currentHead.toLowerCase()) {
+    fail(`严格模式要求 sourceCommit 等于当前 HEAD：${currentHead}`);
+  }
+}
+
+function readCurrentGitHead() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) return null;
+  const value = result.stdout.trim();
+  return /^[a-f0-9]{40}$/i.test(value) ? value : null;
 }
 
 function validateDeviceRuns(deviceRuns) {

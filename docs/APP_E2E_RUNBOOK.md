@@ -59,7 +59,7 @@ cp docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json docs/device-acceptance/2026-07-d
 pnpm acceptance:evidence -- --file docs/device-acceptance/2026-07-development-build.json --require-passed
 ```
 
-严格模式会要求 iOS 和 Android 真机记录都存在，14 条 MVP 主流程、设备专项检查和平台预检全部为 `passed`，且不允许遗留 P0/P1。证据文件不得写入 Token、密码、私钥、完整 Webhook 或未脱敏设备标识；脚本会做敏感信息拦截。
+严格模式会要求 `sourceCommit` 等于当前 Git HEAD，iOS 和 Android 真机记录都存在，14 条 MVP 主流程、设备专项检查和平台预检全部为 `passed`，且不允许遗留 P0/P1。证据文件不得写入 Token、密码、私钥、完整 Webhook 或未脱敏设备标识；脚本会做敏感信息拦截。CI 会执行 `pnpm test:device-evidence` 自检，确保当前提交证据可通过、旧提交证据会被拒绝。
 
 建议使用尚未登录过的新手机号，避免直接进入已有家庭。单独验证登录建档流程时执行：
 
