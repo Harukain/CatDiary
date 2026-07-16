@@ -1,14 +1,22 @@
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 
 const PACKAGE_NAME = 'com.haruka.catdiary';
 const DEFAULT_DURATION_MS = 12_000;
 const MIN_DURATION_MS = 3_000;
 const MAX_DURATION_MS = 60_000;
+const root = resolve(import.meta.dirname, '..');
 
-const help = process.argv.includes('--help') || process.argv.includes('-h');
-const selfCheck = process.argv.includes('--self-check');
-const skipPreflight = process.argv.includes('--skip-preflight');
-const skipLaunch = process.argv.includes('--skip-launch');
+let options;
+try {
+  options = parseArgs(process.argv.slice(2));
+} catch (error) {
+  console.error(`Android smoke 参数无效：${error.message}`);
+  process.exit(1);
+}
+
+const { help, selfCheck, skipPreflight, skipLaunch, evidenceFile } = options;
 
 if (help) {
   console.log(`Android Development Build 真机冒烟检查
@@ -17,10 +25,12 @@ Usage:
   pnpm android:smoke
   ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8082 pnpm android:smoke
   pnpm android:smoke -- --skip-launch
+  pnpm android:smoke -- --evidence-file docs/device-acceptance/android-smoke.json
 
 Options:
   --skip-preflight  不执行 android:preflight，直接读取设备日志。
   --skip-launch     不重新发送 Development Client 深链，只检查当前进程和日志。
+  --evidence-file    成功后写入脱敏 JSON 证据，可合并到真机验收草稿。
   --self-check      只验证本脚本的参数解析和崩溃识别规则，不连接设备。
 
 Environment:
@@ -165,6 +175,108 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function parseArgs(argv) {
+  const parsed = {
+    help: false,
+    selfCheck: false,
+    skipPreflight: false,
+    skipLaunch: false,
+    evidenceFile: undefined,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--') continue;
+    if (arg === '--help' || arg === '-h') parsed.help = true;
+    else if (arg === '--self-check') parsed.selfCheck = true;
+    else if (arg === '--skip-preflight') parsed.skipPreflight = true;
+    else if (arg === '--skip-launch') parsed.skipLaunch = true;
+    else if (arg === '--evidence-file') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) throw new Error('--evidence-file 需要路径参数');
+      parsed.evidenceFile = value;
+      index += 1;
+    } else {
+      throw new Error(`未知参数：${arg}`);
+    }
+  }
+
+  return parsed;
+}
+
+function resolvePath(value) {
+  return isAbsolute(value) ? value : resolve(root, value);
+}
+
+function readCurrentGitHead() {
+  try {
+    const value = run('git', ['rev-parse', 'HEAD']);
+    return /^[a-f0-9]{40}$/i.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function redactDeviceIdentifier(serial) {
+  const normalized = String(serial ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+  if (normalized.length === 0) return 'redacted';
+  return `redacted-last4-${normalized.slice(-4)}`;
+}
+
+function buildSmokeCommand() {
+  const flags = [];
+  if (skipPreflight) flags.push('--skip-preflight');
+  if (skipLaunch) flags.push('--skip-launch');
+  if (evidenceFile) flags.push('--evidence-file <redacted-local-path>');
+  const suffix = flags.length > 0 ? ` -- ${flags.join(' ')}` : '';
+  return `ANDROID_API_PORT=${API_PORT} ANDROID_METRO_PORT=${METRO_PORT} ANDROID_SMOKE_DURATION_MS=${DURATION_MS} pnpm android:smoke${suffix}`;
+}
+
+function writeEvidenceFile(outputPath, result) {
+  const sourceCommit = readCurrentGitHead();
+  if (!sourceCommit) {
+    throw new Error('无法读取当前 Git HEAD，未写入真机 smoke 证据');
+  }
+
+  const output = resolvePath(outputPath);
+  const evidence = {
+    schemaVersion: 1,
+    evidenceType: 'cat-diary-android-smoke',
+    sourceCommit,
+    createdAt: new Date().toISOString(),
+    platform: 'android',
+    status: 'passed',
+    packageName: PACKAGE_NAME,
+    device: {
+      identifier: redactDeviceIdentifier(result.serial),
+    },
+    appRuntime: {
+      apiPort: API_PORT,
+      metroPort: METRO_PORT,
+      devClientUrl: DEV_CLIENT_URL,
+      pid: result.pid,
+      observedMs: DURATION_MS,
+    },
+    preflight: {
+      status: skipPreflight ? 'not-run' : 'passed',
+      command: skipPreflight
+        ? 'not-run: android:smoke was executed with --skip-preflight'
+        : `ANDROID_API_PORT=${API_PORT} ANDROID_METRO_PORT=${METRO_PORT} pnpm android:preflight -- --fix`,
+    },
+    logs: {
+      jsCrashFree: true,
+      nativeCrashFree: true,
+      evidence:
+        'android:smoke cleared logcat, launched Development Client when requested, observed logcat, and found no configured Android/RN startup crash patterns.',
+    },
+    command: buildSmokeCommand(),
+  };
+
+  mkdirSync(dirname(output), { recursive: true });
+  writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`);
+  return output;
+}
+
 async function main() {
   console.log('Android Development Build 真机冒烟检查');
 
@@ -211,16 +323,21 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(
-    `ANDROID_SMOKE_OK ${JSON.stringify({
-      serial: device.serial,
-      packageName: PACKAGE_NAME,
-      apiPort: API_PORT,
-      metroPort: METRO_PORT,
-      observedMs: DURATION_MS,
-      pid: pidAfterWindow,
-    })}`,
-  );
+  const result = {
+    serial: device.serial,
+    packageName: PACKAGE_NAME,
+    apiPort: API_PORT,
+    metroPort: METRO_PORT,
+    observedMs: DURATION_MS,
+    pid: pidAfterWindow,
+  };
+
+  if (evidenceFile) {
+    const output = writeEvidenceFile(evidenceFile, result);
+    console.log(`✓ 已写入脱敏 smoke 证据：${output}`);
+  }
+
+  console.log(`ANDROID_SMOKE_OK ${JSON.stringify(result)}`);
 }
 
 function runSelfCheck() {

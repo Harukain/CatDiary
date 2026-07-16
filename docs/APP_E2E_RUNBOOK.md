@@ -33,6 +33,23 @@ ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8082 pnpm android:smoke
 
 该命令会执行 Android 预检、清空当前设备 logcat、发送 Development Client 深链、确认 `com.haruka.catdiary` 进程存活，并在观察窗口内拦截 `AndroidRuntime`、`FATAL EXCEPTION` 和常见 `ReactNativeJS` 启动崩溃。它只能证明“当前真机能加载且未立即崩溃”，不替代下面的 Maestro 主流程、权限、照片、推送和离线验收。
 
+如果需要把这次轻量冒烟写入本轮真机验收草稿，先生成草稿，再让 smoke 输出脱敏 JSON，最后合并 Android 设备预检与崩溃日志字段：
+
+```bash
+pnpm acceptance:evidence-draft -- \
+  --api-url http://127.0.0.1:3310/api/v1 \
+  --android-build-url https://expo.dev/artifacts/eas/<android-artifact>.apk
+
+ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8082 pnpm android:smoke -- \
+  --evidence-file docs/device-acceptance/2026-07-17-android-smoke.json
+
+pnpm acceptance:android-smoke-evidence -- \
+  --file docs/device-acceptance/2026-07-17-development-build.json \
+  --smoke-file docs/device-acceptance/2026-07-17-android-smoke.json
+```
+
+`acceptance:android-smoke-evidence` 只更新 Android `deviceRuns` 里的预检状态和 JS/原生启动崩溃检查结果，不会把 14 条 MVP 主流程、权限、照片、推送、飞书或离线验收标记为通过。
+
 ## iOS Development Build 真机预检
 
 iPhone 真机不能访问 Mac 上的 `localhost`、`127.0.0.1` 或 Android Emulator 专用的 `10.0.2.2`。真机验收前，先让 iPhone 与 Mac 接入同一 Wi-Fi，并使用 Mac 的局域网 IPv4 启动 Metro：

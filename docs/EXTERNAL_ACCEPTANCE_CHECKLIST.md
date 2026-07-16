@@ -160,6 +160,19 @@ ANDROID_API_PORT=3001 ANDROID_METRO_PORT=8082 pnpm android:smoke
 
 `android:smoke` 只检查设备连接、进程存活、Development Client 深链和 logcat 崩溃信号；它不能替代完整 App E2E 主流程、系统权限、照片、推送、飞书或离线同步验收。
 
+如果要把轻量冒烟结果纳入本轮真机验收草稿，使用脱敏证据文件，不要手工粘贴完整设备序列号或 logcat：
+
+```bash
+ANDROID_API_PORT=3001 ANDROID_METRO_PORT=8082 pnpm android:smoke -- \
+  --evidence-file docs/device-acceptance/2026-07-17-android-smoke.json
+
+pnpm acceptance:android-smoke-evidence -- \
+  --file docs/device-acceptance/2026-07-17-development-build.json \
+  --smoke-file docs/device-acceptance/2026-07-17-android-smoke.json
+```
+
+该合并只会更新 Android 设备预检和启动崩溃检查，不会勾选 MVP 主流程或权限、照片、推送、飞书、离线专项。
+
 如果要在预检通过后直接打开 Android Development Build 并加载当前 Metro 项目，使用：
 
 ```bash
