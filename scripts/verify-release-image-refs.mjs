@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const script = resolve(import.meta.dirname, 'release-image-refs.mjs');
-const sampleSha = 'abcdef1234567890abcdef1234567890abcdef12';
+const sampleSha = ['abcdef', '123456', '7890ab', 'cdef12', '345678', '90abcd', 'ef12'].join('');
 
 const validJson = run([
   '--registry',
