@@ -134,6 +134,7 @@ export default function MeTab() {
           </Row>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
+              testID="me.notifications.button"
               accessibilityRole="button"
               onPress={() => router.push('/settings/notifications')}
               style={styles.rowPress}
@@ -144,6 +145,7 @@ export default function MeTab() {
           </Row>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
+              testID="me.notification-logs.button"
               accessibilityRole="button"
               onPress={() => router.push('/notification-logs')}
               style={styles.rowPress}

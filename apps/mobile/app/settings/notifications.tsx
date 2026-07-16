@@ -208,6 +208,7 @@ export default function NotificationSettingsRoute() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
+          testID="notifications.back.button"
           accessibilityLabel="返回"
           accessibilityHint={saving ? '通知设置保存中，点击会提示继续等待' : '返回上一页'}
           onPress={requestReturn}
@@ -215,7 +216,9 @@ export default function NotificationSettingsRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>通知偏好</Text>
+        <Text testID="notifications.title" style={styles.navTitle}>
+          通知偏好
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -231,8 +234,10 @@ export default function NotificationSettingsRoute() {
         ) : preference ? (
           <Card>
             <Title>{activeFamily?.name}</Title>
-            {success ? <SuccessText>{success}</SuccessText> : null}
-            {error ? <ErrorText>{error}</ErrorText> : null}
+            {success ? (
+              <SuccessText testID="notifications.success.text">{success}</SuccessText>
+            ) : null}
+            {error ? <ErrorText testID="notifications.error.text">{error}</ErrorText> : null}
             <Setting
               title="照顾任务提醒"
               detail="接收疫苗、驱虫、用药和铲屎等计划提醒"
@@ -341,6 +346,7 @@ export default function NotificationSettingsRoute() {
         <Card>
           <Title>家庭通知渠道</Title>
           <Pressable
+            testID="notifications.feishu.button"
             accessibilityRole="button"
             accessibilityLabel="飞书通知"
             accessibilityHint="配置家庭级飞书机器人通知"

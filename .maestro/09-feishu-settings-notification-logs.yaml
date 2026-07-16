@@ -1,0 +1,108 @@
+appId: com.haruka.catdiary
+name: '09 飞书设置与通知日志入口'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139091'
+  CATDIARY_E2E_FAMILY: 'Maestro 通知验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 通知验收猫'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.notifications.button
+    direction: DOWN
+- tapOn:
+    id: me.notifications.button
+- assertVisible:
+    id: notifications.title
+- scrollUntilVisible:
+    element:
+      id: notifications.feishu.button
+    direction: DOWN
+- tapOn:
+    id: notifications.feishu.button
+- assertVisible:
+    id: feishu.title
+- extendedWaitUntil:
+    visible:
+      id: feishu.status.text
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: feishu.webhook.input
+    direction: DOWN
+- tapOn:
+    id: feishu.webhook.input
+- inputText: https://example.com/open-apis/bot/v2/hook/maestro
+- assertVisible: 仅支持飞书或 Lark 自定义机器人 Webhook
+- tapOn:
+    id: feishu.back.button
+- tapOn: 放弃并返回
+- assertVisible:
+    id: notifications.title
+- tapOn:
+    id: notifications.back.button
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.notification-logs.button
+    direction: DOWN
+- tapOn:
+    id: me.notification-logs.button
+- assertVisible:
+    id: notification-logs.title
+- extendedWaitUntil:
+    visible:
+      id: notification-logs.summary.card
+    timeout: 30000
+- tapOn:
+    id: notification-logs.filter.FAILED
+- extendedWaitUntil:
+    visible:
+      id: notification-logs.empty.card
+    timeout: 30000
+- tapOn:
+    id: notification-logs.refresh.button
+- extendedWaitUntil:
+    visible:
+      id: notification-logs.empty.card
+    timeout: 30000

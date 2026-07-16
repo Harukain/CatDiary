@@ -20,6 +20,7 @@
     "acceptance:audit": "node scripts/verify-external-acceptance.mjs",
     "acceptance:gate": "node scripts/verify-external-acceptance.mjs --strict",
     "e2e:maestro": "maestro test .maestro",
+    "e2e:maestro:feishu-logs": "maestro test .maestro/09-feishu-settings-notification-logs.yaml",
     "e2e:maestro:android-offline": "maestro test .maestro-android/08-offline-record-sync.yaml",
     "queue:ops": "pnpm --filter @cat-diary/domain build && pnpm --filter @cat-diary/worker build && pnpm --filter @cat-diary/worker queue:ops",
     "openapi:check": "node scripts/verify-openapi.mjs",

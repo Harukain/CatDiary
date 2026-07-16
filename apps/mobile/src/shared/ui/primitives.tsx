@@ -39,25 +39,41 @@ export function BrandHeader({
   );
 }
 
-export function Card({ children, elevated = false }: PropsWithChildren<{ elevated?: boolean }>) {
-  return <View style={[styles.card, elevated && styles.cardElevated]}>{children}</View>;
-}
-export function Title({ children }: PropsWithChildren) {
-  return <Text style={styles.h2}>{children}</Text>;
-}
-export function Body({ children }: PropsWithChildren) {
-  return <Text style={styles.body}>{children}</Text>;
-}
-export function ErrorText({ children }: PropsWithChildren) {
+export function Card({
+  children,
+  elevated = false,
+  testID,
+}: PropsWithChildren<{ elevated?: boolean; testID?: string }>) {
   return (
-    <Text accessibilityRole="alert" style={styles.error}>
+    <View testID={testID} style={[styles.card, elevated && styles.cardElevated]}>
+      {children}
+    </View>
+  );
+}
+export function Title({ children, testID }: PropsWithChildren<{ testID?: string }>) {
+  return (
+    <Text testID={testID} style={styles.h2}>
       {children}
     </Text>
   );
 }
-export function SuccessText({ children }: PropsWithChildren) {
+export function Body({ children, testID }: PropsWithChildren<{ testID?: string }>) {
   return (
-    <Text accessibilityRole="alert" style={styles.success}>
+    <Text testID={testID} style={styles.body}>
+      {children}
+    </Text>
+  );
+}
+export function ErrorText({ children, testID }: PropsWithChildren<{ testID?: string }>) {
+  return (
+    <Text testID={testID} accessibilityRole="alert" style={styles.error}>
+      {children}
+    </Text>
+  );
+}
+export function SuccessText({ children, testID }: PropsWithChildren<{ testID?: string }>) {
+  return (
+    <Text testID={testID} accessibilityRole="alert" style={styles.success}>
       {children}
     </Text>
   );

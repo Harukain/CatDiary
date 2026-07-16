@@ -124,10 +124,17 @@ export default function NotificationLogsRoute() {
   return (
     <Screen>
       <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.back}>
+        <Pressable
+          testID="notification-logs.back.button"
+          accessibilityLabel="返回"
+          onPress={() => router.back()}
+          style={styles.back}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>提醒发送记录</Text>
+        <Text testID="notification-logs.title" style={styles.navTitle}>
+          提醒发送记录
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -143,6 +150,7 @@ export default function NotificationLogsRoute() {
           {filters.map((filter) => (
             <Pressable
               key={filter.label}
+              testID={`notification-logs.filter.${filter.value ?? 'ALL'}`}
               accessibilityRole="button"
               accessibilityState={{ selected: status === filter.value }}
               onPress={() => {
@@ -157,7 +165,7 @@ export default function NotificationLogsRoute() {
             </Pressable>
           ))}
         </ScrollView>
-        <Card>
+        <Card testID="notification-logs.summary.card">
           <View style={styles.summaryTop}>
             <View style={styles.summaryCopy}>
               <Title>
@@ -170,53 +178,85 @@ export default function NotificationLogsRoute() {
               </Body>
             </View>
             <TextButton
+              testID="notification-logs.refresh.button"
               label={loading ? '刷新中' : '刷新'}
               disabled={loading}
               onPress={() => void load()}
             />
           </View>
           <View style={styles.stats}>
-            <StatChip label="失败" value={stats.failed} tone="danger" />
-            <StatChip label="队列" value={stats.queued} tone="warning" />
-            <StatChip label="已发送" value={stats.sent} tone="brand" />
-            <StatChip label="送达" value={stats.delivered} tone="success" />
+            <StatChip
+              testID="notification-logs.stat.failed"
+              label="失败"
+              value={stats.failed}
+              tone="danger"
+            />
+            <StatChip
+              testID="notification-logs.stat.queued"
+              label="队列"
+              value={stats.queued}
+              tone="warning"
+            />
+            <StatChip
+              testID="notification-logs.stat.sent"
+              label="已发送"
+              value={stats.sent}
+              tone="brand"
+            />
+            <StatChip
+              testID="notification-logs.stat.delivered"
+              label="送达"
+              value={stats.delivered}
+              tone="success"
+            />
           </View>
           {status ? (
             <Text style={styles.statusHelp}>{notificationLogStatusCopy(status).description}</Text>
           ) : null}
         </Card>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        {success ? <SuccessText>{success}</SuccessText> : null}
+        {error ? <ErrorText testID="notification-logs.error.text">{error}</ErrorText> : null}
+        {success ? (
+          <SuccessText testID="notification-logs.success.text">{success}</SuccessText>
+        ) : null}
         {loading ? (
-          <ActivityIndicator color={colors.brand} />
+          <ActivityIndicator testID="notification-logs.loading.indicator" color={colors.brand} />
         ) : items.length ? (
-          <View style={styles.list}>
+          <View testID="notification-logs.list" style={styles.list}>
             {items.map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} testID="notification-logs.item">
                 <View style={styles.itemTop}>
                   <View style={styles.itemHeading}>
-                    <Text style={styles.itemTitle}>{item.task?.title ?? '原任务已删除'}</Text>
-                    <Text style={styles.itemMeta}>
+                    <Text testID="notification-logs.item.title" style={styles.itemTitle}>
+                      {item.task?.title ?? '原任务已删除'}
+                    </Text>
+                    <Text testID="notification-logs.item.meta" style={styles.itemMeta}>
                       {notificationLogChannelLabel(item.channel)} · 计划{' '}
                       {formatDate(item.scheduledAt)}
                       {item.attempt ? ` · 第 ${item.attempt} 次` : ''}
                     </Text>
                   </View>
-                  <StatusBadge status={item.status} />
+                  <StatusBadge testID="notification-logs.item.status" status={item.status} />
                 </View>
-                <Text style={styles.statusDescription}>
+                <Text
+                  testID="notification-logs.item.status-description"
+                  style={styles.statusDescription}
+                >
                   {notificationLogStatusCopy(item.status).description}
                 </Text>
                 {item.status === 'FAILED' ? (
-                  <View style={styles.failure}>
-                    <Text style={styles.failureText}>
+                  <View testID="notification-logs.failure.card" style={styles.failure}>
+                    <Text testID="notification-logs.failure.reason" style={styles.failureText}>
                       {item.errorMessageSafe || '发送失败，请检查通知渠道后重试。'}
                     </Text>
                     {canRetry ? (
                       retryingId === item.id ? (
-                        <ActivityIndicator color={colors.dangerDark} />
+                        <ActivityIndicator
+                          testID="notification-logs.retry.loading"
+                          color={colors.dangerDark}
+                        />
                       ) : (
                         <Pressable
+                          testID="notification-logs.retry.button"
                           accessibilityRole="button"
                           onPress={() => requestRetry(item)}
                           style={({ pressed }) => [styles.retry, pressed && styles.pressed]}
@@ -234,6 +274,7 @@ export default function NotificationLogsRoute() {
             ))}
             {nextCursor ? (
               <Pressable
+                testID="notification-logs.load-more.button"
                 accessibilityRole="button"
                 disabled={loadingMore}
                 onPress={() => void load(nextCursor, true)}
@@ -248,9 +289,9 @@ export default function NotificationLogsRoute() {
             ) : null}
           </View>
         ) : (
-          <Card>
-            <Title>{emptyCopy.title}</Title>
-            <Body>{emptyCopy.body}</Body>
+          <Card testID="notification-logs.empty.card">
+            <Title testID="notification-logs.empty.title">{emptyCopy.title}</Title>
+            <Body testID="notification-logs.empty.body">{emptyCopy.body}</Body>
           </Card>
         )}
       </ScrollView>
@@ -258,22 +299,24 @@ export default function NotificationLogsRoute() {
   );
 }
 
-function StatusBadge({ status }: { status: NotificationStatus }) {
+function StatusBadge({ status, testID }: { status: NotificationStatus; testID?: string }) {
   const detail = notificationLogStatusCopy(status);
-  return <ToneBadge label={detail.label} tone={detail.tone} />;
+  return <ToneBadge testID={testID} label={detail.label} tone={detail.tone} />;
 }
 
 function StatChip({
   label,
   value,
   tone,
+  testID,
 }: {
   label: string;
   value: number;
   tone: 'brand' | 'success' | 'warning' | 'danger';
+  testID?: string;
 }) {
   return (
-    <View style={styles.statChip}>
+    <View testID={testID} style={styles.statChip}>
       <Text style={styles.statValue}>{value}</Text>
       <ToneBadge label={label} tone={tone} />
     </View>
@@ -283,13 +326,15 @@ function StatChip({
 function ToneBadge({
   label,
   tone,
+  testID,
 }: {
   label: string;
   tone: 'brand' | 'success' | 'warning' | 'danger' | 'neutral';
+  testID?: string;
 }) {
   const detail = toneDetail(tone);
   return (
-    <View style={[styles.badge, detail.style]}>
+    <View testID={testID} style={[styles.badge, detail.style]}>
       <Text style={[styles.badgeText, detail.textStyle]}>{label}</Text>
     </View>
   );

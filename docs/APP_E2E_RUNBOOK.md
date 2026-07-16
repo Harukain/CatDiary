@@ -1,6 +1,6 @@
 # App E2E 验收运行说明
 
-当前已提供八条通用 Maestro 冒烟流程，另有一条 Android 专用离线同步流程：
+当前已提供九条通用 Maestro 冒烟流程，另有一条 Android 专用离线同步流程：
 
 - `.maestro/01-login-onboarding.yaml`：覆盖开发文档中的 App E2E 主流程 1～2，手机号登录、创建家庭和创建第一只猫。
 - `.maestro/02-create-plan-complete-task.yaml`：覆盖 App E2E 主流程 4～5，创建照顾计划、生成任务、完成任务并在记录时间线查看生成记录。
@@ -10,6 +10,7 @@
 - `.maestro/06-medical-next-reminder.yaml`：覆盖 App E2E 主流程 11，新增疫苗医疗档案、填写下次日期，并在医疗档案列表和单猫档案聚合中查看。
 - `.maestro/07-data-export-medical-summary.yaml`：覆盖 App E2E 主流程 13，生成单猫就医摘要，并生成家庭数据导出文件到可分享状态。
 - `.maestro/08-family-invite-role.yaml`：覆盖 App E2E 主流程 3，创建者生成手机号绑定邀请，被邀请账号通过深链接接受邀请，创建者重新登录后把该成员调整为管理员。
+- `.maestro/09-feishu-settings-notification-logs.yaml`：覆盖 App E2E 主流程 12 的稳定页面链路，验证“我的 → 通知偏好 → 飞书配置”和“提醒发送记录 → 失败筛选/刷新”入口；不触发真实飞书 Webhook 发送。
 - `.maestro-android/08-offline-record-sync.yaml`：覆盖 App E2E 主流程 6，Android 真机或模拟器上断网新增饮食记录，本机时间线展示“待同步”，恢复联网后自动重放并显示同步完成。
 
 运行前提：
@@ -110,6 +111,17 @@ maestro test .maestro/08-family-invite-role.yaml
 
 该流程会创建家庭和猫咪，由创建者在“我的 → 家庭成员”生成邀请，复制开发环境展示的 `catdiary:///family-invites/...` 深链；退出后用被邀请手机号登录并接受邀请；最后重新登录创建者账号，将该成员调整为管理员。该流程依赖 App 原生 scheme `catdiary`，移动配置门禁会校验该 scheme 不被移除。
 
+第九条流程会验证飞书配置和通知日志入口：
+
+```bash
+CATDIARY_E2E_PHONE=13900139092 \
+CATDIARY_E2E_FAMILY='Maestro 通知验收家庭' \
+CATDIARY_E2E_PET='Maestro 通知验收猫' \
+pnpm e2e:maestro:feishu-logs
+```
+
+该流程会创建新家庭和猫咪，进入“我的 → 通知偏好 → 飞书通知”，等待飞书配置状态加载完成；随后输入一个非飞书域名的 Webhook，确认本地格式校验会阻止保存，并通过放弃草稿返回。最后进入“提醒发送记录”，切换到“失败”筛选并执行刷新，确认没有失败日志时展示稳定空态。该流程只覆盖不依赖外部服务的入口、校验和筛选链路；真实飞书 Webhook 保存、测试发送、失败日志重试仍按下方手工验收执行。
+
 Android 离线流程会验证断网新增记录和恢复同步：
 
 ```bash
@@ -125,7 +137,20 @@ pnpm e2e:maestro:android-offline
 
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
-`pnpm e2e:maestro` 会运行 `.maestro/` 目录下的八条通用流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。Android 离线流程独立执行，不纳入默认通用目录，避免 iOS 或非离线环境误跑。
+`pnpm e2e:maestro` 会运行 `.maestro/` 目录下的九条通用流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。Android 离线流程独立执行，不纳入默认通用目录，避免 iOS 或非离线环境误跑。
+
+## 飞书通知与失败重试真机验收
+
+产品主流程 12「配置飞书、失败重试」涉及真实飞书群机器人和外部发送结果，不放入默认自动化断言真实发送成功或失败，避免测试脚本误发群消息、依赖公网超时或刷爆飞书机器人限流。该流程在真机上按以下步骤验收：
+
+1. 用管理员账号进入“我的 → 通知偏好 → 飞书通知”，确认页面状态从“正在加载飞书通知配置…”进入“未配置”或“已配置”。
+2. 输入非 HTTPS、非飞书/Lark 域名、非 `/open-apis/bot/` 路径三类错误地址，确认页面分别阻止保存并展示格式错误。
+3. 输入真实飞书或 Lark 自定义机器人 Webhook，点击 `feishu.save.button`，确认出现 `feishu.success.text`，状态变为“已配置”，且只展示脱敏尾号。
+4. 点击 `feishu.test.button`，确认 App 出现测试发送成功，并在对应飞书群收到“猫伴日记测试通知”。
+5. 为同一家庭创建一个固定时间提醒任务，等待 Worker 生成并发送通知；进入“提醒发送记录”，确认对应日志展示为发送中、已发送或送达。
+6. 若需要验证失败重试，应临时将飞书机器人 Webhook 替换为已删除、无效或会被飞书拒绝的真实飞书/Lark Webhook，等待任务通知失败后进入“提醒发送记录 → 失败”，确认失败原因安全可读。
+7. 修复 Webhook 后点击失败项的 `notification-logs.retry.button`，在确认弹窗中选择“确认重试”，确认日志状态从失败回到队列中，并在 Worker 处理后变为已发送/送达。
+8. 普通成员账号进入飞书通知页，应只能看到 `feishu.readonly.card`，不能保存、测试或移除 Webhook。
 
 ## 照片上传与相册真机验收
 
@@ -143,4 +168,4 @@ pnpm e2e:maestro:android-offline
 
 如果要覆盖拍照路径，将第 3 步改为 `photo-new.take-photo.button`，并额外验证首次拒绝相机权限后的 `photo-new.permission.notice`。
 
-这些流程运行通过后，只能证明登录建档、家庭邀请与角色调整、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期、Android 离线记录同步、数据导出、就医摘要和退出全部设备的自动化冒烟通过；照片上传、推送、相机/相册权限、照片队列恢复、系统分享面板、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+这些流程运行通过后，只能证明登录建档、家庭邀请与角色调整、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期、Android 离线记录同步、飞书配置入口、通知日志失败筛选、数据导出、就医摘要和退出全部设备的自动化冒烟通过；照片上传、真实推送、真实飞书 Webhook、相机/相册权限、照片队列恢复、系统分享面板、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

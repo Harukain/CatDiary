@@ -175,6 +175,7 @@ export default function FeishuSettingsRoute() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
+          testID="feishu.back.button"
           accessibilityLabel="返回"
           accessibilityHint={busy || draftDirty ? '返回前会提示当前飞书配置状态' : '返回上一页'}
           onPress={requestReturn}
@@ -182,7 +183,9 @@ export default function FeishuSettingsRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>飞书通知</Text>
+        <Text testID="feishu.title" style={styles.navTitle}>
+          飞书通知
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -191,11 +194,15 @@ export default function FeishuSettingsRoute() {
           <Text style={styles.subtitle}>配置后，家庭级照顾任务可通过飞书机器人同步提醒。</Text>
         </View>
 
-        <Card>
+        <Card testID="feishu.status.card">
           <View style={styles.cardHeader}>
             <Title>当前状态</Title>
-            <View style={[styles.statusPill, channelStatus === 'configured' && styles.statusOn]}>
+            <View
+              testID="feishu.status.pill"
+              style={[styles.statusPill, channelStatus === 'configured' && styles.statusOn]}
+            >
               <Text
+                testID="feishu.status.text"
                 style={[styles.statusText, channelStatus === 'configured' && styles.statusTextOn]}
               >
                 {statusCopy.title}
@@ -205,28 +212,38 @@ export default function FeishuSettingsRoute() {
           {loading ? (
             <View style={styles.loading}>
               <ActivityIndicator color={colors.brand} />
-              <Text style={styles.loadingText}>正在加载飞书通知配置…</Text>
+              <Text testID="feishu.loading.text" style={styles.loadingText}>
+                正在加载飞书通知配置…
+              </Text>
             </View>
           ) : (
             <>
               <Body>{statusCopy.detail}</Body>
               {feishuChannel?.maskedHint ? (
-                <Text style={styles.meta}>Webhook 尾号：{feishuChannel.maskedHint}</Text>
+                <Text testID="feishu.masked-hint.text" style={styles.meta}>
+                  Webhook 尾号：{feishuChannel.maskedHint}
+                </Text>
               ) : null}
               {feishuChannel?.updatedAt ? (
-                <Text style={styles.meta}>
+                <Text testID="feishu.updated-at.text" style={styles.meta}>
                   最近更新：{new Date(feishuChannel.updatedAt).toLocaleString('zh-CN')}
                 </Text>
               ) : null}
             </>
           )}
-          {success ? <SuccessText>{success}</SuccessText> : null}
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          {!loading && error ? <TextButton label="重新加载" onPress={() => void load()} /> : null}
+          {success ? <SuccessText testID="feishu.success.text">{success}</SuccessText> : null}
+          {error ? <ErrorText testID="feishu.error.text">{error}</ErrorText> : null}
+          {!loading && error ? (
+            <TextButton
+              testID="feishu.reload.button"
+              label="重新加载"
+              onPress={() => void load()}
+            />
+          ) : null}
         </Card>
 
         {canManage ? (
-          <Card>
+          <Card testID="feishu.config.card">
             <Title>配置 Webhook</Title>
             <Body>
               在飞书群添加“自定义机器人”后，复制 Webhook
@@ -241,6 +258,7 @@ export default function FeishuSettingsRoute() {
               autoCorrect={false}
               keyboardType="url"
               editable={!busy}
+              testID="feishu.webhook.input"
               onBlur={() => setTouched(true)}
               onChangeText={(value) => {
                 setWebhookUrl(value);
@@ -248,6 +266,7 @@ export default function FeishuSettingsRoute() {
               }}
             />
             <PrimaryButton
+              testID="feishu.save.button"
               label="保存飞书 Webhook"
               busy={operation === 'save'}
               disabled={loading || busy || webhookError.length > 0}
@@ -260,11 +279,13 @@ export default function FeishuSettingsRoute() {
             ) : null}
             <View style={styles.actionRow}>
               <TextButton
+                testID="feishu.test.button"
                 label="发送测试通知"
                 disabled={loading || busy || !feishuChannel}
                 onPress={() => void testWebhook()}
               />
               <TextButton
+                testID="feishu.remove.button"
                 label="移除飞书通知"
                 danger
                 disabled={loading || busy || !feishuChannel}
@@ -276,7 +297,7 @@ export default function FeishuSettingsRoute() {
             ) : null}
           </Card>
         ) : (
-          <Card>
+          <Card testID="feishu.readonly.card">
             <Title>只读状态</Title>
             <Body>
               当前账号不是家庭管理员，可以查看飞书通知状态，但不能配置、测试或移除 Webhook。
@@ -284,7 +305,7 @@ export default function FeishuSettingsRoute() {
           </Card>
         )}
 
-        <View style={styles.notice}>
+        <View testID="feishu.security.notice" style={styles.notice}>
           <Ionicons name="shield-checkmark-outline" size={20} color={colors.successDark} />
           <Body>
             飞书 Webhook 会作为家庭级通知渠道保存；个人是否接收手机推送仍由“通知偏好”里的开关控制。
