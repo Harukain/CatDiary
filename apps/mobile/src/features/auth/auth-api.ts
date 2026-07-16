@@ -1,14 +1,9 @@
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { clearAuthSession, getRefreshToken, saveAuthSession } from './session-store';
 import { isTerminalSessionError } from './session-policy';
+import { runtimeConfig } from '../../shared/config/runtime-config';
 
-const fallbackHost = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
-const configuredApiUrl = Constants.expoConfig?.extra?.apiUrl;
-const baseUrl =
-  typeof configuredApiUrl === 'string'
-    ? configuredApiUrl
-    : (process.env.EXPO_PUBLIC_API_URL ?? `http://${fallbackHost}:3000/api/v1`);
+const baseUrl = runtimeConfig.apiUrl;
 export function apiResourceUrl(path: string) {
   return path.startsWith('http://') || path.startsWith('https://') ? path : `${baseUrl}${path}`;
 }
