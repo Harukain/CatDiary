@@ -188,12 +188,15 @@ export default function TasksTab() {
       >
         <View style={styles.heading}>
           <View>
-            <Text style={styles.title}>照顾任务</Text>
+            <Text testID="tasks.title" style={styles.title}>
+              照顾任务
+            </Text>
             <Text style={styles.subtitle}>未来事项与历史结果清楚分开</Text>
           </View>
           {canManagePlans ? (
             <View style={styles.headerActions}>
               <Pressable
+                testID="tasks.manage-plans.button"
                 accessibilityRole="button"
                 onPress={() => router.push('/plans')}
                 style={styles.newButton}
@@ -201,6 +204,7 @@ export default function TasksTab() {
                 <Text style={styles.newButtonText}>管理计划</Text>
               </Pressable>
               <Pressable
+                testID="tasks.create-plan.button"
                 accessibilityRole="button"
                 onPress={() => router.push('/plans/new')}
                 style={styles.newButton}
@@ -214,6 +218,7 @@ export default function TasksTab() {
           {scopes.map((item) => (
             <Pressable
               key={item.value}
+              testID={`tasks.scope.${item.value}`}
               accessibilityRole="button"
               accessibilityState={{ selected: scope === item.value }}
               onPress={() => setScope(item.value)}
@@ -254,6 +259,7 @@ export default function TasksTab() {
             {tasks.map((task) => (
               <View
                 key={task.id}
+                testID="tasks.item"
                 style={[
                   styles.task,
                   (task.status === 'COMPLETED' || task.status === 'SKIPPED') && styles.completed,
@@ -273,6 +279,7 @@ export default function TasksTab() {
                   {formatTime(task.scheduledAt)}
                 </Text>
                 <Pressable
+                  testID="tasks.item.detail"
                   accessibilityRole="button"
                   accessibilityLabel={`查看${task.title}详情`}
                   onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}
@@ -294,6 +301,7 @@ export default function TasksTab() {
                   <ActivityIndicator color={colors.brand} />
                 ) : task.status === 'COMPLETED' || task.status === 'SKIPPED' ? (
                   <Pressable
+                    testID="tasks.item.undo"
                     accessibilityRole="button"
                     onPress={() => void undo(task)}
                     style={styles.action}
@@ -303,6 +311,7 @@ export default function TasksTab() {
                 ) : (
                   <View style={styles.actions}>
                     <Pressable
+                      testID="tasks.item.skip"
                       accessibilityRole="button"
                       onPress={() => requestSkip(task)}
                       style={styles.smallAction}
@@ -310,6 +319,7 @@ export default function TasksTab() {
                       <Text style={styles.skip}>跳过</Text>
                     </Pressable>
                     <Pressable
+                      testID="tasks.item.complete"
                       accessibilityRole="button"
                       onPress={() => requestComplete(task)}
                       style={styles.complete}
@@ -329,6 +339,7 @@ export default function TasksTab() {
             <Body>{emptyBody(scope)}</Body>
             {canManagePlans && scope !== 'completed' ? (
               <Pressable
+                testID="tasks.empty.create-plan.button"
                 accessibilityRole="button"
                 onPress={() => router.push('/plans/new')}
                 style={styles.emptyAction}

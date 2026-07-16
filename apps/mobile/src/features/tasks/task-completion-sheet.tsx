@@ -139,7 +139,9 @@ export function TaskCompletionSheet({
             <View style={styles.handle} />
             <View style={styles.heading}>
               <View style={styles.headingCopy}>
-                <Text style={styles.title}>完成任务</Text>
+                <Text testID="task-completion.sheet.title" style={styles.title}>
+                  完成任务
+                </Text>
                 <Text style={styles.subtitle}>
                   {task.pet?.name ?? '家庭公共任务'} · {task.title}
                 </Text>
@@ -166,6 +168,7 @@ export function TaskCompletionSheet({
               </View>
             ) : null}
             <Field
+              testID="task-completion.actual-at.input"
               label="实际完成时间"
               value={draft.actualAtLocal}
               onChangeText={(value) => update('actualAtLocal', value)}
@@ -175,6 +178,7 @@ export function TaskCompletionSheet({
               editable={!busy}
             />
             <Field
+              testID="task-completion.result.input"
               label="执行结果"
               value={draft.resultText}
               onChangeText={(value) => update('resultText', value)}
@@ -183,6 +187,7 @@ export function TaskCompletionSheet({
               editable={!busy}
             />
             <Field
+              testID="task-completion.note.input"
               label="备注"
               value={draft.note}
               onChangeText={(value) => update('note', value)}
@@ -192,8 +197,17 @@ export function TaskCompletionSheet({
               editable={!busy}
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
-            <PrimaryButton label="保存完成结果" busy={busy} onPress={submit} />
-            <TextButton label={busy ? '保存中，请等待' : '取消'} onPress={requestCancel} />
+            <PrimaryButton
+              testID="task-completion.submit.button"
+              label="保存完成结果"
+              busy={busy}
+              onPress={submit}
+            />
+            <TextButton
+              testID="task-completion.cancel.button"
+              label={busy ? '保存中，请等待' : '取消'}
+              onPress={requestCancel}
+            />
           </ScrollView>
         </KeyboardAvoidingView>
       </View>

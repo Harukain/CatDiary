@@ -78,6 +78,7 @@ export function QuickAddSheet({
             <View style={styles.headingCopy}>
               <Text
                 ref={titleRef}
+                testID="quick-add.sheet.title"
                 accessible
                 accessibilityRole="header"
                 accessibilityLabel="快速新增。记录已经发生的事，或安排接下来的照顾"
@@ -138,6 +139,7 @@ function QuickAddCard({
 }) {
   return (
     <Pressable
+      testID={action.testID}
       accessibilityRole="button"
       accessibilityLabel={`${action.title}快捷新增`}
       onPress={() => onPress(action.path)}
@@ -161,7 +163,9 @@ function QuickAddRow({
 }) {
   return (
     <Pressable
+      testID={action.testID}
       accessibilityRole="button"
+      accessibilityLabel={`${action.title}快捷新增`}
       onPress={() => onPress(action.path)}
       style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}
     >

@@ -19,6 +19,7 @@ export type QuickAddAction = {
   title: string;
   detail: string;
   path: QuickAddActionPath;
+  testID: string;
   group: 'record' | 'manage';
   placement: 'card' | 'row';
   requiresManagement?: boolean;
@@ -30,6 +31,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '饮食',
     detail: '吃了什么',
     path: '/records/new?type=FOOD',
+    testID: 'quick-add.action.food',
     group: 'record',
     placement: 'card',
   },
@@ -38,6 +40,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '体重',
     detail: 'kg 和时间',
     path: '/records/new?type=WEIGHT',
+    testID: 'quick-add.action.weight',
     group: 'record',
     placement: 'card',
   },
@@ -46,6 +49,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '铲屎',
     detail: '可选公共猫砂盆',
     path: '/records/new?type=LITTER',
+    testID: 'quick-add.action.litter',
     group: 'record',
     placement: 'card',
   },
@@ -54,6 +58,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '照片',
     detail: '多图、备注和猫咪',
     path: '/photos/new',
+    testID: 'quick-add.action.photo',
     group: 'record',
     placement: 'card',
   },
@@ -62,6 +67,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '更多记录类型',
     detail: '饮水、排便、呕吐、用药、疫苗、驱虫',
     path: '/records/new',
+    testID: 'quick-add.action.more-records',
     group: 'record',
     placement: 'row',
   },
@@ -70,6 +76,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '新建照顾计划',
     detail: '疫苗、驱虫、用药或铲屎提醒',
     path: '/plans/new',
+    testID: 'quick-add.action.new-plan',
     group: 'manage',
     placement: 'row',
     requiresManagement: true,
@@ -79,6 +86,7 @@ export const quickAddActions: QuickAddAction[] = [
     title: '添加猫咪档案',
     detail: '创建新猫咪，家庭最多 5 只',
     path: '/onboarding/pet?returnTo=pets',
+    testID: 'quick-add.action.new-pet',
     group: 'manage',
     placement: 'row',
     requiresManagement: true,

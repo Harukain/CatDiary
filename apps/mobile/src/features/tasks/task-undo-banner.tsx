@@ -24,7 +24,7 @@ export function TaskUndoBanner({
   }, [busy, onDismiss, task.id, task.version]);
 
   return (
-    <View accessibilityLiveRegion="polite" style={styles.banner}>
+    <View testID="tasks.undo.banner" accessibilityLiveRegion="polite" style={styles.banner}>
       <View style={styles.icon}>
         <Ionicons name="checkmark" size={17} color={colors.surface} />
       </View>
@@ -33,6 +33,7 @@ export function TaskUndoBanner({
         <Text style={styles.detail}>已生成一条实际记录</Text>
       </View>
       <Pressable
+        testID="tasks.undo.banner.undo.button"
         accessibilityRole="button"
         accessibilityLabel={`撤销完成${task.title}`}
         accessibilityState={{ disabled: busy }}

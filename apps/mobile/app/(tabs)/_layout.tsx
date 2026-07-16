@@ -98,6 +98,7 @@ export default function TabsLayout() {
               <Pressable
                 {...(props as ComponentProps<typeof Pressable>)}
                 ref={addTabButtonRef}
+                testID="tab.quick-add.button"
                 accessibilityRole="button"
                 accessibilityLabel="快速新增"
               />

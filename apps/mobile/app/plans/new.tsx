@@ -312,6 +312,7 @@ export default function NewPlanRoute() {
               {planTypes.map((item) => (
                 <Pressable
                   key={item.value}
+                  testID={`plan.type.${item.value}`}
                   accessibilityRole="button"
                   accessibilityState={{ selected: type === item.value }}
                   onPress={() => {
@@ -334,6 +335,7 @@ export default function NewPlanRoute() {
                 contentContainerStyle={styles.petRow}
               >
                 <Pressable
+                  testID="plan.assignee.all"
                   accessibilityRole="button"
                   accessibilityState={{ selected: assigneeId === null }}
                   onPress={() => setAssigneeId(null)}
@@ -348,6 +350,7 @@ export default function NewPlanRoute() {
                 {members.map((member) => (
                   <Pressable
                     key={member.id}
+                    testID="plan.assignee.member"
                     accessibilityRole="button"
                     accessibilityState={{ selected: assigneeId === member.user.id }}
                     onPress={() => setAssigneeId(member.user.id)}
@@ -374,6 +377,7 @@ export default function NewPlanRoute() {
               >
                 {type === 'LITTER' ? (
                   <Pressable
+                    testID="plan.pet.public"
                     accessibilityRole="button"
                     accessibilityState={{ selected: petId === null }}
                     onPress={() => setPetId(null)}
@@ -387,6 +391,7 @@ export default function NewPlanRoute() {
                 {pets.map((pet) => (
                   <Pressable
                     key={pet.id}
+                    testID="plan.pet.item"
                     accessibilityRole="button"
                     accessibilityState={{ selected: petId === pet.id }}
                     onPress={() => setPetId(pet.id)}
@@ -401,8 +406,15 @@ export default function NewPlanRoute() {
                 ))}
               </ScrollView>
             </View>
-            <Field label="计划名称" value={title} maxLength={80} onChangeText={setTitle} />
             <Field
+              testID="plan.title.input"
+              label="计划名称"
+              value={title}
+              maxLength={80}
+              onChangeText={setTitle}
+            />
+            <Field
+              testID="plan.detail.input"
               label="说明"
               value={detail}
               maxLength={500}
@@ -410,6 +422,7 @@ export default function NewPlanRoute() {
               onChangeText={setDetail}
             />
             <Field
+              testID="plan.local-time.input"
               label="提醒时间"
               value={localTime}
               maxLength={5}
@@ -423,6 +436,7 @@ export default function NewPlanRoute() {
                 {frequencies.map((item) => (
                   <Pressable
                     key={item.value}
+                    testID={`plan.frequency.${item.value}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: frequency === item.value }}
                     onPress={() => setFrequency(item.value)}
@@ -485,6 +499,7 @@ export default function NewPlanRoute() {
             ) : null}
             {error ? <ErrorText>{error}</ErrorText> : null}
             <PrimaryButton
+              testID="plan.submit.button"
               label={existingPlan ? '保存计划' : '保存并生成任务'}
               busy={busy}
               disabled={!valid}

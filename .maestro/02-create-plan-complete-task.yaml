@@ -1,0 +1,88 @@
+appId: com.haruka.catdiary
+name: '02 创建照顾计划并完成任务'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139011'
+  CATDIARY_E2E_FAMILY: 'Maestro 任务验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 任务验收猫'
+  CATDIARY_E2E_PLAN: 'Maestro 铲屎提醒'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn:
+    id: tab.quick-add.button
+- assertVisible:
+    id: quick-add.sheet.title
+- tapOn:
+    id: quick-add.action.new-plan
+- assertVisible:
+    id: plan.title.input
+- tapOn:
+    id: plan.type.LITTER
+- tapOn:
+    id: plan.pet.public
+- tapOn:
+    id: plan.title.input
+- eraseText
+- inputText: ${CATDIARY_E2E_PLAN}
+- tapOn:
+    id: plan.local-time.input
+- eraseText
+- inputText: '00:00'
+- tapOn:
+    id: plan.frequency.daily
+- tapOn:
+    id: plan.submit.button
+- assertVisible:
+    id: tasks.title
+- tapOn:
+    id: tasks.scope.upcoming
+- assertVisible:
+    id: tasks.item.complete
+- tapOn:
+    id: tasks.item.complete
+- assertVisible:
+    id: task-completion.sheet.title
+- tapOn:
+    id: task-completion.submit.button
+- assertVisible:
+    id: tasks.undo.banner
+- tapOn: 记录
+- assertVisible:
+    id: records.title
+- assertVisible:
+    id: records.item

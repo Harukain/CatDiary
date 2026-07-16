@@ -94,7 +94,9 @@ export default function RecordsTab() {
       >
         <View style={styles.heading}>
           <View>
-            <Text style={styles.title}>记录时间线</Text>
+            <Text testID="records.title" style={styles.title}>
+              记录时间线
+            </Text>
             <Text style={styles.subtitle}>实际发生的生活与健康情况</Text>
           </View>
         </View>
@@ -231,6 +233,7 @@ function RecordItem({
     <View style={styles.record}>
       <View style={[styles.dot, record.abnormal && styles.dotAbnormal]} />
       <Pressable
+        testID="records.item"
         accessibilityRole="button"
         onPress={onPress}
         style={({ pressed }) => [styles.recordCard, pressed && styles.pressed]}
