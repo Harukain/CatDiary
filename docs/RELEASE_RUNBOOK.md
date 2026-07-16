@@ -10,6 +10,7 @@ pnpm test:release-env
 pnpm test:preview-compose
 pnpm db:validate
 pnpm verify
+pnpm release:image-refs -- --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE>
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
 pnpm test:integration
 pnpm test:restore
@@ -22,7 +23,7 @@ pnpm audit --audit-level high
 
 CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gitleaks 密钥扫描。
 
-`pnpm test:release-env` 校验 `.env.preview.example` 与 `.env.production.example` 覆盖发布必需变量、显式禁用本地上传/导出目录、保留 EAS Project ID、区分 COS/SMS 占位密钥，并避免混入开发验证码或本地地址。`pnpm test:preview-compose` 校验 Preview Compose 只包含 migrate/API/Worker 三个服务、API 默认仅绑定 `127.0.0.1`、Worker 不暴露端口、容器使用只读文件系统/无新增权限/丢弃 capabilities、API/Worker 镜像保留非 root 用户和健康检查，防止部署模板在后续修改中回退。`pnpm release:preflight` 在正式部署前做静态配置检查，不连接腾讯云、不发送短信、不读取真实外部服务状态。它会检查 Git 提交、EAS profile、Preview/Production 公开 API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接串、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、Preview Compose 运行时 API 绑定地址/端口、发布镜像不可变引用以及本地上传/导出目录禁用。镜像引用必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA；`latest`、`main`、`prod`、`stable` 等浮动标签、缺失 registry host 和 API/Worker 共用同一镜像都会失败。CI 执行 `pnpm test:release-preflight`，用脱敏样例证明规则能放行安全配置并拒绝开发验证码、本地 API、SMS/COS 共用密钥、公开 API 绑定、非法 API 端口、浮动镜像标签、缺失 registry host 和共用服务镜像；真实部署仍需使用实际 env 文件和镜像引用运行 `release:preflight`。
+`pnpm test:release-env` 校验 `.env.preview.example` 与 `.env.production.example` 覆盖发布必需变量、显式禁用本地上传/导出目录、保留 EAS Project ID、区分 COS/SMS 占位密钥，并避免混入开发验证码或本地地址。`pnpm test:preview-compose` 校验 Preview Compose 只包含 migrate/API/Worker 三个服务、API 默认仅绑定 `127.0.0.1`、Worker 不暴露端口、容器使用只读文件系统/无新增权限/丢弃 capabilities、API/Worker 镜像保留非 root 用户和健康检查，防止部署模板在后续修改中回退。`pnpm release:image-refs` 从当前 Git HEAD 生成 `YYYYMMDD-<12位sha>` 镜像 tag，并输出 API/Worker 两个独立镜像引用；默认会拒绝未提交改动、无效 registry、本地 registry、无效 namespace 和非法 SHA，CI 通过 `pnpm test:release-image-refs` 防止规则回退。`pnpm release:preflight` 在正式部署前做静态配置检查，不连接腾讯云、不发送短信、不读取真实外部服务状态。它会检查 Git 提交、EAS profile、Preview/Production 公开 API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接串、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、Preview Compose 运行时 API 绑定地址/端口、发布镜像不可变引用以及本地上传/导出目录禁用。镜像引用必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA；`latest`、`main`、`prod`、`stable` 等浮动标签、缺失 registry host 和 API/Worker 共用同一镜像都会失败。CI 执行 `pnpm test:release-preflight`，用脱敏样例证明规则能放行安全配置并拒绝开发验证码、本地 API、SMS/COS 共用密钥、公开 API 绑定、非法 API 端口、浮动镜像标签、缺失 registry host 和共用服务镜像；真实部署仍需使用实际 env 文件和镜像引用运行 `release:preflight`。
 
 `pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项；不要把 Secret、Token、密码或私钥写入清单。
 
@@ -68,11 +69,13 @@ Preview/Production 不要从开发 `.env.example` 开始复制。Preview 使用 
 API 与 Worker 使用独立生产镜像，均以非 root `node` 用户运行，并内置 OpenSSL、CA 证书、Prisma Client 与健康检查：
 
 ```bash
-docker build -f apps/api/Dockerfile -t cat-diary-api:VERSION .
-docker build -f apps/worker/Dockerfile -t cat-diary-worker:VERSION .
-API_IMAGE=ccr.ccs.tencentyun.com/harukains/cat-diary-api:20260717-abcdef1 \
-WORKER_IMAGE=ccr.ccs.tencentyun.com/harukains/cat-diary-worker:20260717-abcdef1 \
-  ENV_FILE=../.env.preview docker compose -f infra/docker-compose.preview.yml config
+pnpm --silent release:image-refs -- --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE> --format export > /tmp/catdiary-images.env
+. /tmp/catdiary-images.env
+
+docker build -f apps/api/Dockerfile -t "$API_IMAGE" .
+docker build -f apps/worker/Dockerfile -t "$WORKER_IMAGE" .
+
+ENV_FILE=../.env.preview docker compose -f infra/docker-compose.preview.yml config
 ```
 
 Preview Compose 默认只把 API 绑定到 `127.0.0.1`，由 HTTPS 反向代理或负载均衡器对外提供服务；容器启用只读文件系统、丢弃 Linux capabilities 并禁止权限提升。生产图片与导出必须使用 COS，不依赖容器本地磁盘。

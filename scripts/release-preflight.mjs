@@ -20,8 +20,8 @@ if (args.help) {
 
 Usage:
   pnpm release:preflight -- --target preview --env-file ../.env.preview \\
-    --api-image ccr.ccs.tencentyun.com/team/cat-diary-api:VERSION \\
-    --worker-image ccr.ccs.tencentyun.com/team/cat-diary-worker:VERSION
+    --api-image ccr.ccs.tencentyun.com/team/cat-diary-api:20260717-abcdef123456 \\
+    --worker-image ccr.ccs.tencentyun.com/team/cat-diary-worker:20260717-abcdef123456
 
 Options:
   --target <preview|production>   要检查的发布目标，必填。
