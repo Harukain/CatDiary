@@ -16,6 +16,7 @@
     "test:privacy-manifest": "./scripts/verify-ios-privacy-manifest.sh",
     "eas:check": "node scripts/check-eas-readiness.mjs",
     "eas": "pnpm --dir apps/mobile eas",
+    "android:preflight": "node scripts/android-dev-preflight.mjs",
     "queue:ops": "pnpm --filter @cat-diary/domain build && pnpm --filter @cat-diary/worker build && pnpm --filter @cat-diary/worker queue:ops",
     "openapi:check": "node scripts/verify-openapi.mjs",
     "openapi:update": "UPDATE_OPENAPI=1 node scripts/verify-openapi.mjs",

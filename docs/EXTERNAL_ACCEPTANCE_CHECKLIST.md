@@ -78,6 +78,12 @@ adb reverse tcp:3000 tcp:3000
 adb devices -l
 ```
 
+也可以使用仓库内预检脚本统一检查设备、App 包名、USB reverse、API 和 Metro：
+
+```bash
+pnpm android:preflight -- --fix
+```
+
 在设备上打开 Development Build 后，通过 Metro 的开发链接载入项目；若启动器没有自动选择项目，可使用以下深链：
 
 ```bash
