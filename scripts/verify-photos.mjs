@@ -114,6 +114,37 @@ const content = await fetch(base + created.body.downloadUrl, { headers: ownerHea
 const contentBytes = Buffer.from(await content.arrayBuffer());
 const thumbnailContent = await fetch(base + created.body.thumbnailUrl, { headers: ownerHeaders });
 const thumbnailBytes = Buffer.from(await thumbnailContent.arrayBuffer());
+const otherFamily = await request('/families', {
+  method: 'POST',
+  headers: ownerAuth,
+  body: JSON.stringify({ name: '照片隔离家庭', timezone: 'Asia/Shanghai' }),
+});
+const otherFamilyHeaders = { ...ownerAuth, 'X-Family-Id': otherFamily.body.id };
+const otherPet = await request('/pets', {
+  method: 'POST',
+  headers: otherFamilyHeaders,
+  body: JSON.stringify({ name: '隔离猫', sex: 'UNKNOWN' }),
+});
+const crossFamilyDetail = await request(`/photos/${created.body.id}`, {
+  headers: otherFamilyHeaders,
+});
+const crossFamilyContent = await fetch(base + created.body.downloadUrl, {
+  headers: otherFamilyHeaders,
+});
+const crossFamilyRecordClientId = crypto.randomUUID();
+const crossFamilyRecord = await request('/records', {
+  method: 'POST',
+  headers: { ...otherFamilyHeaders, 'Idempotency-Key': crossFamilyRecordClientId },
+  body: JSON.stringify({
+    clientId: crossFamilyRecordClientId,
+    petId: otherPet.body.id,
+    type: 'PHOTO',
+    title: '跨家庭照片记录',
+    occurredAt: new Date().toISOString(),
+    abnormal: false,
+    data: { photoIds: [created.body.id] },
+  }),
+});
 const memberEdit = await request(`/photos/${created.body.id}`, {
   method: 'PATCH',
   headers: memberHeaders,
@@ -189,6 +220,12 @@ const checks = {
     byPet1.body.items[0]?.id === created.body.id && byPet2.body.items[0]?.id === created.body.id,
   protectedContentMatches: content.status === 200 && contentBytes.equals(png),
   thumbnailContentMatches: thumbnailContent.status === 200 && thumbnailBytes.equals(png),
+  crossFamilyDetailRejected:
+    crossFamilyDetail.status === 404 && crossFamilyDetail.body.code === 'PHOTO_NOT_FOUND',
+  crossFamilyContentRejected: crossFamilyContent.status === 404,
+  crossFamilyRecordRejected:
+    crossFamilyRecord.status === 422 &&
+    crossFamilyRecord.body.code === 'PHOTO_RECORD_SCOPE_INVALID',
   memberCannotEditOthers:
     memberEdit.status === 403 && memberEdit.body.code === 'PHOTO_EDIT_FORBIDDEN',
   ownerCanEditBindings:
@@ -213,6 +250,12 @@ if (Object.values(checks).some((value) => !value))
         created,
         byPet1,
         byPet2,
+        crossFamilyDetail,
+        crossFamilyContent: {
+          status: crossFamilyContent.status,
+          body: await crossFamilyContent.text(),
+        },
+        crossFamilyRecord,
         memberEdit,
         updated,
         avatar,
