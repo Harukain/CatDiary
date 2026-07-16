@@ -9,15 +9,18 @@ pnpm acceptance:audit
 pnpm acceptance:gate
 pnpm acceptance:evidence-template
 pnpm test:release-image-refs
+pnpm test:release-plan
 pnpm test:release-env
 pnpm test:preview-compose
 pnpm release:image-refs -- --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE>
+pnpm release:plan -- --target preview --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE> --env-file ../.env.preview --format markdown
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
 ```
 
 `acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
 `acceptance:evidence-template` 校验真机验收证据模板结构；实际真机回归证据按 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 复制到本地忽略目录后，用 `pnpm acceptance:evidence -- --file <证据文件> --require-passed` 做发布前证据校验。严格模式会要求证据 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。
 `test:release-image-refs` 校验不可变镜像引用生成器；真实发布前用 `release:image-refs` 从当前 Git HEAD 生成 API/Worker 镜像引用，避免手工使用浮动 tag。
+`test:release-plan` 校验脱敏发布执行清单生成器；真实发布前用 `release:plan` 产出 Git、镜像、env 摘要和下一步命令，不得包含 Secret 原文。
 `test:release-env` 校验 Preview/Production 发布环境模板本身是否完整且不含开发默认值。
 `test:preview-compose` 校验 Preview Compose 和 API/Worker Dockerfile 保留迁移前置、API 本地绑定、Worker 不暴露端口、只读容器、无新增权限、丢弃 capabilities、非 root 运行和健康检查。
 `release:preflight` 只做本地静态配置预检，检查 env 文件、镜像不可变引用、移动端公开配置和 Preview Compose 运行时 API 绑定覆盖变量是否达到 Preview/Production 部署前要求；镜像必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA，禁止 `latest/main/prod/stable` 等浮动标签、缺失 registry host 或 API/Worker 共用同一镜像。它不替代真实 COS/SMS/推送/数据库连通验收。

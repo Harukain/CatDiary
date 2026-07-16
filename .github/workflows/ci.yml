@@ -45,6 +45,7 @@ jobs:
       - run: pnpm test:device-evidence
       - run: pnpm test:preview-probe
       - run: pnpm test:release-image-refs
+      - run: pnpm test:release-plan
       - run: pnpm test:release-preflight
       - run: pnpm test:release-env
       - run: pnpm test:preview-compose
