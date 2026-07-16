@@ -2,7 +2,7 @@
 
 更新时间：2026-07-12
 
-本文件是 App Store Connect、Google Play Data safety 和正式隐私政策的工程事实底稿，不替代法律文本。提交前必须由产品所有者补充运营主体、联系邮箱、隐私政策 URL、用户协议 URL、数据存储地域和第三方处理者清单，并由合规人员复核。
+本文件是 App Store Connect、Google Play Data safety 和正式隐私政策的工程事实底稿，不替代法律文本。提交前必须由产品所有者补充运营主体、联系邮箱、隐私政策 URL、用户协议 URL、数据存储地域和第三方处理者清单，并由合规人员复核。法律正文源文件位于 [docs/legal/](./legal/README.md)，正式发布前必须从草稿衍生最终版并通过 `pnpm legal:gate`。
 
 ## 1. 数据类型与用途
 
@@ -50,3 +50,5 @@ Required Reason API 条目来自当前安装的 Expo SDK 57 与 React Native 0.8
 - App Store Connect 与 Google Play 问卷截图由两人复核并归档
 
 Preview/Production 构建通过 `EXPO_PUBLIC_PRIVACY_POLICY_URL` 与 `EXPO_PUBLIC_TERMS_URL` 注入正式地址；构建配置会拒绝缺失、HTTP、本机地址、带凭据、查询参数或 fragment 的 URL。登录页和登录后的设置页均提供入口，但正式内容及法律效力仍由运营主体负责确认。
+
+`pnpm legal:audit` 可在草稿阶段列出待确认项；`pnpm legal:gate` 会阻断仍含占位符、草稿声明、缺少核心章节或疑似密钥的法律文档源文件。该门禁只验证结构和工程安全，不替代法律意见。

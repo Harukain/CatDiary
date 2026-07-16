@@ -157,6 +157,7 @@
 - Production 原生权限已最小化：iOS ATS 禁止任意 HTTP，SecureStore 不再生成未使用 Face ID 声明；Android 阻断录音和开发悬浮窗。最终 Info.plist/Manifest introspection 白名单已纳入移动配置测试。
 - 商店隐私工程基线已补齐：iOS App 级 Privacy Manifest 声明不追踪、App Functionality 数据用途，并聚合当前 Expo/RN Required Reason API；隔离目录真实 Prebuild 会校验最终 XML。Google Play Data safety 与双商店数据类型映射已形成待法务确认底稿。
 - 法律文档入口已闭环：Preview/Production 强制两个独立 HTTPS URL，登录前与“我的”均可访问用户协议和隐私政策；缺失、本地 HTTP、凭据、查询参数和 fragment 均会阻断构建。
+- 法律文档源文件和门禁已补齐：新增隐私政策、用户协议草稿与 `pnpm legal:audit`/`pnpm legal:gate`，检查版本、生效日期、账号注销/删除渠道、权限用途、第三方处理者、联系方式、占位项、草稿声明和疑似密钥；自检 `pnpm test:legal-docs` 已纳入 `pnpm verify` 与 CI。最终法律/合规确认仍由产品所有者负责。
 - App typed runtime config：移动端业务代码不再直接读取 `process.env` 或分散读取 Expo 常量；API 地址、EAS Project ID、运行环境和法律链接统一经 typed runtime config 解析，并保留 iOS/Android 开发 fallback。
 - 外部验收审计：新增 `pnpm acceptance:audit` 与 `pnpm acceptance:gate`，统一读取外部环境与真机验收清单，列出未完成项并在发布门禁模式下阻断 Production；脚本同时检查清单中是否疑似写入 Secret、Token、密码或私钥。
 - 外部验收报告：新增 `pnpm acceptance:report`，从外部环境与真机验收清单生成 Markdown/JSON 脱敏报告，按章节列出完成度、待处理项和下一步建议；自检 `pnpm test:acceptance-report` 已纳入 `pnpm verify` 与 CI，防止报告泄漏 Secret 原文或与清单结构漂移。

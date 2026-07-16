@@ -9,6 +9,8 @@ pnpm acceptance:audit
 pnpm acceptance:gate
 pnpm acceptance:report
 pnpm acceptance:evidence-template
+pnpm legal:audit
+pnpm legal:gate
 pnpm test:release-image-refs
 pnpm test:release-plan
 pnpm test:release-env
@@ -21,6 +23,7 @@ pnpm release:preflight -- --target preview --env-file ../.env.preview --api-imag
 `acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
 `acceptance:report` 生成 Markdown/JSON 脱敏验收报告，按章节列出完成度、待处理项和下一步建议；如果清单疑似写入 Secret、Token、密码或私钥，会隐藏对应行文本并返回非零退出码。
 `acceptance:evidence-template` 校验真机验收证据模板结构；实际真机回归证据按 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 复制到本地忽略目录后，用 `pnpm acceptance:evidence -- --file <证据文件> --require-passed` 做发布前证据校验。严格模式会要求证据 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。
+`legal:audit` 审计 [法律文档源文件](./legal/README.md) 的结构、占位项、草稿声明和疑似敏感信息；`legal:gate` 用于 Preview/Production 发布前门禁，要求隐私政策和用户协议不再包含占位符或草稿声明，并包含版本、生效日期、账号注销/删除渠道、权限用途、第三方处理者和联系方式。
 `test:release-image-refs` 校验不可变镜像引用生成器；真实发布前用 `release:image-refs` 从当前 Git HEAD 生成 API/Worker 镜像引用，避免手工使用浮动 tag。
 `test:release-plan` 校验脱敏发布执行清单生成器；真实发布前用 `release:plan` 产出 Git、镜像、env 摘要和下一步命令，不得包含 Secret 原文。
 `test:release-env` 校验 Preview/Production 发布环境模板本身是否完整且不含开发默认值。
@@ -185,6 +188,7 @@ pnpm preview:probe
 - [ ] 至少两类国内 Android 品牌真机完成通知验证
 - [ ] P0/P1 为 0；P2 有负责人和目标版本
 - [ ] 隐私政策、用户协议、客服/隐私邮箱和权限用途文案确认
+- [ ] `pnpm legal:gate` 使用最终法律文档源文件通过
 - [ ] 两个法律文档 URL 均可在未登录状态通过 HTTPS 打开，正文包含版本、生效日期和账号删除渠道
 - [ ] TestFlight 与 Google Internal Testing 构建可安装
 
