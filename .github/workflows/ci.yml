@@ -43,6 +43,7 @@ jobs:
       - run: pnpm test:e2e-flows
       - run: pnpm acceptance:evidence-template
       - run: pnpm test:device-evidence
+      - run: pnpm test:acceptance-report
       - run: pnpm test:preview-probe
       - run: pnpm test:release-image-refs
       - run: pnpm test:release-plan

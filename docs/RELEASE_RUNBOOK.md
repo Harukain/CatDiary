@@ -10,6 +10,7 @@ pnpm test:release-env
 pnpm test:preview-compose
 pnpm db:validate
 pnpm verify
+pnpm acceptance:report
 pnpm release:image-refs -- --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE>
 pnpm release:plan -- --target preview --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE> --env-file ../.env.preview --format markdown
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
@@ -26,7 +27,7 @@ CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gi
 
 `pnpm test:release-env` 校验 `.env.preview.example` 与 `.env.production.example` 覆盖发布必需变量、显式禁用本地上传/导出目录、保留 EAS Project ID、区分 COS/SMS 占位密钥，并避免混入开发验证码或本地地址。`pnpm test:preview-compose` 校验 Preview Compose 只包含 migrate/API/Worker 三个服务、API 默认仅绑定 `127.0.0.1`、Worker 不暴露端口、容器使用只读文件系统/无新增权限/丢弃 capabilities、API/Worker 镜像保留非 root 用户和健康检查，防止部署模板在后续修改中回退。`pnpm release:image-refs` 从当前 Git HEAD 生成 `YYYYMMDD-<12位sha>` 镜像 tag，并输出 API/Worker 两个独立镜像引用；默认会拒绝未提交改动、无效 registry、本地 registry、无效 namespace 和非法 SHA，CI 通过 `pnpm test:release-image-refs` 防止规则回退。`pnpm release:plan` 生成不含 Secret 的发布执行清单，汇总 Git、镜像、env 脱敏摘要和下一步命令；它只输出公开 URL、Bucket 名称、地域和开关状态，真实密钥只显示变量名已存在，CI 通过 `pnpm test:release-plan` 验证清单不泄漏 Secret。`pnpm release:preflight` 在正式部署前做静态配置检查，不连接腾讯云、不发送短信、不读取真实外部服务状态。它会检查 Git 提交、EAS profile、Preview/Production 公开 API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接串、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、Preview Compose 运行时 API 绑定地址/端口、发布镜像不可变引用以及本地上传/导出目录禁用。镜像引用必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA；`latest`、`main`、`prod`、`stable` 等浮动标签、缺失 registry host 和 API/Worker 共用同一镜像都会失败。CI 执行 `pnpm test:release-preflight`，用脱敏样例证明规则能放行安全配置并拒绝开发验证码、本地 API、SMS/COS 共用密钥、公开 API 绑定、非法 API 端口、浮动镜像标签、缺失 registry host 和共用服务镜像；真实部署仍需使用实际 env 文件和镜像引用运行 `release:preflight`。
 
-`pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项；不要把 Secret、Token、密码或私钥写入清单。
+`pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项，或用 `pnpm acceptance:report -- --output /tmp/catdiary-acceptance-report.md` 生成脱敏 Markdown 报告给人工逐项补证据；不要把 Secret、Token、密码或私钥写入清单。
 
 Preview API 部署后，先运行以下外部探针再勾选 Preview 环境相关项：
 

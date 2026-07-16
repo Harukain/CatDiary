@@ -159,6 +159,7 @@
 - 法律文档入口已闭环：Preview/Production 强制两个独立 HTTPS URL，登录前与“我的”均可访问用户协议和隐私政策；缺失、本地 HTTP、凭据、查询参数和 fragment 均会阻断构建。
 - App typed runtime config：移动端业务代码不再直接读取 `process.env` 或分散读取 Expo 常量；API 地址、EAS Project ID、运行环境和法律链接统一经 typed runtime config 解析，并保留 iOS/Android 开发 fallback。
 - 外部验收审计：新增 `pnpm acceptance:audit` 与 `pnpm acceptance:gate`，统一读取外部环境与真机验收清单，列出未完成项并在发布门禁模式下阻断 Production；脚本同时检查清单中是否疑似写入 Secret、Token、密码或私钥。
+- 外部验收报告：新增 `pnpm acceptance:report`，从外部环境与真机验收清单生成 Markdown/JSON 脱敏报告，按章节列出完成度、待处理项和下一步建议；自检 `pnpm test:acceptance-report` 已纳入 `pnpm verify` 与 CI，防止报告泄漏 Secret 原文或与清单结构漂移。
 - App E2E 自动化基础：已新增 `pnpm e2e:maestro` 与九条通用 Maestro 冒烟流程，覆盖产品文档 App E2E 主流程 1～5、8、10～11、13～14，并补齐主流程 12 中不依赖外部服务的飞书配置入口、Webhook 本地校验、通知日志失败筛选与刷新链路；另新增 `pnpm e2e:maestro:android-offline` Android 专用流程覆盖主流程 6（离线新增记录、时间线待同步、恢复联网后同步完成），该流程依赖 Android 飞行模式或真实断开 API 链路，仍需在装有 Maestro CLI 的 Android 环境执行；相册/照片上传因依赖系统媒体库和权限弹窗，当前按 `docs/APP_E2E_RUNBOOK.md` 执行真机手工验收；真实推送、真实飞书 Webhook、双设备并发和系统分享面板仍需继续按外部验收清单回归。
 - App E2E 静态门禁：新增 `pnpm test:e2e-flows` 并纳入本地 `pnpm verify` 与 CI，检查 10 条 Maestro 流程存在、App ID、默认手机号唯一性、关键 testID、脚本入口和 runbook 引用，防止真机回归前脚本漂移；该门禁不替代真实设备运行。
 - iOS Development Build 真机预检：新增 `pnpm ios:preflight`，只读检查 Xcode 命令行工具、已信任 iPhone/iPad、本机 Metro、局域网 Metro 和局域网 API `/health/live`，并在提供 `IOS_METRO_URL` 时输出 Development Client 深链；该工具用于降低 iPhone 真机连不上本地服务的排障成本，不代表 iPhone 真机回归已完成。
