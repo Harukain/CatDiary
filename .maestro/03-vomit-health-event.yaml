@@ -1,0 +1,103 @@
+appId: com.haruka.catdiary
+name: '03 呕吐记录与健康事件'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139021'
+  CATDIARY_E2E_FAMILY: 'Maestro 健康验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 健康验收猫'
+  CATDIARY_E2E_EVENT: 'Maestro 呕吐观察'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn:
+    id: tab.quick-add.button
+- assertVisible:
+    id: quick-add.sheet.title
+- tapOn:
+    id: quick-add.action.more-records
+- assertVisible:
+    id: record-new.title
+- assertVisible:
+    id: record-new.pet.item
+- tapOn:
+    id: record-new.type.VOMIT
+- tapOn:
+    id: record-new.primary.input
+- inputText: '1'
+- hideKeyboard
+- tapOn:
+    id: record-new.option.HAIRBALL
+- tapOn:
+    id: record-new.blood.switch
+- tapOn:
+    id: record-new.note.input
+- inputText: 'Maestro 健康观察'
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: record-new.submit.button
+    direction: DOWN
+- tapOn:
+    id: record-new.submit.button
+- assertVisible:
+    id: records.title
+- assertVisible:
+    id: records.item
+- tapOn:
+    id: records.item
+- assertVisible:
+    id: record-detail.title
+- tapOn:
+    id: record-detail.create-health-event.button
+- assertVisible:
+    id: health-event-new.title
+- tapOn:
+    id: health-event-new.title.input
+- eraseText
+- inputText: ${CATDIARY_E2E_EVENT}
+- tapOn:
+    id: health-event-new.summary.input
+- inputText: '由 Maestro 创建，关联一次呕吐异常记录'
+- hideKeyboard
+- assertVisible:
+    id: health-event-new.linked-record
+- tapOn:
+    id: health-event-new.submit.button
+- assertVisible:
+    id: health-event-detail.title
+- assertVisible:
+    id: health-event-detail.record.item

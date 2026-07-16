@@ -122,7 +122,9 @@ export default function NewHealthEventScreen() {
           </Pressable>
           <View style={styles.navCopy}>
             <Text style={styles.eyebrow}>异常追踪</Text>
-            <Text style={styles.title}>建立健康事件</Text>
+            <Text testID="health-event-new.title" style={styles.title}>
+              建立健康事件
+            </Text>
             <Text style={styles.subtitle}>健康事件用于整理事实，不提供诊断或医疗建议。</Text>
           </View>
         </View>
@@ -133,6 +135,7 @@ export default function NewHealthEventScreen() {
             onChangeText={setTitle}
             maxLength={100}
             placeholder="例如：连续呕吐观察"
+            testID="health-event-new.title.input"
           />
           <Field
             label="目前情况（选填）"
@@ -141,12 +144,28 @@ export default function NewHealthEventScreen() {
             maxLength={1000}
             multiline
             placeholder="描述频率、精神状态和已采取的处理"
+            testID="health-event-new.summary.input"
           />
-          {params.recordId ? <Text style={styles.linked}>已关联当前异常记录</Text> : null}
+          {params.recordId ? (
+            <Text testID="health-event-new.linked-record" style={styles.linked}>
+              已关联当前异常记录
+            </Text>
+          ) : null}
           {error ? <ErrorText>{error}</ErrorText> : null}
-          <PrimaryButton label="开始追踪" busy={busy} disabled={!title.trim()} onPress={submit} />
+          <PrimaryButton
+            label="开始追踪"
+            busy={busy}
+            disabled={!title.trim()}
+            testID="health-event-new.submit.button"
+            onPress={submit}
+          />
         </Card>
-        <TextButton label="取消" disabled={busy} onPress={requestClose} />
+        <TextButton
+          label="取消"
+          disabled={busy}
+          testID="health-event-new.cancel.button"
+          onPress={requestClose}
+        />
       </ScrollView>
     </Screen>
   );

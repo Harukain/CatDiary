@@ -224,7 +224,9 @@ export default function HealthEventDetailScreen() {
             <Text style={[styles.status, event.status === 'RECOVERED' && styles.recovered]}>
               {event.status === 'ACTIVE' ? '观察中' : '已恢复'}
             </Text>
-            <Text style={styles.title}>{event.title}</Text>
+            <Text testID="health-event-detail.title" style={styles.title}>
+              {event.title}
+            </Text>
             <Text style={styles.meta}>
               {event.pet.name} ·{' '}
               {new Date(event.startedAt).toLocaleString('zh-CN', { hour12: false })} 开始
@@ -254,6 +256,7 @@ export default function HealthEventDetailScreen() {
               label="保存事件信息"
               busy={busy}
               disabled={!title.trim() || !isDirty}
+              testID="health-event-detail.save.button"
               onPress={save}
             />
           ) : (
@@ -264,7 +267,12 @@ export default function HealthEventDetailScreen() {
           <View style={styles.sectionHeading}>
             <Text style={styles.section}>关联记录</Text>
             {canEdit ? (
-              <Pressable onPress={requestLinkRecord} disabled={busy} style={styles.linkButton}>
+              <Pressable
+                testID="health-event-detail.link-record.button"
+                onPress={requestLinkRecord}
+                disabled={busy}
+                style={styles.linkButton}
+              >
                 <Ionicons name="add" size={17} color={colors.brand} />
                 <Text style={styles.linkButtonText}>继续关联</Text>
               </Pressable>
@@ -275,6 +283,7 @@ export default function HealthEventDetailScreen() {
               event.records.map(({ record, relationType }) => (
                 <View key={record.id} style={styles.record}>
                   <Pressable
+                    testID="health-event-detail.record.item"
                     accessibilityRole="button"
                     accessibilityLabel={`查看关联记录：${record.title}`}
                     style={styles.recordMain}
@@ -307,7 +316,12 @@ export default function HealthEventDetailScreen() {
           </View>
         </View>
         {event.status === 'ACTIVE' && canEdit ? (
-          <PrimaryButton label="标记为已恢复" busy={busy} onPress={recover} />
+          <PrimaryButton
+            label="标记为已恢复"
+            busy={busy}
+            testID="health-event-detail.recover.button"
+            onPress={recover}
+          />
         ) : event.status === 'RECOVERED' ? (
           <View style={styles.done}>
             <Text style={styles.doneText}>

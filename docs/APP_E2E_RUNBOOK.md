@@ -1,9 +1,10 @@
 # App E2E 验收运行说明
 
-当前已提供两条 Maestro 冒烟流程：
+当前已提供三条 Maestro 冒烟流程：
 
 - `.maestro/01-login-onboarding.yaml`：覆盖开发文档中的 App E2E 主流程 1～2，手机号登录、创建家庭和创建第一只猫。
 - `.maestro/02-create-plan-complete-task.yaml`：覆盖 App E2E 主流程 4～5，创建照顾计划、生成任务、完成任务并在记录时间线查看生成记录。
+- `.maestro/03-vomit-health-event.yaml`：覆盖 App E2E 主流程 8，新增一次呕吐异常记录，并从记录详情建立已关联的健康事件。
 
 运行前提：
 
@@ -33,8 +34,20 @@ maestro test .maestro/02-create-plan-complete-task.yaml
 
 该流程会创建一个“铲屎”公共照顾计划，把提醒时间固定为 `00:00` 并选择每天重复。这样新任务会稳定出现在“即将”范围中，避免执行时间依赖当前时刻。
 
+第三条流程同样建议使用新手机号，避免历史记录影响第一条时间线记录的定位：
+
+```bash
+CATDIARY_E2E_PHONE=13900139022 \
+CATDIARY_E2E_FAMILY='Maestro 健康验收家庭' \
+CATDIARY_E2E_PET='Maestro 健康验收猫' \
+CATDIARY_E2E_EVENT='Maestro 呕吐观察' \
+maestro test .maestro/03-vomit-health-event.yaml
+```
+
+该流程会从中央 `+` 打开新增记录，选择“呕吐”，填写一次带血/毛球呕吐并标记异常。保存后进入记录时间线，打开记录详情并建立健康事件，最后校验健康事件详情页存在关联记录。
+
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
 `pnpm e2e:maestro` 会运行 `.maestro/` 目录下的全部流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。
 
-这些流程只能证明登录建档、创建计划、任务完成和任务生成记录的自动化冒烟通过；推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录和健康事件关联的自动化冒烟通过；推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

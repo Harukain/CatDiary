@@ -36,7 +36,9 @@ export default function HealthEventsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.heading}>
           <View>
-            <Text style={styles.title}>健康事件</Text>
+            <Text testID="health-events.title" style={styles.title}>
+              健康事件
+            </Text>
             <Text style={styles.subtitle}>把零散异常串成一段可追溯过程</Text>
           </View>
           <Pressable onPress={() => router.back()} style={styles.close}>
@@ -44,10 +46,16 @@ export default function HealthEventsScreen() {
           </Pressable>
         </View>
         <View style={styles.tabs}>
-          <Tab active={status === 'ACTIVE'} label="观察中" onPress={() => setStatus('ACTIVE')} />
+          <Tab
+            active={status === 'ACTIVE'}
+            label="观察中"
+            value="ACTIVE"
+            onPress={() => setStatus('ACTIVE')}
+          />
           <Tab
             active={status === 'RECOVERED'}
             label="已恢复"
+            value="RECOVERED"
             onPress={() => setStatus('RECOVERED')}
           />
         </View>
@@ -59,6 +67,7 @@ export default function HealthEventsScreen() {
           events.map((event) => (
             <Pressable
               key={event.id}
+              testID="health-events.item"
               onPress={() =>
                 router.push({ pathname: '/health-events/[id]', params: { id: event.id } })
               }
@@ -91,9 +100,23 @@ export default function HealthEventsScreen() {
     </Screen>
   );
 }
-function Tab({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+function Tab({
+  active,
+  label,
+  value,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  value: 'ACTIVE' | 'RECOVERED';
+  onPress(): void;
+}) {
   return (
-    <Pressable onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
+    <Pressable
+      testID={`health-events.status.${value}`}
+      onPress={onPress}
+      style={[styles.tab, active && styles.tabActive]}
+    >
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>
   );

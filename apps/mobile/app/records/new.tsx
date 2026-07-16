@@ -273,7 +273,9 @@ export default function NewRecordScreen() {
               <Ionicons name="close" size={23} color={colors.ink} />
             </Pressable>
             <View style={styles.navCopy}>
-              <Text style={styles.title}>新增记录</Text>
+              <Text testID="record-new.title" style={styles.title}>
+                新增记录
+              </Text>
               <Text style={styles.subtitle}>记录实际发生的情况，不会生成待办任务</Text>
             </View>
           </View>
@@ -306,6 +308,7 @@ export default function NewRecordScreen() {
                   active={petId === null}
                   disabled={busy || petsLoading}
                   label="公共猫砂盆"
+                  testID="record-new.pet.public"
                   onPress={() => setPetId(null)}
                 />
               ) : null}
@@ -315,11 +318,12 @@ export default function NewRecordScreen() {
                   active={pet.id === petId}
                   disabled={busy || petsLoading}
                   label={pet.name}
+                  testID="record-new.pet.item"
                   onPress={() => setPetId(pet.id)}
                 />
               ))}
             </View>
-            <View style={styles.ownerNotice}>
+            <View testID="record-new.owner.notice" style={styles.ownerNotice}>
               <Text style={styles.ownerNoticeLabel}>提交归属</Text>
               <Text style={styles.ownerNoticeValue}>{ownerLabel}</Text>
             </View>
@@ -331,6 +335,7 @@ export default function NewRecordScreen() {
                   active={item.value === type}
                   disabled={busy || petsLoading}
                   label={item.label}
+                  testID={`record-new.type.${item.value}`}
                   onPress={() => setType(item.value)}
                 />
               ))}
@@ -344,6 +349,7 @@ export default function NewRecordScreen() {
                   placeholder="YYYY-MM-DD"
                   maxLength={10}
                   editable={!fieldsDisabled}
+                  testID="record-new.occurred-date.input"
                 />
               </View>
               <View style={styles.timeField}>
@@ -354,6 +360,7 @@ export default function NewRecordScreen() {
                   placeholder="HH:mm"
                   maxLength={5}
                   editable={!fieldsDisabled}
+                  testID="record-new.occurred-time.input"
                 />
               </View>
             </View>
@@ -364,6 +371,7 @@ export default function NewRecordScreen() {
               placeholder={fields.firstPlaceholder}
               keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
               editable={!fieldsDisabled}
+              testID="record-new.primary.input"
             />
             {choices ? (
               <View style={styles.optionBlock}>
@@ -375,6 +383,7 @@ export default function NewRecordScreen() {
                       active={form.second === item.value}
                       disabled={fieldsDisabled}
                       label={item.label}
+                      testID={`record-new.option.${item.value}`}
                       onPress={() => setForm((current) => ({ ...current, second: item.value }))}
                     />
                   ))}
@@ -388,6 +397,7 @@ export default function NewRecordScreen() {
                 placeholder={fields.secondPlaceholder}
                 keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
                 editable={!fieldsDisabled}
+                testID="record-new.secondary.input"
               />
             ) : null}
             {type === 'STOOL' || type === 'VOMIT' ? (
@@ -396,6 +406,7 @@ export default function NewRecordScreen() {
                 body="建议标记为异常并持续观察，必要时及时就医"
                 value={form.blood}
                 disabled={fieldsDisabled}
+                testID="record-new.blood.switch"
                 onChange={(blood) => {
                   setForm((current) => ({ ...current, blood }));
                   if (blood) setAbnormal(true);
@@ -410,17 +421,30 @@ export default function NewRecordScreen() {
               maxLength={500}
               placeholder="补充品牌、反应或观察情况"
               editable={!fieldsDisabled}
+              testID="record-new.note.input"
             />
             <SwitchRow
               title="标记为异常"
               body="会在时间线和健康摘要中醒目标识"
               value={abnormal}
               disabled={fieldsDisabled}
+              testID="record-new.abnormal.switch"
               onChange={setAbnormal}
             />
             {error ? <ErrorText>{error}</ErrorText> : null}
-            <PrimaryButton label="保存记录" busy={busy} disabled={!canSubmit} onPress={submit} />
-            <TextButton label="取消" disabled={busy} onPress={requestClose} />
+            <PrimaryButton
+              label="保存记录"
+              busy={busy}
+              disabled={!canSubmit}
+              testID="record-new.submit.button"
+              onPress={submit}
+            />
+            <TextButton
+              label="取消"
+              disabled={busy}
+              testID="record-new.cancel.button"
+              onPress={requestClose}
+            />
           </Card>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -431,15 +455,18 @@ function Chip({
   active,
   disabled,
   label,
+  testID,
   onPress,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
+  testID?: string;
   onPress(): void;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected: active, disabled: !!disabled }}
       disabled={disabled}
@@ -455,6 +482,7 @@ function SwitchRow({
   body,
   value,
   disabled,
+  testID,
   onChange,
   danger,
 }: {
@@ -462,6 +490,7 @@ function SwitchRow({
   body: string;
   value: boolean;
   disabled?: boolean;
+  testID?: string;
   onChange(value: boolean): void;
   danger?: boolean;
 }) {
@@ -472,6 +501,7 @@ function SwitchRow({
         <Text style={styles.switchBody}>{body}</Text>
       </View>
       <Switch
+        testID={testID}
         value={value}
         disabled={disabled}
         onValueChange={onChange}

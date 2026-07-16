@@ -251,7 +251,9 @@ export default function RecordDetailScreen() {
           <Text style={styles.eyebrow}>
             {recordTypeLabel(record.type)} · {recordOwnerLabel(record)}
           </Text>
-          <Text style={styles.title}>{record.title}</Text>
+          <Text testID="record-detail.title" style={styles.title}>
+            {record.title}
+          </Text>
           <Text style={styles.time}>
             {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
           </Text>
@@ -264,6 +266,7 @@ export default function RecordDetailScreen() {
             </Text>
             <PrimaryButton
               label="建立健康事件"
+              testID="record-detail.create-health-event.button"
               onPress={() =>
                 requestNavigate(() =>
                   router.push({
