@@ -1,0 +1,112 @@
+appId: com.haruka.catdiary
+name: '08 Android 离线新增记录与恢复同步'
+tags:
+  - android
+  - offline
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139071'
+  CATDIARY_E2E_FAMILY: 'Maestro 离线验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 离线验收猫'
+  CATDIARY_E2E_FOOD: 'Maestro 离线餐'
+  CATDIARY_E2E_NOTE: 'Maestro 离线同步记录'
+---
+- setAirplaneMode: disabled
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn:
+    id: tab.quick-add.button
+- assertVisible:
+    id: quick-add.sheet.title
+- tapOn:
+    id: quick-add.action.food
+- assertVisible:
+    id: record-new.title
+- assertVisible:
+    id: record-new.pet.item
+- tapOn:
+    id: record-new.pet.item
+- tapOn:
+    id: record-new.primary.input
+- inputText: ${CATDIARY_E2E_FOOD}
+- tapOn:
+    id: record-new.secondary.input
+- inputText: '80'
+- scrollUntilVisible:
+    element:
+      id: record-new.note.input
+    direction: DOWN
+- tapOn:
+    id: record-new.note.input
+- inputText: ${CATDIARY_E2E_NOTE}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: record-new.submit.button
+    direction: DOWN
+- setAirplaneMode: enabled
+- waitForAnimationToEnd
+- tapOn:
+    id: record-new.submit.button
+- extendedWaitUntil:
+    visible:
+      id: records.title
+    timeout: 60000
+- assertVisible:
+    id: records.route-notice.text
+- assertVisible:
+    id: records.sync.offline
+- assertVisible:
+    id: records.pending.badge
+- assertVisible:
+    id: records.item
+- assertVisible:
+    id: records.item.title
+- assertVisible:
+    id: records.item.meta
+- setAirplaneMode: disabled
+- waitForAnimationToEnd
+- tapOn: 首页
+- assertVisible:
+    id: home.title
+- tapOn: 记录
+- assertVisible:
+    id: records.title
+- extendedWaitUntil:
+    visible:
+      id: records.sync.synced
+    timeout: 60000
+- assertVisible:
+    id: records.item

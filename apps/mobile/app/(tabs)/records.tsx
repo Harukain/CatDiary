@@ -37,6 +37,8 @@ export default function RecordsTab() {
   const [error, setError] = useState('');
   const [syncNote, setSyncNote] = useState('');
   const routeNotice = recordTimelineNoticeState(paramValue(params.notice));
+  const effectiveRouteNotice =
+    routeNotice?.tone === 'warning' && syncNote.startsWith('已同步') ? null : routeNotice;
 
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
@@ -137,41 +139,54 @@ export default function RecordsTab() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.brand} />
         </Pressable>
-        {routeNotice ? (
+        {effectiveRouteNotice ? (
           <View
+            testID="records.route-notice"
             style={[
               styles.routeNotice,
-              routeNotice.tone === 'success' ? styles.routeNoticeSuccess : styles.routeNoticeWarn,
+              effectiveRouteNotice.tone === 'success'
+                ? styles.routeNoticeSuccess
+                : styles.routeNoticeWarn,
             ]}
           >
             <Ionicons
-              name={routeNotice.tone === 'success' ? 'checkmark-circle-outline' : 'cloud-outline'}
+              name={
+                effectiveRouteNotice.tone === 'success'
+                  ? 'checkmark-circle-outline'
+                  : 'cloud-outline'
+              }
               size={16}
-              color={routeNotice.tone === 'success' ? colors.successDark : colors.warningDark}
+              color={
+                effectiveRouteNotice.tone === 'success' ? colors.successDark : colors.warningDark
+              }
             />
             <Text
+              testID="records.route-notice.text"
               style={[
                 styles.routeNoticeText,
-                routeNotice.tone === 'success'
+                effectiveRouteNotice.tone === 'success'
                   ? styles.routeNoticeTextSuccess
                   : styles.routeNoticeTextWarn,
               ]}
             >
-              {routeNotice.text}
+              {effectiveRouteNotice.text}
             </Text>
           </View>
         ) : null}
         {syncNote ? (
           <Pressable
+            testID="records.sync.note"
             disabled={!syncNote.includes('冲突')}
             onPress={() => router.push('/sync-conflicts')}
             style={styles.sync}
           >
             <Ionicons name="cloud-done-outline" size={16} color={colors.warningDark} />
-            <Text style={styles.syncText}>
-              {syncNote}
-              {syncNote.includes('冲突') ? ' · 点击处理' : ''}
-            </Text>
+            <View testID={syncStatusTestId(syncNote)} style={styles.syncCopy}>
+              <Text testID="records.sync.note.text" style={styles.syncText}>
+                {syncNote}
+                {syncNote.includes('冲突') ? ' · 点击处理' : ''}
+              </Text>
+            </View>
           </Pressable>
         ) : null}
         {!loading && records.length ? <Insights records={records} /> : null}
@@ -209,6 +224,13 @@ function paramValue(value: string | string[] | undefined) {
   return value ?? null;
 }
 
+function syncStatusTestId(note: string) {
+  if (note.startsWith('已同步')) return 'records.sync.synced';
+  if (note.includes('冲突')) return 'records.sync.conflict';
+  if (note.includes('离线')) return 'records.sync.offline';
+  return 'records.sync.pending';
+}
+
 function Filter({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
   return (
     <Pressable onPress={onPress} style={[styles.filter, active && styles.filterActive]}>
@@ -242,18 +264,23 @@ function RecordItem({
           <View style={styles.recordTypeRow}>
             <Text style={styles.recordType}>{recordTypeLabel(record.type)}</Text>
             {isPendingLocalRecord(record) ? (
-              <View style={styles.pendingPill}>
+              <View testID="records.pending.badge" style={styles.pendingPill}>
                 <Ionicons name="cloud-upload-outline" size={12} color={colors.warningDark} />
-                <Text style={styles.pendingText}>本机待同步</Text>
+                <Text testID="records.pending.badge.text" style={styles.pendingText}>
+                  本机待同步
+                </Text>
               </View>
             ) : null}
           </View>
           <Text
+            testID="records.item.time"
             style={styles.recordTime}
           >{`${when.getMonth() + 1}月${when.getDate()}日 ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`}</Text>
         </View>
-        <Text style={styles.recordTitle}>{record.title}</Text>
-        <Text style={styles.recordMeta}>
+        <Text testID="records.item.title" style={styles.recordTitle}>
+          {record.title}
+        </Text>
+        <Text testID="records.item.meta" style={styles.recordMeta}>
           {recordOwnerLabel(record)} · {recordSummaryText(record)}
         </Text>
         {photos.length ? (
@@ -384,6 +411,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
   },
+  syncCopy: { flex: 1 },
   syncText: { ...typography.caption, color: colors.warningDark },
   insights: {
     borderRadius: radii.card,

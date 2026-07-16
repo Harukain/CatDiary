@@ -158,7 +158,7 @@
 - 法律文档入口已闭环：Preview/Production 强制两个独立 HTTPS URL，登录前与“我的”均可访问用户协议和隐私政策；缺失、本地 HTTP、凭据、查询参数和 fragment 均会阻断构建。
 - App typed runtime config：移动端业务代码不再直接读取 `process.env` 或分散读取 Expo 常量；API 地址、EAS Project ID、运行环境和法律链接统一经 typed runtime config 解析，并保留 iOS/Android 开发 fallback。
 - 外部验收审计：新增 `pnpm acceptance:audit` 与 `pnpm acceptance:gate`，统一读取外部环境与真机验收清单，列出未完成项并在发布门禁模式下阻断 Production；脚本同时检查清单中是否疑似写入 Secret、Token、密码或私钥。
-- App E2E 自动化基础：已新增 `pnpm e2e:maestro` 与七条 Maestro 冒烟流程，覆盖产品文档 App E2E 主流程 1～2、4～5、8、10～11、13～14；相册/照片上传因依赖系统媒体库和权限弹窗，当前按 `docs/APP_E2E_RUNBOOK.md` 执行真机手工验收；推送、弱网和系统分享面板仍需继续按外部验收清单回归。
+- App E2E 自动化基础：已新增 `pnpm e2e:maestro` 与七条通用 Maestro 冒烟流程，覆盖产品文档 App E2E 主流程 1～2、4～5、8、10～11、13～14；另新增 `pnpm e2e:maestro:android-offline` Android 专用流程覆盖主流程 6（离线新增记录、时间线待同步、恢复联网后同步完成），该流程依赖 Android 飞行模式或真实断开 API 链路，仍需在装有 Maestro CLI 的 Android 环境执行；相册/照片上传因依赖系统媒体库和权限弹窗，当前按 `docs/APP_E2E_RUNBOOK.md` 执行真机手工验收；推送、飞书、双设备并发和系统分享面板仍需继续按外部验收清单回归。
 - 设备端敏感数据生命周期已补齐：加密会话快照支持断网重启但校验 Token 世代；记录/任务缓存分别保留 90/7 天，孤儿照片 24 小时回收；退出或会话撤销会清除缓存、待同步操作和待上传照片，Android 系统备份关闭。
 - PostgreSQL 恢复演练已自动化：兼容 Prisma `schema` URL 参数、强制数据库名二次确认与 SHA-256、拒绝系统库，随机创建隔离库并逐表比对、校验 16 个迁移后自动清理；已纳入 CI。
 - API/Worker 独立生产镜像、非 root/健康检查/Prisma 生成、Preview Compose 与 Trivy CI 门禁已完成；两个容器真实连接 PostgreSQL/Redis 冒烟通过。
@@ -212,7 +212,7 @@
 ## 下一步
 
 1. 继续补齐 MVP 细节缺口；提醒生命周期仍需在 iOS/Android 真机上做系统推送和飞书通道回归。
-2. 在 iOS 与 Android 真机回归推送、权限、图片队列恢复、轻量离线同步和 360dp 安全区布局。
+2. 在 iOS 与 Android 真机回归推送、权限、图片队列恢复、Android 离线 Maestro 流程、iOS 离线恢复和 360dp 安全区布局。
 3. 用腾讯云测试 Bucket 与已审核短信签名/模板验收 COS 和真实验证码，再接入托管 PostgreSQL/Redis、域名、备份与监控告警。
 
 本文件只记录实施状态；产品范围和验收标准仍以上级目录 `docs/development/` 为准。
