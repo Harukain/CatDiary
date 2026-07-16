@@ -46,14 +46,22 @@ pnpm ios:preflight
 
 真机回归不能只口头记录“已跑过”。仓库提供证据模板 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json)，覆盖 14 条 App E2E 主流程、双平台设备信息、预检结果、权限、推送、离线、照片队列、小屏布局和冷启动专项检查。
 
-真实证据建议放在本地忽略目录，不提交到 GitHub：
+建议每轮真机回归开始前先生成当前 Git HEAD 的草稿，避免复用旧提交模板：
 
 ```bash
-mkdir -p docs/device-acceptance
-cp docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json docs/device-acceptance/2026-07-development-build.json
+pnpm acceptance:evidence-draft -- --api-url http://开发机局域网IP:3000/api/v1 --tester <验收人>
 ```
 
-每轮真机跑完后，填写脱敏证据，再执行：
+该命令默认输出到 `docs/device-acceptance/YYYY-MM-DD-development-build.json`，并要求工作区干净；如果只是临时调试未提交代码，可加 `--allow-dirty`，但正式发布证据不要这样做。也可以显式指定输出文件和构建地址：
+
+```bash
+pnpm acceptance:evidence-draft -- \
+  --output docs/device-acceptance/2026-07-development-build.json \
+  --ios-build-url https://expo.dev/accounts/harukains-team/projects/catdiary/builds/<ios-build-id> \
+  --android-build-url https://expo.dev/artifacts/eas/<android-artifact>.apk
+```
+
+每轮真机跑完后，填写草稿里的脱敏证据，再执行：
 
 ```bash
 pnpm acceptance:evidence -- --file docs/device-acceptance/2026-07-development-build.json --require-passed

@@ -17,6 +17,7 @@ pnpm release:plan -- --target preview --registry ccr.ccs.tencentyun.com --namesp
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
 pnpm test:integration
 pnpm test:restore
+pnpm acceptance:evidence-draft -- --output docs/device-acceptance/实际证据文件.json
 pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed
 pnpm legal:gate
 pnpm acceptance:gate
@@ -45,7 +46,7 @@ pnpm preview:probe
 
 该探针会验证 Preview API 使用非本地 HTTPS、TLS 1.2+、API live/ready 正常、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读取，以及固定开发验证码 `123456` 不会被接受。它不会触发真实短信发送；固定验证码检查只调用验证码校验接口，若 Preview 误开开发验证码会失败。提供法律文档 URL 时，探针还会验证用户协议和隐私政策均可未登录访问，并包含版本/生效信息和账号删除渠道。
 
-双平台真机回归完成后，先复制 [真机验收证据模板](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 到 `docs/device-acceptance/` 本地忽略目录，填写脱敏结果，再运行 `pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed`。该命令会要求 `sourceCommit` 等于当前 Git HEAD，iOS/Android 设备记录、14 条 MVP 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查全部通过，并阻止把 Token、密码、私钥、完整 Webhook 或未脱敏设备标识写入证据。
+双平台真机回归开始前，先运行 `pnpm acceptance:evidence-draft -- --output docs/device-acceptance/实际证据文件.json` 生成绑定当前 Git HEAD 的草稿；该命令默认要求工作区干净，避免证据指向无法复现的 dirty 代码。回归完成后填写脱敏结果，再运行 `pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed`。严格校验会要求 `sourceCommit` 等于当前 Git HEAD，iOS/Android 设备记录、14 条 MVP 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查全部通过，并阻止把 Token、密码、私钥、完整 Webhook 或未脱敏设备标识写入证据。
 
 当前依赖审计无高危或严重漏洞。Expo 构建工具链间接依赖的 `uuid@7` 有 1 个中危公告；它位于本地原生工程配置生成链路，不进入业务 API 运行时，待 Expo 上游升级后移除。禁止用跨大版本强制 override 破坏 Expo 工具链。
 
