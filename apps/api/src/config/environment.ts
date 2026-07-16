@@ -102,6 +102,12 @@ const schema = z
         path: ['METRICS_TOKEN'],
         message: 'METRICS_TOKEN is required in production',
       });
+    if (value.ENABLE_SWAGGER === 'true')
+      context.addIssue({
+        code: 'custom',
+        path: ['ENABLE_SWAGGER'],
+        message: 'Swagger must not be enabled in production',
+      });
   });
 
 export function validateEnvironment(value: Record<string, unknown>) {

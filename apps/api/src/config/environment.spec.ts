@@ -76,6 +76,32 @@ describe('validateEnvironment', () => {
     );
   });
 
+  it('rejects Swagger in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...base,
+        NODE_ENV: 'production',
+        DEV_OTP_CODE: '654321',
+        JWT_ACCESS_SECRET: 'production-access-secret-at-least-32-characters',
+        JWT_REFRESH_SECRET: 'production-refresh-secret-at-least-32-characters',
+        PHONE_LOOKUP_SECRET: 'production-phone-lookup-secret-at-least-32-chars',
+        PHONE_ENCRYPTION_SECRET: 'production-phone-encryption-secret-at-least-32-chars',
+        CHANNEL_ENCRYPTION_SECRET: 'production-channel-encryption-secret-at-least-32-chars',
+        COS_SECRET_ID: 'id',
+        COS_SECRET_KEY: 'key',
+        COS_BUCKET: 'bucket-123',
+        COS_REGION: 'ap-shanghai',
+        SMS_APP_ID: 'app',
+        SMS_SIGN_NAME: 'sign',
+        SMS_TEMPLATE_ID: 'template',
+        SMS_SECRET_ID: 'sms-secret-id',
+        SMS_SECRET_KEY: 'sms-secret-key',
+        METRICS_TOKEN: 'production-metrics-token-at-least-32-characters',
+        ENABLE_SWAGGER: 'true',
+      }),
+    ).toThrow(/Swagger/);
+  });
+
   it('accepts a fully configured production environment', () => {
     expect(
       validateEnvironment({

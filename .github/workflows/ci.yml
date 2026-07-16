@@ -46,6 +46,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm test:production-env
       - run: pnpm test:mobile-config
       - run: pnpm test:privacy-manifest
       - run: pnpm test:integration

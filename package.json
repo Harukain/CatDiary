@@ -13,6 +13,7 @@
     "test:restore": "./scripts/verify-backup-restore.sh",
     "test:monitoring": "./scripts/verify-monitoring.sh",
     "test:mobile-config": "node scripts/verify-mobile-config.mjs",
+    "test:production-env": "node scripts/verify-production-environment.mjs",
     "test:privacy-manifest": "./scripts/verify-ios-privacy-manifest.sh",
     "eas:check": "node scripts/check-eas-readiness.mjs",
     "eas": "pnpm --dir apps/mobile eas",
@@ -28,7 +29,7 @@
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,json}\" \"packages/**/*.{ts,tsx,json}\" \"scripts/**/*.mjs\" \"docs/**/*.md\" \"*.{json,md,yml}\" \".github/**/*.yml\" \".maestro/**/*.{yaml,yml}\" \".maestro-android/**/*.{yaml,yml}\"",
-    "verify": "pnpm format:check && pnpm lint:eslint && pnpm db:validate && pnpm typecheck && pnpm test && pnpm build",
+    "verify": "pnpm format:check && pnpm lint:eslint && pnpm db:validate && pnpm typecheck && pnpm test && pnpm build && pnpm test:production-env",
     "db:generate": "prisma generate",
     "db:validate": "DATABASE_URL=postgresql://catdiary:catdiary@localhost:5433/catdiary?schema=public prisma validate"
   },

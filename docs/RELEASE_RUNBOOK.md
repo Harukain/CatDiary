@@ -24,7 +24,7 @@ CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gi
 
 ## 2. 服务端环境
 
-复制 `.env.example` 后通过密钥管理服务注入生产值，不提交 `.env`。生产启动校验会阻止弱密钥、固定验证码和缺失的 COS/SMS 配置。
+复制 `.env.example` 后通过密钥管理服务注入生产值，不提交 `.env`。生产启动校验会阻止弱密钥、固定验证码、生产 Swagger 和缺失的 COS/SMS 配置。`pnpm verify` 已包含 `pnpm test:production-env`；需要单独排查生产环境校验时，也可以在构建后直接运行该命令。
 
 必须配置 HTTPS 反向代理，并设置：
 
