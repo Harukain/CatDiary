@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FamilyRole, NotificationStatus } from '@prisma/client';
 import { z } from 'zod';
@@ -72,5 +82,11 @@ export class NotificationPreferencesController {
       body,
     );
     return this.notifications.updatePreference(family.familyId, user.sub, input);
+  }
+
+  @Post('me/test-push')
+  @HttpCode(200)
+  testPush(@CurrentFamily() family: FamilyContext, @CurrentUser() user: AccessTokenPayload) {
+    return this.notifications.testCurrentDevicePush(family.familyId, user.sub, user.sid);
   }
 }

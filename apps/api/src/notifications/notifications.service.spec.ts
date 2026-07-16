@@ -1,6 +1,10 @@
 import { NotificationChannelType, NotificationStatus } from '@prisma/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NotificationsService } from './notifications.service';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('NotificationsService retry', () => {
   it('rejects retries while the notification incident switch is disabled', async () => {
@@ -135,6 +139,139 @@ describe('NotificationsService retry', () => {
     await expect(service.retry('family-id', 'log-id')).rejects.toMatchObject({
       code: 'NOTIFICATION_RECIPIENT_LEFT_FAMILY',
       status: 410,
+    });
+    await service.onModuleDestroy();
+  });
+});
+
+describe('NotificationsService current device push test', () => {
+  it('rejects test push while the notification incident switch is disabled', async () => {
+    const service = new NotificationsService(
+      {} as never,
+      {
+        get: vi.fn((key: string, fallback?: unknown) =>
+          key === 'FEATURE_NOTIFICATIONS_ENABLED' ? false : (fallback ?? 'redis://localhost:6379'),
+        ),
+      } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.testCurrentDevicePush('family-id', 'user-id', 'session-id'),
+    ).rejects.toMatchObject({
+      code: 'NOTIFICATIONS_TEMPORARILY_DISABLED',
+      status: 503,
+    });
+    await service.onModuleDestroy();
+  });
+
+  it('requires the user push preference to be enabled', async () => {
+    const service = new NotificationsService(
+      {
+        notificationPreference: {
+          findUnique: vi.fn().mockResolvedValue({ pushEnabled: false }),
+        },
+      } as never,
+      { get: vi.fn().mockReturnValue('redis://localhost:6379') } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.testCurrentDevicePush('family-id', 'user-id', 'session-id'),
+    ).rejects.toMatchObject({
+      code: 'PUSH_PREFERENCE_DISABLED',
+      status: 422,
+    });
+    await service.onModuleDestroy();
+  });
+
+  it('sends a test push to the active token bound to the current device session', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: { status: 'ok', id: 'expo-ticket-id' } }),
+      }),
+    );
+    const prisma = {
+      notificationPreference: {
+        findUnique: vi.fn().mockResolvedValue({ pushEnabled: true }),
+      },
+      devicePushToken: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'token-id',
+          token: 'ExponentPushToken[current-device]',
+        }),
+        update: vi.fn(),
+      },
+    };
+    const service = new NotificationsService(
+      prisma as never,
+      { get: vi.fn().mockReturnValue('redis://localhost:6379') } as never,
+      {} as never,
+    );
+
+    const result = await service.testCurrentDevicePush('family-id', 'user-id', 'session-id');
+
+    expect(result).toMatchObject({ success: true, providerMessageId: 'expo-ticket-id' });
+    expect(prisma.devicePushToken.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-id',
+          deviceSessionId: 'session-id',
+          active: true,
+          provider: 'EXPO',
+          deviceSession: expect.objectContaining({ revokedAt: null }),
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'https://exp.host/--/api/v2/push/send',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('猫伴日记测试通知'),
+      }),
+    );
+    await service.onModuleDestroy();
+  });
+
+  it('deactivates a stale current-device token when Expo reports DeviceNotRegistered', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          data: { status: 'error', details: { error: 'DeviceNotRegistered' } },
+        }),
+      }),
+    );
+    const prisma = {
+      notificationPreference: {
+        findUnique: vi.fn().mockResolvedValue({ pushEnabled: true }),
+      },
+      devicePushToken: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'token-id',
+          token: 'ExponentPushToken[stale]',
+        }),
+        update: vi.fn(),
+      },
+    };
+    const service = new NotificationsService(
+      prisma as never,
+      { get: vi.fn().mockReturnValue('redis://localhost:6379') } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.testCurrentDevicePush('family-id', 'user-id', 'session-id'),
+    ).rejects.toMatchObject({
+      code: 'PUSH_TOKEN_NOT_DELIVERABLE',
+      status: 422,
+    });
+    expect(prisma.devicePushToken.update).toHaveBeenCalledWith({
+      where: { id: 'token-id' },
+      data: { active: false },
     });
     await service.onModuleDestroy();
   });

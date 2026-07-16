@@ -343,6 +343,11 @@ export interface NotificationPreference {
   overdueEnabled: boolean;
   updatedAt: string;
 }
+export interface PushTestResult {
+  success: boolean;
+  providerMessageId?: string | null;
+  sentAt: string;
+}
 export interface AccountDeletionStatus {
   status: 'ACTIVE' | 'PENDING_DELETION' | 'DELETED';
   requestedAt: string | null;
@@ -956,6 +961,14 @@ export const authApi = {
       accessToken,
       familyId,
       input,
+    );
+  },
+  testCurrentDevicePush(accessToken: string, familyId: string) {
+    return authenticatedPost<PushTestResult>(
+      '/notification-preferences/me/test-push',
+      accessToken,
+      familyId,
+      {},
     );
   },
   listNotificationChannels(accessToken: string, familyId: string) {

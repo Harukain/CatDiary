@@ -14,19 +14,27 @@ import {
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
-import { authApi, type NotificationPreference } from '../../src/features/auth/auth-api';
+import {
+  AuthApiError,
+  authApi,
+  type NotificationPreference,
+} from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
   canEditNotificationPreference,
+  canSendDevicePushTest,
   devicePushRegistrationActionLabel,
   devicePushRegistrationBody,
   devicePushRegistrationFailureRecovery,
   devicePushRegistrationTitle,
+  devicePushTestActionLabel,
+  devicePushTestHint,
   maskExpoPushToken,
   notificationPreferenceDependencyHint,
   notificationPreferenceEffectiveEnabled,
   notificationPreferenceSaveMessage,
   type DevicePushRegistrationStatus,
+  type DevicePushTestStatus,
   type NotificationPreferenceKey,
 } from '../../src/features/notifications/notification-preferences';
 import { registerForPushNotifications } from '../../src/features/notifications/register-push';
@@ -47,16 +55,35 @@ export default function NotificationSettingsRoute() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<NotificationPreferenceKey | ''>('');
   const [devicePushStatus, setDevicePushStatus] = useState<DevicePushRegistrationStatus>('idle');
+  const [devicePushTestStatus, setDevicePushTestStatus] = useState<DevicePushTestStatus>('idle');
   const [devicePushToken, setDevicePushToken] = useState('');
   const [devicePushError, setDevicePushError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const devicePushRegistering = devicePushStatus === 'registering';
+  const devicePushTesting = devicePushTestStatus === 'sending';
   const editingDisabled =
     !canEditNotificationPreference({ loading, savingKey: saving }) ||
-    devicePushStatus === 'registering';
+    devicePushRegistering ||
+    devicePushTesting;
   const devicePushRecovery = devicePushError
     ? devicePushRegistrationFailureRecovery(devicePushError)
     : null;
+  const canTestDevicePush = preference
+    ? canSendDevicePushTest({
+        loading,
+        savingKey: saving,
+        pushEnabled: preference.pushEnabled,
+        registrationStatus: devicePushStatus,
+        testStatus: devicePushTestStatus,
+      })
+    : false;
+  const devicePushTestHelp = preference
+    ? devicePushTestHint({
+        pushEnabled: preference.pushEnabled,
+        registrationStatus: devicePushStatus,
+      })
+    : '';
   const load = useCallback(async () => {
     if (!session || !activeFamily) {
       setLoading(false);
@@ -77,22 +104,24 @@ export default function NotificationSettingsRoute() {
     void load();
   }, [load]);
   const requestReturn = useCallback(() => {
-    if (!saving) {
+    if (!saving && !devicePushRegistering && !devicePushTesting) {
       router.back();
       return;
     }
-    Alert.alert('通知设置正在保存', '请等待当前开关保存完成，避免本机展示状态与服务器不一致。', [
-      { text: '继续等待', style: 'cancel' },
-    ]);
-  }, [router, saving]);
+    Alert.alert(
+      '通知设置正在处理',
+      '请等待当前保存、登记或测试发送完成，避免本机展示状态与服务器不一致。',
+      [{ text: '继续等待', style: 'cancel' }],
+    );
+  }, [devicePushRegistering, devicePushTesting, router, saving]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!saving) return false;
+      if (!saving && !devicePushRegistering && !devicePushTesting) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
-  }, [requestReturn, saving]);
+  }, [devicePushRegistering, devicePushTesting, requestReturn, saving]);
   async function change(key: NotificationPreferenceKey, value: boolean) {
     if (!session || !activeFamily || !preference) return;
     if (editingDisabled) return;
@@ -124,6 +153,7 @@ export default function NotificationSettingsRoute() {
     setDevicePushStatus('registering');
     setDevicePushToken('');
     setDevicePushError('');
+    setDevicePushTestStatus('idle');
     setError('');
     if (showSuccess) setSuccess('');
     try {
@@ -136,6 +166,32 @@ export default function NotificationSettingsRoute() {
       setDevicePushStatus('failed');
       setDevicePushError(cause instanceof Error ? cause.message : '当前设备推送登记失败');
       return false;
+    }
+  }
+  async function sendCurrentDevicePushTest() {
+    if (!session || !activeFamily || !preference || !canTestDevicePush) return;
+    setDevicePushTestStatus('sending');
+    setDevicePushError('');
+    setError('');
+    setSuccess('');
+    try {
+      const result = await authApi.testCurrentDevicePush(session.accessToken, activeFamily.id);
+      setDevicePushTestStatus('sent');
+      setSuccess(
+        result.providerMessageId
+          ? `测试推送已发送，票据 ${result.providerMessageId}。请在这台手机上确认是否收到。`
+          : '测试推送已发送。请在这台手机上确认是否收到。',
+      );
+    } catch (cause) {
+      setDevicePushTestStatus('failed');
+      if (
+        cause instanceof AuthApiError &&
+        (cause.code === 'CURRENT_DEVICE_PUSH_TOKEN_MISSING' ||
+          cause.code === 'PUSH_TOKEN_NOT_DELIVERABLE')
+      ) {
+        setDevicePushStatus('failed');
+      }
+      setDevicePushError(cause instanceof Error ? cause.message : '测试推送发送失败');
     }
   }
   async function openDevicePushSettings() {
@@ -256,7 +312,7 @@ export default function NotificationSettingsRoute() {
                   <TextButton
                     label={devicePushRecovery.actionLabel}
                     danger
-                    disabled={devicePushStatus === 'registering' || Boolean(saving)}
+                    disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
                     onPress={() => void openDevicePushSettings()}
                   />
                 </View>
@@ -269,9 +325,17 @@ export default function NotificationSettingsRoute() {
             ) : null}
             <TextButton
               label={devicePushRegistrationActionLabel(devicePushStatus)}
-              disabled={devicePushStatus === 'registering' || Boolean(saving)}
+              disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
               onPress={() => void registerCurrentDevicePush()}
             />
+            <View style={styles.devicePushTest}>
+              <TextButton
+                label={devicePushTestActionLabel(devicePushTestStatus)}
+                disabled={!canTestDevicePush}
+                onPress={() => void sendCurrentDevicePushTest()}
+              />
+              <Text style={styles.devicePushTestHint}>{devicePushTestHelp}</Text>
+            </View>
           </Card>
         ) : null}
         <Card>
@@ -397,6 +461,8 @@ const styles = StyleSheet.create({
   devicePushRecoveryBody: { flex: 1, gap: spacing.xs },
   devicePushRecoveryTitle: { ...typography.h3, color: colors.dangerDark },
   devicePushRecoveryText: { ...typography.caption, color: colors.dangerDark },
+  devicePushTest: { gap: spacing.xs },
+  devicePushTestHint: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
   channelRow: {
     minHeight: 64,
     flexDirection: 'row',

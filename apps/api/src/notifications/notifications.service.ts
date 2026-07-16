@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NotificationChannelType, NotificationStatus } from '@prisma/client';
+import { NotificationChannelType, NotificationStatus, PushProvider } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { redisConnectionFromUrl } from '@cat-diary/domain';
 import { AppException } from '../common/app.exception';
@@ -58,6 +58,58 @@ export class NotificationsService implements OnModuleDestroy {
         updatedAt: true,
       },
     });
+  }
+
+  async testCurrentDevicePush(familyId: string, userId: string, sessionId: string) {
+    this.requireEnabled();
+    const preference = await this.prisma.notificationPreference.findUnique({
+      where: { familyId_userId: { familyId, userId } },
+      select: { pushEnabled: true },
+    });
+    if (preference?.pushEnabled === false)
+      throw new AppException(
+        'PUSH_PREFERENCE_DISABLED',
+        '请先开启手机推送，再发送测试通知',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    const token = await this.prisma.devicePushToken.findFirst({
+      where: {
+        userId,
+        deviceSessionId: sessionId,
+        active: true,
+        provider: PushProvider.EXPO,
+        deviceSession: { revokedAt: null, expiresAt: { gt: new Date() } },
+      },
+      orderBy: { lastSeenAt: 'desc' },
+      select: { id: true, token: true },
+    });
+    if (!token)
+      throw new AppException(
+        'CURRENT_DEVICE_PUSH_TOKEN_MISSING',
+        '当前设备尚未登记推送，请先登记当前设备',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    try {
+      const providerMessageId = await this.sendExpoPushTest(token.token, familyId);
+      return { success: true, providerMessageId, sentAt: new Date().toISOString() };
+    } catch (error) {
+      if (error instanceof ExpoPushTestError && error.providerCode === 'DeviceNotRegistered') {
+        await this.prisma.devicePushToken.update({
+          where: { id: token.id },
+          data: { active: false },
+        });
+        throw new AppException(
+          'PUSH_TOKEN_NOT_DELIVERABLE',
+          '当前设备推送 Token 已失效，请重新登记当前设备',
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+      throw new AppException(
+        'PUSH_TEST_FAILED',
+        safePushTestFailureMessage(error),
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   async list(
@@ -323,6 +375,43 @@ export class NotificationsService implements OnModuleDestroy {
       );
     }
   }
+
+  private async sendExpoPushTest(token: string, familyId: string) {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        to: token,
+        title: '猫伴日记测试通知',
+        body: '如果你看到这条消息，当前设备已可以接收系统推送。',
+        sound: 'default',
+        data: { familyId, category: 'PUSH_TEST' },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const payload = (await response.json()) as {
+      data?: { status?: string; id?: string; message?: string; details?: { error?: string } };
+    };
+    if (!response.ok || payload.data?.status === 'error') {
+      const providerCode = payload.data?.details?.error ?? payload.data?.message ?? response.status;
+      throw new ExpoPushTestError(String(providerCode));
+    }
+    return payload.data?.id ?? null;
+  }
+}
+
+class ExpoPushTestError extends Error {
+  constructor(public readonly providerCode: string) {
+    super(providerCode);
+  }
+}
+
+function safePushTestFailureMessage(error: unknown) {
+  if (error instanceof ExpoPushTestError) {
+    if (error.providerCode === 'MessageTooBig') return '测试推送内容过大，请联系开发者处理';
+    if (error.providerCode === 'InvalidCredentials') return '推送凭据无效，请检查 EAS/APNs 配置';
+  }
+  return '测试推送发送失败，请稍后重试';
 }
 
 function notificationStageFromJobKey(jobKey: string) {

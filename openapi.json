@@ -1121,6 +1121,23 @@
         "tags": ["notification preferences"]
       }
     },
+    "/api/v1/notification-preferences/me/test-push": {
+      "post": {
+        "operationId": "NotificationPreferencesController_testPush",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": ["notification preferences"]
+      }
+    },
     "/api/v1/pets": {
       "get": {
         "operationId": "PetsController_list",

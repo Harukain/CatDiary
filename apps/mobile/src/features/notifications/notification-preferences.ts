@@ -2,6 +2,7 @@ export type NotificationPreferenceKey = 'taskReminderEnabled' | 'pushEnabled' | 
 
 export type NotificationPreferenceState = Record<NotificationPreferenceKey, boolean>;
 export type DevicePushRegistrationStatus = 'idle' | 'registering' | 'registered' | 'failed';
+export type DevicePushTestStatus = 'idle' | 'sending' | 'sent' | 'failed';
 
 export function notificationPreferenceLabel(key: NotificationPreferenceKey) {
   return {
@@ -96,4 +97,47 @@ export function devicePushRegistrationFailureRecovery(errorMessage: string) {
     body: '请在系统设置中允许猫伴日记发送通知，然后返回这里重新登记当前设备。',
     actionLabel: '打开系统设置',
   };
+}
+
+export function devicePushTestActionLabel(status: DevicePushTestStatus) {
+  if (status === 'sending') return '测试发送中';
+  if (status === 'sent') return '再次发送测试推送';
+  return '发送测试推送';
+}
+
+export function canSendDevicePushTest({
+  loading,
+  savingKey,
+  pushEnabled,
+  registrationStatus,
+  testStatus,
+}: {
+  loading: boolean;
+  savingKey: NotificationPreferenceKey | '';
+  pushEnabled: boolean;
+  registrationStatus: DevicePushRegistrationStatus;
+  testStatus: DevicePushTestStatus;
+}) {
+  return (
+    !loading &&
+    !savingKey &&
+    pushEnabled &&
+    registrationStatus !== 'registering' &&
+    testStatus !== 'sending'
+  );
+}
+
+export function devicePushTestHint({
+  pushEnabled,
+  registrationStatus,
+}: {
+  pushEnabled: boolean;
+  registrationStatus: DevicePushRegistrationStatus;
+}) {
+  if (!pushEnabled) return '请先开启手机推送，再发送测试通知。';
+  if (registrationStatus === 'registering') return '当前设备登记完成后才能发送测试通知。';
+  if (registrationStatus === 'idle')
+    return '测试会使用服务器里当前会话最新 Token；如果失败，请先登记当前设备。';
+  if (registrationStatus === 'failed') return '请先处理登记失败原因，必要时重新登记当前设备。';
+  return '测试通知只发送到这台设备，不会影响家庭任务。';
 }

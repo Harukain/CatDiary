@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   canEditNotificationPreference,
+  canSendDevicePushTest,
   devicePushRegistrationActionLabel,
   devicePushRegistrationBody,
   devicePushRegistrationFailureRecovery,
   devicePushRegistrationTitle,
+  devicePushTestActionLabel,
+  devicePushTestHint,
   maskExpoPushToken,
   notificationPreferenceDependencyHint,
   notificationPreferenceEffectiveEnabled,
@@ -83,5 +86,53 @@ describe('notification preference rules', () => {
       },
     );
     expect(devicePushRegistrationFailureRecovery('Network request failed')).toBeNull();
+  });
+
+  it('guards current-device test push behind push preference and busy states', () => {
+    expect(
+      canSendDevicePushTest({
+        loading: false,
+        savingKey: '',
+        pushEnabled: true,
+        registrationStatus: 'registered',
+        testStatus: 'idle',
+      }),
+    ).toBe(true);
+    expect(
+      canSendDevicePushTest({
+        loading: false,
+        savingKey: '',
+        pushEnabled: false,
+        registrationStatus: 'registered',
+        testStatus: 'idle',
+      }),
+    ).toBe(false);
+    expect(
+      canSendDevicePushTest({
+        loading: false,
+        savingKey: '',
+        pushEnabled: true,
+        registrationStatus: 'registering',
+        testStatus: 'idle',
+      }),
+    ).toBe(false);
+    expect(
+      canSendDevicePushTest({
+        loading: false,
+        savingKey: 'pushEnabled',
+        pushEnabled: true,
+        registrationStatus: 'registered',
+        testStatus: 'idle',
+      }),
+    ).toBe(false);
+    expect(devicePushTestActionLabel('idle')).toBe('发送测试推送');
+    expect(devicePushTestActionLabel('sending')).toBe('测试发送中');
+    expect(devicePushTestActionLabel('sent')).toBe('再次发送测试推送');
+    expect(devicePushTestHint({ pushEnabled: false, registrationStatus: 'idle' })).toBe(
+      '请先开启手机推送，再发送测试通知。',
+    );
+    expect(devicePushTestHint({ pushEnabled: true, registrationStatus: 'registered' })).toBe(
+      '测试通知只发送到这台设备，不会影响家庭任务。',
+    );
   });
 });
