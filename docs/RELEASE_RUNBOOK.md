@@ -8,6 +8,7 @@
 pnpm install --frozen-lockfile
 pnpm db:validate
 pnpm verify
+pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
 pnpm test:integration
 pnpm test:restore
 pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed
@@ -18,6 +19,8 @@ pnpm audit --audit-level high
 `pnpm test:integration` 会先自动执行 `prisma migrate deploy` 和 `prisma migrate status`，迁移失败时不会启动 API/Worker，避免新代码连接旧数据库结构。
 
 CI 还会执行 Prisma 迁移状态检查、iOS/Android Expo bundle 导出和 Gitleaks 密钥扫描。
+
+`pnpm release:preflight` 在正式部署前做静态配置检查，不连接腾讯云、不发送短信、不读取真实外部服务状态。它会检查 Git 提交、EAS profile、Preview/Production 公开 API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接串、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、发布镜像版本标签以及本地上传/导出目录禁用。CI 执行 `pnpm test:release-preflight`，用脱敏样例证明规则能放行安全配置并拒绝开发验证码、本地 API、SMS/COS 共用密钥和 `latest` 镜像；真实部署仍需使用实际 env 文件和镜像引用运行 `release:preflight`。
 
 `pnpm acceptance:gate` 读取 [外部环境与真机验收清单](./EXTERNAL_ACCEPTANCE_CHECKLIST.md)，只允许在非敏感配置、COS、双平台真机、Preview 环境和 Preview 回归出口全部勾选后进入 Production 发布。日常排查可先运行 `pnpm acceptance:audit` 查看待确认项；不要把 Secret、Token、密码或私钥写入清单。
 
