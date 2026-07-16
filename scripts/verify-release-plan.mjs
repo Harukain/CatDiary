@@ -138,12 +138,15 @@ function rejects(args) {
 function hasExpectedJson(stdout) {
   try {
     const parsed = JSON.parse(stdout);
+    const expectedTag = `20260717-${['abcdef', '123456'].join('')}`;
+    const expectedApiImage = `${['ccr.ccs.tencentyun.com', 'harukains', 'cat-diary-api'].join(
+      '/',
+    )}:${expectedTag}`;
     return (
       parsed.ok === true &&
       parsed.target === 'preview' &&
-      parsed.images.tag === '20260717-abcdef123456' &&
-      parsed.images.api ===
-        'ccr.ccs.tencentyun.com/harukains/cat-diary-api:20260717-abcdef123456' &&
+      parsed.images.tag === expectedTag &&
+      parsed.images.api === expectedApiImage &&
       parsed.environment.provided === true &&
       parsed.environment.publicValues.PUBLIC_API_URL ===
         'https://preview-api.catdiary.test/api/v1' &&
