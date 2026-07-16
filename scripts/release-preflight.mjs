@@ -475,12 +475,20 @@ function validateNoLocalStorageDirs() {
 function checkImages() {
   validateImage('API_IMAGE', apiImage, 'API');
   validateImage('WORKER_IMAGE', workerImage, 'Worker');
+  record(
+    'IMAGE_SEPARATION',
+    typeof apiImage === 'string' &&
+      typeof workerImage === 'string' &&
+      apiImage.trim() !== workerImage.trim(),
+    'API vs Worker',
+    { action: 'API 与 Worker 必须使用各自独立构建的镜像引用，避免错误发布同一服务镜像' },
+  );
 }
 
 function validateImage(name, image, label) {
   const parsed = parseImageRef(image);
   record(name, parsed.ok, parsed.detail, {
-    action: `${label} 镜像必须使用带仓库命名空间和不可变版本标签或 digest 的引用，不能使用 latest/示例值`,
+    action: `${label} 镜像必须使用真实 registry、仓库命名空间和不可变引用：sha256 digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA；禁止 latest/main/prod/stable 等浮动标签`,
   });
 }
 
@@ -558,17 +566,65 @@ function stripTrailingSlash(input) {
 
 function parseImageRef(image) {
   if (!image || typeof image !== 'string') return { ok: false, detail: 'missing' };
-  if (/\s/.test(image)) return { ok: false, detail: 'contains whitespace' };
-  if (/VERSION|example|latest/i.test(image)) return { ok: false, detail: 'placeholder/latest' };
-  if (!image.includes('/')) return { ok: false, detail: 'missing registry namespace' };
-  const lastSegment = image.split('/').at(-1) ?? '';
-  const hasDigest = /@sha256:[a-f0-9]{64}$/i.test(image);
+  const normalized = image.trim();
+  if (image !== normalized || /\s/.test(normalized))
+    return { ok: false, detail: 'contains whitespace' };
+  if (/VERSION|example|placeholder|replace|your-|<|>/i.test(normalized))
+    return { ok: false, detail: 'placeholder' };
+
+  const digestSeparatorCount = normalized.split('@').length - 1;
+  if (digestSeparatorCount > 1) return { ok: false, detail: 'invalid digest reference' };
+
+  const [nameAndTag, digest] = normalized.split('@');
+  const nameParts = nameAndTag.split('/');
+  const registry = nameParts[0] ?? '';
+  if (nameParts.length < 3) return { ok: false, detail: 'missing registry namespace' };
+  if (!registry.includes('.') && !registry.includes(':'))
+    return { ok: false, detail: 'missing registry host' };
+  if (isLocalHost(registry) || looksPlaceholder(registry))
+    return { ok: false, detail: 'unsafe registry host' };
+  if (nameParts.some((part) => !part)) return { ok: false, detail: 'invalid repository path' };
+
+  const hasDigest = /^sha256:[a-f0-9]{64}$/i.test(digest ?? '');
+  if (digest && !hasDigest) return { ok: false, detail: 'invalid digest reference' };
+  const lastSegment = nameParts.at(-1) ?? '';
   const tag = lastSegment.includes(':') ? lastSegment.split(':').at(-1) : '';
-  const hasVersionTag = Boolean(tag && tag !== 'latest' && tag !== 'VERSION');
+  const tagCheck = validateImmutableTag(tag);
   return {
-    ok: hasDigest || hasVersionTag,
-    detail: hasDigest ? 'digest' : hasVersionTag ? `tag:${tag}` : 'missing immutable tag',
+    ok: hasDigest || tagCheck.ok,
+    detail: hasDigest ? 'digest' : tagCheck.detail,
   };
+}
+
+function validateImmutableTag(tag) {
+  if (!tag) return { ok: false, detail: 'missing immutable tag' };
+
+  const normalized = tag.toLowerCase();
+  const mutableTags = new Set([
+    'latest',
+    'main',
+    'master',
+    'develop',
+    'development',
+    'dev',
+    'preview',
+    'production',
+    'prod',
+    'staging',
+    'stage',
+    'stable',
+    'release',
+    'nightly',
+    'edge',
+    'current',
+  ]);
+  if (mutableTags.has(normalized)) return { ok: false, detail: `mutable tag:${tag}` };
+
+  const semver = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+  const dateWithSha = /^\d{8}[-_.][a-f0-9]{7,40}$/i;
+  const gitSha = /^[a-f0-9]{12,40}$/i;
+  const ok = semver.test(tag) || dateWithSha.test(tag) || gitSha.test(tag);
+  return { ok, detail: ok ? `tag:${tag}` : `non-immutable tag:${tag}` };
 }
 
 function command(name, commandArgs) {

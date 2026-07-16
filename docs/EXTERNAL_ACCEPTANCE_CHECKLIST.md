@@ -17,7 +17,7 @@ pnpm release:preflight -- --target preview --env-file ../.env.preview --api-imag
 `acceptance:evidence-template` 校验真机验收证据模板结构；实际真机回归证据按 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 复制到本地忽略目录后，用 `pnpm acceptance:evidence -- --file <证据文件> --require-passed` 做发布前证据校验。严格模式会要求证据 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。
 `test:release-env` 校验 Preview/Production 发布环境模板本身是否完整且不含开发默认值。
 `test:preview-compose` 校验 Preview Compose 和 API/Worker Dockerfile 保留迁移前置、API 本地绑定、Worker 不暴露端口、只读容器、无新增权限、丢弃 capabilities、非 root 运行和健康检查。
-`release:preflight` 只做本地静态配置预检，检查 env 文件、镜像引用、移动端公开配置和 Preview Compose 运行时 API 绑定覆盖变量是否达到 Preview/Production 部署前要求；它不替代真实 COS/SMS/推送/数据库连通验收。
+`release:preflight` 只做本地静态配置预检，检查 env 文件、镜像不可变引用、移动端公开配置和 Preview Compose 运行时 API 绑定覆盖变量是否达到 Preview/Production 部署前要求；镜像必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA，禁止 `latest/main/prod/stable` 等浮动标签、缺失 registry host 或 API/Worker 共用同一镜像。它不替代真实 COS/SMS/推送/数据库连通验收。
 
 ## 1. 需要确认的非敏感信息
 

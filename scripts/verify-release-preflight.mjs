@@ -50,6 +50,32 @@ try {
       { API_IMAGE: 'ccr.ccs.tencentyun.com/harukains/cat-diary-api:latest' },
       'API_IMAGE',
     ),
+    rejectsFloatingImageTag: rejectsWith(
+      'preview',
+      validPreview,
+      { API_IMAGE: 'ccr.ccs.tencentyun.com/harukains/cat-diary-api:main' },
+      'API_IMAGE',
+    ),
+    rejectsMissingRegistryHost: rejectsWith(
+      'preview',
+      validPreview,
+      { API_IMAGE: 'harukains/cat-diary-api:20260717-abcdef1' },
+      'API_IMAGE',
+    ),
+    rejectsSharedServiceImage: rejectsWith(
+      'preview',
+      validPreview,
+      { WORKER_IMAGE: image('api') },
+      'IMAGE_SEPARATION',
+    ),
+    rejectsInvalidImageDigest: rejectsWith(
+      'preview',
+      validPreview,
+      {
+        API_IMAGE: 'ccr.ccs.tencentyun.com/harukains/cat-diary-api:1.2.3@sha256:not-a-valid-digest',
+      },
+      'API_IMAGE',
+    ),
   };
 
   if (!Object.values(checks).every(Boolean)) {
@@ -157,5 +183,5 @@ function sampleEnv(target) {
 }
 
 function image(name) {
-  return `ccr.ccs.tencentyun.com/harukains/cat-diary-${name}:20260717-abcdef`;
+  return `ccr.ccs.tencentyun.com/harukains/cat-diary-${name}:20260717-abcdef1`;
 }
