@@ -1,6 +1,6 @@
 # 开发状态
 
-更新时间：2026-07-16
+更新时间：2026-07-17
 
 当前阶段：M0～M4 的核心纵向切片已实现，正在进行 MVP 完成度审计、关键交互补齐、发布加固与双平台真机验收。项目尚未达到“完整 MVP 可发布”定义。
 
@@ -179,6 +179,7 @@
 - 发布前静态预检：新增 `pnpm release:preflight`，用于部署 Preview/Production 前检查 Git 提交、EAS profile、HTTPS API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、Preview Compose 运行时 API 绑定地址/端口、发布镜像不可变引用、API/Worker 镜像分离和本地上传/导出目录禁用；无外部依赖自检 `pnpm test:release-preflight` 已纳入 `pnpm verify` 与 CI，防止发布前置规则回退。
 - 照片跨家庭隔离门禁：`scripts/verify-photos.mjs` 已覆盖同一用户切换到另一个家庭后无法读取照片详情、无法下载受保护照片内容，也不能把原家庭照片 ID 写入另一家庭的照片记录；该门禁已纳入 `pnpm test:integration`，用于防止相册与照片记录回归时出现跨家庭数据泄漏。
 - Preview 外部探针：新增 `pnpm preview:probe`，在真实 Preview HTTPS API 部署后自动验证非本地 HTTPS、TLS 1.2+、live/ready、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读以及固定开发验证码不会被接受；提供法律文档 URL 时，还会验证用户协议和隐私政策可未登录访问，并包含版本/生效信息和账号删除渠道。该命令不发送真实短信，便于勾选 Preview 环境验收项前取得证据；无网络自检 `pnpm test:preview-probe` 已纳入本地 `pnpm verify` 与 CI，防止探针基础参数校验回退。
+- COS 外部探针：新增 `pnpm cos:probe`，在真实腾讯云测试 Bucket 配置后验证 10 分钟短期签名 PUT/GET、对象大小与 MIME、匿名读取拒绝、DeleteObject 清理和删除后不可读；输出不会打印 COS Secret 或签名 URL。无网络自检 `pnpm test:cos-probe` 已纳入本地 `pnpm verify` 与 CI，防止占位符拒绝、dry-run 和密钥脱敏规则回退。真实 Bucket 验收仍待接入腾讯云环境后执行。
 - Expo Receipt 的成功、尚未生成和设备失效三条分支已通过单元测试；第 16 个迁移已在本地 PostgreSQL 应用，完整 API/Worker 集成回归通过。
 - 集成测试入口会在启动 API/Worker 前自动执行 `prisma migrate deploy` 与 `migrate status`，避免代码先于数据库结构启动；Receipt 失败重试使用最新有效 Token 的分支已加入 API 单元测试。
 - 会话/推送 Token 真实集成已覆盖两台设备注册、远程撤销只影响目标设备、当前设备退出以及全部设备退出，数据库 active 状态全部符合预期。

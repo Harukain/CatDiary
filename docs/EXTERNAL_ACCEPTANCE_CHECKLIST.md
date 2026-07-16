@@ -16,9 +16,11 @@ pnpm test:release-image-refs
 pnpm test:release-plan
 pnpm test:release-env
 pnpm test:preview-compose
+pnpm test:cos-probe
 pnpm release:image-refs -- --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE>
 pnpm release:plan -- --target preview --registry ccr.ccs.tencentyun.com --namespace <TCR_NAMESPACE> --env-file ../.env.preview --format markdown
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
+pnpm cos:probe -- --target preview --env-file ../.env.preview
 ```
 
 `acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
@@ -30,6 +32,7 @@ pnpm release:preflight -- --target preview --env-file ../.env.preview --api-imag
 `test:release-plan` 校验脱敏发布执行清单生成器；真实发布前用 `release:plan` 产出 Git、镜像、env 摘要和下一步命令，不得包含 Secret 原文。
 `test:release-env` 校验 Preview/Production 发布环境模板本身是否完整且不含开发默认值。
 `test:preview-compose` 校验 Preview Compose 和 API/Worker Dockerfile 保留迁移前置、API 本地绑定、Worker 不暴露端口、只读容器、无新增权限、丢弃 capabilities、非 root 运行和健康检查。
+`test:cos-probe` 校验 COS 探针的参数拦截、占位符拒绝、dry-run 和敏感值脱敏。真实腾讯云测试 Bucket 配置后，使用 `cos:probe` 验证私有 Bucket 的短期签名上传、元数据读取、短期下载、匿名读取拒绝和探针对象清理。该命令不替代 App 照片上传的真机验收，也不把 COS 凭据写入文档或输出。
 `release:preflight` 只做本地静态配置预检，检查 env 文件、镜像不可变引用、移动端公开配置和 Preview Compose 运行时 API 绑定覆盖变量是否达到 Preview/Production 部署前要求；镜像必须包含真实 registry 和命名空间，并使用 `sha256` digest、SemVer、日期+Git SHA 或 12-40 位 Git SHA，禁止 `latest/main/prod/stable` 等浮动标签、缺失 registry host 或 API/Worker 共用同一镜像。它不替代真实 COS/SMS/推送/数据库连通验收。
 
 ## 1. 需要确认的非敏感信息
@@ -48,6 +51,15 @@ pnpm release:preflight -- --target preview --env-file ../.env.preview --api-imag
 - [ ] SMS 使用与 COS 分离的最小权限 SecretId：`待确认`
 
 ## 2. COS 验收
+
+真实 Bucket 准备好后，在 `cat-diary/` 仓库根目录执行：
+
+```bash
+pnpm cos:probe -- --target preview --env-file ../.env.preview
+pnpm cos:probe -- --target production --env-file ../.env.production
+```
+
+探针会创建一个 `cat-diary-probes/<target>/.../probe.png` 临时对象，验证 10 分钟短期 PUT/GET 签名、对象大小与 MIME、匿名读取被拒绝、DeleteObject 清理和删除后不可读。输出只展示 Bucket、Region 和检查结果，不展示 COS SecretId、SecretKey 或签名 URL。业务层的 10MB 上限、伪造 MIME、跨家庭访问、原图/缩略图、软删除和 30 天回收仍需结合 API 集成测试与 App 真机照片流程验收。
 
 - [ ] Preview 与 Production 使用不同 Bucket 或严格隔离前缀
 - [ ] Bucket 私有读写，不允许公共读

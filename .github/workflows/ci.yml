@@ -47,6 +47,7 @@ jobs:
       - run: pnpm test:acceptance-report
       - run: pnpm test:legal-docs
       - run: pnpm test:preview-probe
+      - run: pnpm test:cos-probe
       - run: pnpm test:release-image-refs
       - run: pnpm test:release-plan
       - run: pnpm test:release-preflight
