@@ -23,6 +23,8 @@
 - 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix --launch`，让脚本检查 USB reverse 后直接打开 Development Build 并加载当前 Metro 项目；iPhone 真机可先运行 `pnpm ios:preflight`，确认 Xcode 命令行工具、已信任设备、局域网 API 和 Metro 连通。
 - API 处于开发或测试环境，验证码为 `123456`。
 
+Android 调试机如果遇到 3000 或 8081 端口被其它项目占用，可以用备用端口启动 API/Metro，并在预检时传入 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`。这两个值必须和 `PORT`、`EXPO_PUBLIC_API_URL` 以及 Expo `--port` 保持一致。
+
 ## iOS Development Build 真机预检
 
 iPhone 真机不能访问 Mac 上的 `localhost`、`127.0.0.1` 或 Android Emulator 专用的 `10.0.2.2`。真机验收前，先让 iPhone 与 Mac 接入同一 Wi-Fi，并使用 Mac 的局域网 IPv4 启动 Metro：

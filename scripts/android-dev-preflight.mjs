@@ -1,11 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
 const PACKAGE_NAME = 'com.haruka.catdiary';
-const REQUIRED_REVERSES = [
-  ['tcp:8081', 'tcp:8081', 'Metro 8081'],
-  ['tcp:3000', 'tcp:3000', 'API 3000'],
-];
-const DEV_CLIENT_URL = 'exp+catdiary://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081';
 const fix = process.argv.includes('--fix');
 const launch = process.argv.includes('--launch');
 
@@ -18,16 +13,41 @@ Usage:
   pnpm android:preflight -- --fix --launch
 
 Options:
-  --fix      自动配置 adb reverse tcp:8081 和 tcp:3000。
+  --fix      自动配置 adb reverse tcp:<ANDROID_METRO_PORT> 和 tcp:<ANDROID_API_PORT>。
   --launch   预检通过后用 Expo Development Client 深链打开当前项目。
 
 Environment:
   ANDROID_SERIAL=<serial>  多台设备时指定目标设备。
+  ANDROID_API_PORT=3000    本机 API 端口，默认 3000。
+  ANDROID_METRO_PORT=8081  本机 Metro 端口，默认 8081。
 `);
   process.exit(0);
 }
 
+const API_PORT = readPort('ANDROID_API_PORT', 3000);
+const METRO_PORT = readPort('ANDROID_METRO_PORT', 8081);
+const API_HEALTH_URL = `http://127.0.0.1:${API_PORT}/api/v1/health/live`;
+const METRO_STATUS_URL = `http://127.0.0.1:${METRO_PORT}/status`;
+const DEV_CLIENT_URL = `exp+catdiary://expo-development-client/?url=${encodeURIComponent(
+  `http://127.0.0.1:${METRO_PORT}`,
+)}`;
+const REQUIRED_REVERSES = [
+  [`tcp:${METRO_PORT}`, `tcp:${METRO_PORT}`, `Metro ${METRO_PORT}`],
+  [`tcp:${API_PORT}`, `tcp:${API_PORT}`, `API ${API_PORT}`],
+];
+
 let failed = false;
+
+function readPort(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    console.error(`${name} 必须是 1-65535 的整数，当前值：${raw}`);
+    process.exit(1);
+  }
+  return value;
+}
 
 function print(status, message) {
   const icon = status === 'ok' ? '✓' : status === 'warn' ? '!' : '✗';
@@ -196,8 +216,8 @@ async function main() {
     }
   }
 
-  await checkHttp('http://127.0.0.1:3000/api/v1/health/live', '本机 API health/live', 'ok');
-  await checkHttp('http://127.0.0.1:8081/status', '本机 Metro status', 'packager-status');
+  await checkHttp(API_HEALTH_URL, '本机 API health/live', 'ok');
+  await checkHttp(METRO_STATUS_URL, '本机 Metro status', 'packager-status');
 
   if (failed) {
     console.log('\n预检未通过。按上方失败项修复后重试。');

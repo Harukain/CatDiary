@@ -139,6 +139,19 @@ adb devices -l
 pnpm android:preflight -- --fix
 ```
 
+如果本机 3000 或 8081 已被其它项目占用，不要直接杀无关进程。可以改用备用端口启动 API/Metro，并让预检脚本使用相同端口：
+
+```bash
+# 示例：API 使用 3001，Metro 使用 8082
+PORT=3001 pnpm --filter @cat-diary/api start
+NODE_OPTIONS='--dns-result-order=ipv4first' \
+EXPO_PUBLIC_API_URL='http://127.0.0.1:3001/api/v1' \
+  pnpm --filter @cat-diary/mobile exec expo start --dev-client --host localhost --clear --port 8082
+
+ANDROID_API_PORT=3001 ANDROID_METRO_PORT=8082 \
+  pnpm android:preflight -- --fix --launch
+```
+
 如果要在预检通过后直接打开 Android Development Build 并加载当前 Metro 项目，使用：
 
 ```bash
