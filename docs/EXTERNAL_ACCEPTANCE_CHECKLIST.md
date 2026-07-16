@@ -143,10 +143,12 @@ adb shell am start -a android.intent.action.VIEW \
 ```bash
 PREVIEW_API_URL='https://preview.example.com/api/v1' \
 PREVIEW_METRICS_TOKEN='从密钥管理临时注入，不写入本文档' \
+PREVIEW_PRIVACY_POLICY_URL='https://www.example.com/privacy' \
+PREVIEW_TERMS_URL='https://www.example.com/terms' \
 pnpm preview:probe
 ```
 
-该命令只记录验收动作，不要求把 Token、Secret 或真实域名写入清单。
+该命令只记录验收动作，不要求把 Token、Secret 或真实域名写入清单。探针会验证 Preview API 非本地 HTTPS、TLS 1.2+、live/ready、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读、固定开发验证码不会被接受；提供法律文档 URL 时，还会验证用户协议和隐私政策均可未登录访问，并包含版本/生效信息和账号删除渠道。
 
 - [ ] 独立 PostgreSQL、Redis、COS、短信和推送配置
 - [ ] `NODE_ENV=production` 且固定验证码无法启动

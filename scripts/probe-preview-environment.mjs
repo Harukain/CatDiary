@@ -1,3 +1,4 @@
+import tls from 'node:tls';
 import { URL } from 'node:url';
 
 const args = process.argv.slice(2);
@@ -17,8 +18,12 @@ Usage:
 Optional:
   PREVIEW_METRICS_TOKEN=...   Verify authenticated /metrics access.
   PREVIEW_PROBE_PHONE=...     Phone used only for fixed-code rejection check.
+  PREVIEW_PRIVACY_POLICY_URL=... or EXPO_PUBLIC_PRIVACY_POLICY_URL=...
+  PREVIEW_TERMS_URL=... or EXPO_PUBLIC_TERMS_URL=...
   --json                      Print JSON only.
   --url <url>                 Override PREVIEW_API_URL.
+  --privacy-url <url>         Override privacy policy URL.
+  --terms-url <url>           Override terms URL.
 `);
   process.exit(0);
 }
@@ -28,6 +33,14 @@ const apiUrlInput = argValue('--url') ?? process.env.PREVIEW_API_URL;
 const metricsToken = process.env.PREVIEW_METRICS_TOKEN ?? process.env.METRICS_TOKEN;
 const probePhone = process.env.PREVIEW_PROBE_PHONE ?? '19900000000';
 const timeoutMs = Number(process.env.PREVIEW_PROBE_TIMEOUT_MS ?? 10_000);
+const legalUrlInputs = {
+  privacyPolicy:
+    argValue('--privacy-url') ??
+    process.env.PREVIEW_PRIVACY_POLICY_URL ??
+    process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
+  terms:
+    argValue('--terms-url') ?? process.env.PREVIEW_TERMS_URL ?? process.env.EXPO_PUBLIC_TERMS_URL,
+};
 
 const checks = [];
 
@@ -78,6 +91,7 @@ if (!apiUrlSafety.ok) {
 
 const publicRoot = publicRootFromApi(apiUrl);
 
+await checkTlsVersion();
 await checkHealth('health/live', 'apiLive', (body) => unwrap(body)?.status === 'ok');
 await checkHealth('health/ready', 'apiReady', (body) => {
   const data = unwrap(body);
@@ -91,6 +105,7 @@ await checkSwaggerClosed();
 await checkMetricsUnauthorized();
 await checkMetricsAuthorized();
 await checkFixedDevelopmentOtpDisabled();
+await checkLegalDocuments();
 
 finish();
 
@@ -112,6 +127,22 @@ function validatePreviewApiUrl(url) {
   if (url.username || url.password || url.search || url.hash)
     return { ok: false, detail: 'Preview API URL must not include credentials, query or hash' };
   return { ok: true, detail: url.toString() };
+}
+
+function validatePublicHttpsUrl(value, label) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return { ok: false, detail: `${label} must be an absolute URL` };
+  }
+  const hostname = url.hostname.toLowerCase();
+  const localHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+  if (url.protocol !== 'https:') return { ok: false, detail: `${label} must use HTTPS` };
+  if (localHosts.has(hostname)) return { ok: false, detail: `${label} must not be local` };
+  if (url.username || url.password || url.search || url.hash)
+    return { ok: false, detail: `${label} must not include credentials, query or hash` };
+  return { ok: true, url, detail: url.toString() };
 }
 
 function publicRootFromApi(url) {
@@ -136,6 +167,46 @@ function rootEndpoint(path) {
   endpoint.search = '';
   endpoint.hash = '';
   return endpoint;
+}
+
+async function checkTlsVersion() {
+  try {
+    const protocol = await detectTlsProtocol(apiUrl);
+    const ok = protocol === 'TLSv1.2' || protocol === 'TLSv1.3';
+    record(
+      'tlsAtLeast12',
+      ok,
+      ok ? protocol : `Unsupported TLS protocol: ${protocol ?? 'unknown'}`,
+    );
+  } catch (error) {
+    record('tlsAtLeast12', false, error instanceof Error ? error.message : String(error));
+  }
+}
+
+function detectTlsProtocol(url) {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({
+      host: url.hostname,
+      port: Number(url.port || 443),
+      servername: url.hostname,
+      timeout: timeoutMs,
+      ALPNProtocols: ['http/1.1'],
+    });
+
+    socket.once('secureConnect', () => {
+      const protocol = socket.getProtocol();
+      socket.destroy();
+      resolve(protocol);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      reject(new Error(`TLS handshake timed out after ${timeoutMs}ms`));
+    });
+    socket.once('error', (error) => {
+      socket.destroy();
+      reject(error);
+    });
+  });
 }
 
 async function fetchWithTimeout(url, options = {}) {
@@ -274,5 +345,50 @@ async function checkFixedDevelopmentOtpDisabled() {
       false,
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+async function checkLegalDocuments() {
+  const entries = [
+    ['privacyPolicy', 'privacyPolicyPublic', legalUrlInputs.privacyPolicy],
+    ['terms', 'termsPublic', legalUrlInputs.terms],
+  ];
+
+  for (const [label, checkName, value] of entries) {
+    if (!value) {
+      record(checkName, true, `${label} URL not provided`, { skipped: true });
+      continue;
+    }
+    const validation = validatePublicHttpsUrl(value, label);
+    if (!validation.ok) {
+      record(checkName, false, validation.detail);
+      continue;
+    }
+    await checkLegalDocument(checkName, validation.url);
+  }
+}
+
+async function checkLegalDocument(checkName, url) {
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: { accept: 'text/html, text/plain;q=0.9, */*;q=0.8' },
+    });
+    const contentType = response.headers.get('content-type') ?? '';
+    const body = await response.text();
+    const readable = /text\/html|text\/plain|application\/xhtml\+xml/i.test(contentType);
+    const hasVersion = /版本|Version|生效日期|Effective Date|发布日期|更新日期/i.test(body);
+    const hasDeletionPath = /注销|删除账号|账号删除|账号注销|delete account|account deletion/i.test(
+      body,
+    );
+    const ok = response.status === 200 && readable && hasVersion && hasDeletionPath;
+    record(
+      checkName,
+      ok,
+      ok
+        ? `${response.status} ${url}; legal body ${body.length} bytes`
+        : `${response.status} ${url}; content-type=${contentType}; version=${hasVersion}; deletion=${hasDeletionPath}`,
+    );
+  } catch (error) {
+    record(checkName, false, error instanceof Error ? error.message : String(error));
   }
 }
