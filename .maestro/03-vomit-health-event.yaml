@@ -9,8 +9,8 @@ env:
   CATDIARY_E2E_PET: 'Maestro 健康验收猫'
   CATDIARY_E2E_EVENT: 'Maestro 呕吐观察'
 ---
-- launchApp:
-    clearState: true
+- launchApp
+- openLink: catdiary:///e2e-reset
 - waitForAnimationToEnd
 - assertVisible:
     id: login.phone.input

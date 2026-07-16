@@ -48,8 +48,13 @@ for (const flow of flows) {
   checkIncludes(content, `appId: ${APP_ID}`, flow.file, 'appId');
   checkIncludes(content, 'name:', flow.file, 'name');
   checkIncludes(content, '---', flow.file, 'document separator');
-  checkIncludes(content, 'launchApp:', flow.file, 'launchApp');
-  checkIncludes(content, 'clearState: true', flow.file, 'launchApp clearState');
+  checkIncludes(content, 'launchApp', flow.file, 'launchApp');
+  checkIncludes(content, 'openLink: catdiary:///e2e-reset', flow.file, 'development E2E reset');
+  if (content.includes('clearState: true')) {
+    fail(
+      `${flow.file}: must not use launchApp clearState; some Android OEM builds reject pm clear for development clients`,
+    );
+  }
 
   for (const tag of flow.tags) checkIncludes(content, `  - ${tag}`, flow.file, `tag`);
   for (const key of flow.env) {

@@ -9,8 +9,8 @@ env:
   CATDIARY_E2E_PET: 'Maestro 医疗验收猫'
   CATDIARY_E2E_MEDICAL_TITLE: 'Maestro 猫三联加强针'
 ---
-- launchApp:
-    clearState: true
+- launchApp
+- openLink: catdiary:///e2e-reset
 - waitForAnimationToEnd
 - assertVisible:
     id: login.phone.input

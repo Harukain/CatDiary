@@ -8,8 +8,8 @@ env:
   CATDIARY_E2E_FAMILY: 'Maestro 体重验收家庭'
   CATDIARY_E2E_PET: 'Maestro 体重验收猫'
 ---
-- launchApp:
-    clearState: true
+- launchApp
+- openLink: catdiary:///e2e-reset
 - waitForAnimationToEnd
 - assertVisible:
     id: login.phone.input

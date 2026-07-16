@@ -12,8 +12,8 @@ env:
   CATDIARY_E2E_NOTE: 'Maestro 离线同步记录'
 ---
 - setAirplaneMode: disabled
-- launchApp:
-    clearState: true
+- launchApp
+- openLink: catdiary:///e2e-reset
 - waitForAnimationToEnd
 - assertVisible:
     id: login.phone.input

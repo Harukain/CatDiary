@@ -16,6 +16,8 @@
 
 提交前会执行 `pnpm test:e2e-flows` 静态检查 Maestro 流程清单、默认手机号唯一性、关键 testID、脚本入口和本说明文档引用，防止真机回归前流程被误删或入口漂移。该检查只证明脚本结构完整，不代表已在真机上运行通过。
 
+部分 Android OEM Development Build 会拒绝 shell 执行 `pm clear com.haruka.catdiary`，导致 Maestro 的 `launchApp: clearState: true` 在真机上卡住或失败。因此项目流程不再依赖 OS 级清数据；每条 Maestro 流程启动后会打开仅 Development Build 可用的 `catdiary:///e2e-reset`，由 App 自己清理本机会话、离线队列和待上传照片，再回到登录页。Preview/Production 构建会拒绝执行该入口。
+
 运行前提：
 
 - 已安装 Maestro CLI。
