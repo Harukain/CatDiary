@@ -70,68 +70,74 @@ export class TasksService {
       medicalConfirmed?: boolean;
     },
   ) {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const task = await tx.task.findFirst({ where: { id, familyId, deletedAt: null } });
-        if (!task) throw new AppException('TASK_NOT_FOUND', '任务不存在', HttpStatus.NOT_FOUND);
-        if (task.status === TaskStatus.COMPLETED)
-          throw new AppException('TASK_ALREADY_COMPLETED', '任务已经完成', HttpStatus.CONFLICT);
-        const isMedical =
-          task.type === RecordType.MEDICATION ||
-          task.type === RecordType.VACCINE ||
-          task.type === RecordType.DEWORMING;
-        if (isMedical && !input.medicalConfirmed) {
-          throw new AppException(
-            'MEDICAL_CONFIRMATION_REQUIRED',
-            '医疗任务完成前需要确认',
-            HttpStatus.UNPROCESSABLE_ENTITY,
-          );
-        }
-        const actualAt = new Date(input.actualAt);
-        const updated = await tx.task.updateMany({
-          where: { id, familyId, status: TaskStatus.PENDING, version: input.version },
-          data: {
-            status: TaskStatus.COMPLETED,
-            completedAt: actualAt,
-            completedById: userId,
-            result: (input.result ?? {}) as Prisma.InputJsonValue,
-            note: input.note?.trim() || null,
-            version: { increment: 1 },
-          },
-        });
-        if (!updated.count)
-          throw new AppException('VERSION_CONFLICT', '任务已被其他成员处理', HttpStatus.CONFLICT);
-        const record = await tx.record.upsert({
-          where: { taskId: id },
-          create: {
-            clientId: `task:${id}:${randomUUID()}`,
-            familyId,
-            petId: task.petId,
-            taskId: id,
-            authorId: userId,
-            type: task.type,
-            title: task.title,
-            source: RecordSource.TASK,
-            status: RecordStatus.ACTIVE,
-            occurredAt: actualAt,
-            data: (input.result ?? {}) as Prisma.InputJsonValue,
-            note: input.note?.trim() || null,
-          },
-          update: {
-            authorId: userId,
-            status: RecordStatus.ACTIVE,
-            occurredAt: actualAt,
-            data: (input.result ?? {}) as Prisma.InputJsonValue,
-            note: input.note?.trim() || null,
-            deletedAt: null,
-            version: { increment: 1 },
-          },
-        });
-        const completedTask = await tx.task.findUniqueOrThrow({ where: { id } });
-        return { task: completedTask, record };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const task = await tx.task.findFirst({ where: { id, familyId, deletedAt: null } });
+          if (!task) throw new AppException('TASK_NOT_FOUND', '任务不存在', HttpStatus.NOT_FOUND);
+          if (task.status === TaskStatus.COMPLETED)
+            throw new AppException('TASK_ALREADY_COMPLETED', '任务已经完成', HttpStatus.CONFLICT);
+          const isMedical =
+            task.type === RecordType.MEDICATION ||
+            task.type === RecordType.VACCINE ||
+            task.type === RecordType.DEWORMING;
+          if (isMedical && !input.medicalConfirmed) {
+            throw new AppException(
+              'MEDICAL_CONFIRMATION_REQUIRED',
+              '医疗任务完成前需要确认',
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+          const actualAt = new Date(input.actualAt);
+          const updated = await tx.task.updateMany({
+            where: { id, familyId, status: TaskStatus.PENDING, version: input.version },
+            data: {
+              status: TaskStatus.COMPLETED,
+              completedAt: actualAt,
+              completedById: userId,
+              result: (input.result ?? {}) as Prisma.InputJsonValue,
+              note: input.note?.trim() || null,
+              version: { increment: 1 },
+            },
+          });
+          if (!updated.count)
+            throw new AppException('VERSION_CONFLICT', '任务已被其他成员处理', HttpStatus.CONFLICT);
+          const record = await tx.record.upsert({
+            where: { taskId: id },
+            create: {
+              clientId: `task:${id}:${randomUUID()}`,
+              familyId,
+              petId: task.petId,
+              taskId: id,
+              authorId: userId,
+              type: task.type,
+              title: task.title,
+              source: RecordSource.TASK,
+              status: RecordStatus.ACTIVE,
+              occurredAt: actualAt,
+              data: (input.result ?? {}) as Prisma.InputJsonValue,
+              note: input.note?.trim() || null,
+            },
+            update: {
+              authorId: userId,
+              status: RecordStatus.ACTIVE,
+              occurredAt: actualAt,
+              data: (input.result ?? {}) as Prisma.InputJsonValue,
+              note: input.note?.trim() || null,
+              deletedAt: null,
+              version: { increment: 1 },
+            },
+          });
+          const completedTask = await tx.task.findUniqueOrThrow({ where: { id } });
+          return { task: completedTask, record };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isPrismaWriteConflict(error))
+        throw new AppException('VERSION_CONFLICT', '任务已被其他成员处理', HttpStatus.CONFLICT);
+      throw error;
+    }
   }
 
   async skip(
@@ -209,4 +215,8 @@ export class TasksService {
       throw new AppException('VERSION_CONFLICT', '任务已被其他成员修改', HttpStatus.CONFLICT);
     return this.get(familyId, id);
   }
+}
+
+function isPrismaWriteConflict(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }
