@@ -152,6 +152,14 @@ ANDROID_API_PORT=3001 ANDROID_METRO_PORT=8082 \
   pnpm android:preflight -- --fix --launch
 ```
 
+预检通过后，可以先跑轻量冒烟检查，确认 Development Build 已加载当前 bundle 且观察窗口内没有明显 Android/RN 启动崩溃：
+
+```bash
+ANDROID_API_PORT=3001 ANDROID_METRO_PORT=8082 pnpm android:smoke
+```
+
+`android:smoke` 只检查设备连接、进程存活、Development Client 深链和 logcat 崩溃信号；它不能替代完整 App E2E 主流程、系统权限、照片、推送、飞书或离线同步验收。
+
 如果要在预检通过后直接打开 Android Development Build 并加载当前 Metro 项目，使用：
 
 ```bash

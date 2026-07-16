@@ -25,6 +25,14 @@
 
 Android 调试机如果遇到 3000 或 8081 端口被其它项目占用，可以用备用端口启动 API/Metro，并在预检时传入 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`。这两个值必须和 `PORT`、`EXPO_PUBLIC_API_URL` 以及 Expo `--port` 保持一致。
 
+如果 Maestro 未安装，或只需要先确认 Development Build 是否成功加载当前 bundle，可先执行轻量冒烟检查：
+
+```bash
+ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8082 pnpm android:smoke
+```
+
+该命令会执行 Android 预检、清空当前设备 logcat、发送 Development Client 深链、确认 `com.haruka.catdiary` 进程存活，并在观察窗口内拦截 `AndroidRuntime`、`FATAL EXCEPTION` 和常见 `ReactNativeJS` 启动崩溃。它只能证明“当前真机能加载且未立即崩溃”，不替代下面的 Maestro 主流程、权限、照片、推送和离线验收。
+
 ## iOS Development Build 真机预检
 
 iPhone 真机不能访问 Mac 上的 `localhost`、`127.0.0.1` 或 Android Emulator 专用的 `10.0.2.2`。真机验收前，先让 iPhone 与 Mac 接入同一 Wi-Fi，并使用 Mac 的局域网 IPv4 启动 Metro：

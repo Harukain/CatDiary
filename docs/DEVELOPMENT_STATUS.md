@@ -65,6 +65,7 @@
 - Android 真机调试预检：新增 `pnpm android:preflight -- --fix`，用于检查 ADB 设备授权、Development Build 包名、Metro/API USB reverse 和本机 API/Metro 连通性；当前无设备时会明确失败，避免再次把 reloading 问题误判为 App 代码问题。
 - Android 真机调试启动：`pnpm android:preflight -- --fix --launch` 可在预检通过后自动发送 Expo Development Client 深链，直接请求 Android Development Build 加载当前 Metro 项目，减少手工选择项目导致的长期 reloading。
 - Android 真机调试端口加固：预检脚本支持 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`，当本机 3000/8081 被其它项目占用时，可用备用端口配置 ADB reverse 和 Development Client 深链，避免误杀无关进程或继续卡在 reloading。
+- Android 真机轻量冒烟：新增 `pnpm android:smoke`，在无 Maestro 或正式 E2E 前快速执行预检、发送 Development Client 深链、检查 App 进程存活并拦截 logcat 中的 Android/RN 启动崩溃；脚本自检已纳入 `pnpm verify`，真实设备运行仍作为本地真机验收步骤。
 - M2 飞书通知：家庭管理员可配置、测试和移除飞书机器人；Webhook 使用 AES-GCM 加密保存，接口只返回脱敏信息。
 - M2 飞书测试限流：家庭级 Webhook 测试发送按 5 次/小时限流；第 6 次返回明确 429，不再触达外部飞书机器人，避免错误配置或真机验收中刷爆群机器人。
 - M2 多通道发送：Worker 支持 Expo Push、飞书和开发通道，按接收人生成确定性任务并统一记录发送结果与重试状态。
