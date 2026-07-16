@@ -17,6 +17,7 @@
     "test:device-evidence": "node scripts/verify-device-evidence-gate.mjs",
     "test:preview-probe": "node scripts/verify-preview-probe.mjs",
     "test:release-preflight": "node scripts/verify-release-preflight.mjs",
+    "test:release-env": "node scripts/verify-release-env-templates.mjs",
     "test:production-env": "node scripts/verify-production-environment.mjs",
     "test:privacy-manifest": "./scripts/verify-ios-privacy-manifest.sh",
     "eas:check": "node scripts/check-eas-readiness.mjs",
@@ -38,7 +39,7 @@
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,json}\" \"packages/**/*.{ts,tsx,json}\" \"scripts/**/*.mjs\" \"docs/**/*.{md,json}\" \"*.{json,md,yml}\" \".github/**/*.yml\" \".maestro/**/*.{yaml,yml}\" \".maestro-android/**/*.{yaml,yml}\"",
-    "verify": "pnpm format:check && pnpm lint:eslint && pnpm test:e2e-flows && pnpm acceptance:evidence-template && pnpm test:device-evidence && pnpm test:preview-probe && pnpm test:release-preflight && pnpm db:validate && pnpm typecheck && pnpm test && pnpm build && pnpm test:production-env",
+    "verify": "pnpm format:check && pnpm lint:eslint && pnpm test:e2e-flows && pnpm acceptance:evidence-template && pnpm test:device-evidence && pnpm test:preview-probe && pnpm test:release-preflight && pnpm test:release-env && pnpm db:validate && pnpm typecheck && pnpm test && pnpm build && pnpm test:production-env",
     "db:generate": "prisma generate",
     "db:validate": "DATABASE_URL=postgresql://catdiary:catdiary@localhost:5433/catdiary?schema=public prisma validate"
   },

@@ -169,6 +169,7 @@
 - API/Worker 独立生产镜像、非 root/健康检查/Prisma 生成、Preview Compose 与 Trivy CI 门禁已完成；两个容器真实连接 PostgreSQL/Redis 冒烟通过。
 - 腾讯云 SMS 3.0 随机验证码与 Redis 一次性校验已实现；Worker/API 生产环境均拒绝开发默认密钥和缺失的外部服务配置。
 - 生产环境安全预检：新增 `pnpm test:production-env`，构建后复用 API/Worker 真实环境校验函数，持续验证生产环境拒绝固定开发验证码、开发默认密钥、缺失 COS/SMS 配置、Worker 缺失私有对象存储以及生产 Swagger。
+- 发布环境模板门禁：新增 `.env.preview.example`、`.env.production.example` 与 `pnpm test:release-env`，持续校验 Preview/Production 模板覆盖必需变量、保留正确 EAS Project ID、禁用本地上传/导出目录、区分 COS/SMS 占位密钥，并避免开发验证码或本地地址混入发布模板。
 - 发布前静态预检：新增 `pnpm release:preflight`，用于部署 Preview/Production 前检查 Git 提交、EAS profile、HTTPS API 与法律文档 URL、EAS Project ID、PostgreSQL/Redis 非本地连接、CORS、反向代理、Swagger 关闭、通知/导出开关、固定验证码禁用、密钥长度、COS/SMS 配置分离、Worker 运维端口、发布镜像标签和本地上传/导出目录禁用；无外部依赖自检 `pnpm test:release-preflight` 已纳入 `pnpm verify` 与 CI，防止发布前置规则回退。
 - 照片跨家庭隔离门禁：`scripts/verify-photos.mjs` 已覆盖同一用户切换到另一个家庭后无法读取照片详情、无法下载受保护照片内容，也不能把原家庭照片 ID 写入另一家庭的照片记录；该门禁已纳入 `pnpm test:integration`，用于防止相册与照片记录回归时出现跨家庭数据泄漏。
 - Preview 外部探针：新增 `pnpm preview:probe`，在真实 Preview HTTPS API 部署后自动验证非本地 HTTPS、TLS 1.2+、live/ready、Swagger 不公开、匿名 Metrics 被拒绝、Bearer Metrics 可读以及固定开发验证码不会被接受；提供法律文档 URL 时，还会验证用户协议和隐私政策可未登录访问，并包含版本/生效信息和账号删除渠道。该命令不发送真实短信，便于勾选 Preview 环境验收项前取得证据；无网络自检 `pnpm test:preview-probe` 已纳入本地 `pnpm verify` 与 CI，防止探针基础参数校验回退。

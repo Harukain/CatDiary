@@ -8,11 +8,13 @@
 pnpm acceptance:audit
 pnpm acceptance:gate
 pnpm acceptance:evidence-template
+pnpm test:release-env
 pnpm release:preflight -- --target preview --env-file ../.env.preview --api-image <API_IMAGE> --worker-image <WORKER_IMAGE>
 ```
 
 `acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
 `acceptance:evidence-template` 校验真机验收证据模板结构；实际真机回归证据按 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 复制到本地忽略目录后，用 `pnpm acceptance:evidence -- --file <证据文件> --require-passed` 做发布前证据校验。严格模式会要求证据 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。
+`test:release-env` 校验 Preview/Production 发布环境模板本身是否完整且不含开发默认值。
 `release:preflight` 只做本地静态配置预检，检查 env 文件、镜像引用和移动端公开配置是否达到 Preview/Production 部署前要求；它不替代真实 COS/SMS/推送/数据库连通验收。
 
 ## 1. 需要确认的非敏感信息
