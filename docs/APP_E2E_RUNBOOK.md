@@ -42,6 +42,25 @@ pnpm ios:preflight
 
 该脚本只做只读检查：Xcode 命令行工具、可见且已信任的 iPhone/iPad、本机 Metro、iPhone 可访问的 Metro、以及 iPhone 可访问的 API `/health/live`。预检通过后，如果 Development Build 没有自动发现项目，可复制脚本输出的 `exp+catdiary://...` 深链到 iPhone Safari 打开。
 
+## 真机验收证据
+
+真机回归不能只口头记录“已跑过”。仓库提供证据模板 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json)，覆盖 14 条 App E2E 主流程、双平台设备信息、预检结果、权限、推送、离线、照片队列、小屏布局和冷启动专项检查。
+
+真实证据建议放在本地忽略目录，不提交到 GitHub：
+
+```bash
+mkdir -p docs/device-acceptance
+cp docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json docs/device-acceptance/2026-07-development-build.json
+```
+
+每轮真机跑完后，填写脱敏证据，再执行：
+
+```bash
+pnpm acceptance:evidence -- --file docs/device-acceptance/2026-07-development-build.json --require-passed
+```
+
+严格模式会要求 iOS 和 Android 真机记录都存在，14 条 MVP 主流程、设备专项检查和平台预检全部为 `passed`，且不允许遗留 P0/P1。证据文件不得写入 Token、密码、私钥、完整 Webhook 或未脱敏设备标识；脚本会做敏感信息拦截。
+
 建议使用尚未登录过的新手机号，避免直接进入已有家庭。单独验证登录建档流程时执行：
 
 ```bash

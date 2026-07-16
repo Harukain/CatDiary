@@ -10,6 +10,7 @@ tmp/
 !.env.example
 *.log
 .DS_Store
+docs/device-acceptance/*.json
 apps/mobile/ios/
 apps/mobile/android/
 apps/mobile/dist-*/

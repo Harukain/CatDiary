@@ -7,9 +7,11 @@
 ```bash
 pnpm acceptance:audit
 pnpm acceptance:gate
+pnpm acceptance:evidence-template
 ```
 
 `acceptance:audit` 只输出未完成项；`acceptance:gate` 会在仍有未完成项或疑似敏感信息写入本清单时返回非零退出码，用于 Preview/Production 发布前门禁。
+`acceptance:evidence-template` 校验真机验收证据模板结构；实际真机回归证据按 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json) 复制到本地忽略目录后，用 `pnpm acceptance:evidence -- --file <证据文件> --require-passed` 做发布前证据校验。
 
 ## 1. 需要确认的非敏感信息
 
@@ -52,6 +54,7 @@ pnpm eas build --profile development --platform android
 - [x] iOS Development Build 已生成，Apple Distribution Certificate、Provisioning Profile、测试设备和 APNs Key 已配置
 - [ ] 当前代码批次已在 Android 真机完成回归
 - [ ] 当前代码批次已在 iPhone 真机完成回归
+- [ ] 当前代码批次真机验收证据已通过 `pnpm acceptance:evidence -- --file <证据文件> --require-passed`
 
 ### 真机连接本地 API
 

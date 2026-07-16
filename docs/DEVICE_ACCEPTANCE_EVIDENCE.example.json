@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "evidenceType": "cat-diary-device-acceptance",
+  "sourceCommit": "待填写：被验收的 Git commit SHA",
+  "createdAt": "待填写：YYYY-MM-DDTHH:mm:ss+08:00",
+  "environment": {
+    "appEnvironment": "development",
+    "apiBaseUrl": "待填写：只写 URL，不写任何 Token、密码或密钥",
+    "database": "local-development",
+    "notes": "Development Build 真机回归证据模板。真实验收文件建议保存在 docs/device-acceptance/ 下，该目录已被 git 忽略。"
+  },
+  "deviceRuns": [
+    {
+      "platform": "ios",
+      "checkedAt": "待填写",
+      "tester": "待填写",
+      "device": {
+        "model": "待填写：例如 iPhone 15",
+        "osVersion": "待填写：例如 iOS 18.5",
+        "screen": "待填写：例如 393x852",
+        "identifier": "redacted-last4"
+      },
+      "appBuild": {
+        "profile": "development",
+        "buildUrl": "待填写：EAS build 页面 URL 或内部构建编号",
+        "version": "待填写",
+        "runtimeVersion": "待填写"
+      },
+      "preflight": {
+        "command": "EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' IOS_METRO_URL='http://开发机局域网IP:8081' pnpm ios:preflight",
+        "status": "pending",
+        "evidence": "待填写：预检输出保存路径或摘要"
+      },
+      "logs": {
+        "jsCrashFree": false,
+        "nativeCrashFree": false,
+        "evidence": "待填写：Xcode/console 日志摘要，不能粘贴敏感值"
+      }
+    },
+    {
+      "platform": "android",
+      "checkedAt": "待填写",
+      "tester": "待填写",
+      "device": {
+        "model": "待填写：例如 OPPO PKG110",
+        "osVersion": "待填写：例如 Android 15",
+        "screen": "待填写：例如 360dp / 1080x2376",
+        "identifier": "redacted-last4"
+      },
+      "appBuild": {
+        "profile": "development",
+        "buildUrl": "待填写：EAS build 页面 URL 或 APK artifact URL",
+        "version": "待填写",
+        "runtimeVersion": "待填写"
+      },
+      "preflight": {
+        "command": "pnpm android:preflight -- --fix --launch",
+        "status": "pending",
+        "evidence": "待填写：预检输出保存路径或摘要"
+      },
+      "logs": {
+        "jsCrashFree": false,
+        "nativeCrashFree": false,
+        "evidence": "待填写：logcat 摘要，不能粘贴敏感值"
+      }
+    }
+  ],
+  "mvpFlows": [
+    {
+      "id": "login-otp",
+      "title": "手机号 + 验证码登录",
+      "status": "pending",
+      "evidence": "待填写：手机号需脱敏，只记录固定开发验证码是否按预期工作"
+    },
+    {
+      "id": "onboarding-family-pet",
+      "title": "创建家庭和第一只猫",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "family-invite-role",
+      "title": "邀请成员与角色调整",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "create-plan",
+      "title": "创建提醒并生成任务",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "complete-task-record",
+      "title": "完成任务并查看生成记录",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "offline-record-sync",
+      "title": "离线新增记录，联网同步",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "task-concurrency",
+      "title": "两设备并发完成同一任务",
+      "status": "pending",
+      "evidence": "待填写：物理双机结果或服务端门禁 run id"
+    },
+    {
+      "id": "vomit-health-event",
+      "title": "记录呕吐并创建健康事件",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "photo-upload-filter",
+      "title": "上传照片并按猫筛选",
+      "status": "pending",
+      "evidence": "待填写：不要写入照片原始隐私内容"
+    },
+    {
+      "id": "weight-trend",
+      "title": "查看体重趋势",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "medical-next-reminder",
+      "title": "新增疫苗/驱虫并设置下次提醒",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "feishu-failure-retry",
+      "title": "配置飞书、失败重试",
+      "status": "pending",
+      "evidence": "待填写：只记录脱敏 Webhook 尾号或日志 id，不写 URL 全量密钥"
+    },
+    {
+      "id": "data-export-medical-summary",
+      "title": "导出数据与就医摘要",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "logout-all",
+      "title": "退出全部设备",
+      "status": "pending",
+      "evidence": "待填写"
+    }
+  ],
+  "deviceChecks": [
+    {
+      "id": "camera-permission-denied-recovery",
+      "title": "相机权限首次拒绝与再次开启路径正确",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "photo-library-permission-denied-recovery",
+      "title": "相册权限首次拒绝与再次开启路径正确",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "notification-permission-denied-recovery",
+      "title": "通知权限首次拒绝与再次开启路径正确",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "push-device-registration",
+      "title": "当前设备推送可登记当前设备",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "push-test-notification",
+      "title": "发送测试推送可在当前手机收到系统通知",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "push-privacy-lockscreen",
+      "title": "真实任务推送锁屏文案不展示猫名、药名、品牌或具体任务标题",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "push-deeplink-task",
+      "title": "通知点击打开正确任务",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "photo-upload-queue-recovery",
+      "title": "App 被杀进程后图片上传队列可以恢复",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "offline-cold-start-cache-sync",
+      "title": "无网启动显示缓存，联网后按顺序同步",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "offline-token-refresh-preserves-operations",
+      "title": "Token 刷新时断网不会丢失本地操作",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "small-screen-layout",
+      "title": "小屏 360dp 与常规 390–430dp 无遮挡",
+      "status": "pending",
+      "evidence": "待填写"
+    },
+    {
+      "id": "release-cold-start",
+      "title": "Release 冷启动在目标真机小于 3 秒",
+      "status": "pending",
+      "evidence": "待填写"
+    }
+  ],
+  "openIssues": []
+}
