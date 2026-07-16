@@ -42,7 +42,9 @@ export default function MeTab() {
         ]}
       >
         <View>
-          <Text style={styles.title}>我的</Text>
+          <Text testID="me.title" style={styles.title}>
+            我的
+          </Text>
           <Text style={styles.subtitle}>家庭、成员与账号设置</Text>
         </View>
         <Card>
@@ -79,6 +81,7 @@ export default function MeTab() {
         <Card>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
+              testID="me.pets.button"
               accessibilityRole="button"
               onPress={() => router.push('/pets')}
               style={styles.rowPress}

@@ -50,7 +50,9 @@ export default function PetsRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>猫咪档案</Text>
+        <Text testID="pets.title" style={styles.navTitle}>
+          猫咪档案
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -64,6 +66,7 @@ export default function PetsRoute() {
             pets.map((pet) => (
               <Pressable
                 key={pet.id}
+                testID="pets.item"
                 accessibilityRole="button"
                 onPress={() => router.push({ pathname: '/pets/[id]', params: { id: pet.id } })}
                 style={styles.pet}
@@ -96,6 +99,7 @@ export default function PetsRoute() {
           {canManage && pets.length < 5 ? (
             <PrimaryButton
               label="添加猫咪"
+              testID="pets.add.button"
               onPress={() =>
                 router.push({ pathname: '/onboarding/pet', params: { returnTo: 'pets' } })
               }

@@ -1,0 +1,121 @@
+appId: com.haruka.catdiary
+name: '04 体重记录与趋势'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139031'
+  CATDIARY_E2E_FAMILY: 'Maestro 体重验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 体重验收猫'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn:
+    id: tab.quick-add.button
+- assertVisible:
+    id: quick-add.sheet.title
+- tapOn:
+    id: quick-add.action.weight
+- assertVisible:
+    id: record-new.title
+- assertVisible:
+    id: record-new.pet.item
+- tapOn:
+    id: record-new.occurred-date.input
+- eraseText
+- inputText: '2026-07-14'
+- tapOn:
+    id: record-new.primary.input
+- inputText: '4.2'
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: record-new.submit.button
+    direction: DOWN
+- tapOn:
+    id: record-new.submit.button
+- assertVisible:
+    id: records.title
+- tapOn:
+    id: tab.quick-add.button
+- assertVisible:
+    id: quick-add.sheet.title
+- tapOn:
+    id: quick-add.action.weight
+- assertVisible:
+    id: record-new.title
+- assertVisible:
+    id: record-new.pet.item
+- tapOn:
+    id: record-new.occurred-date.input
+- eraseText
+- inputText: '2026-07-15'
+- tapOn:
+    id: record-new.primary.input
+- inputText: '4.3'
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: record-new.submit.button
+    direction: DOWN
+- tapOn:
+    id: record-new.submit.button
+- assertVisible:
+    id: records.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.pets.button
+    direction: DOWN
+- tapOn:
+    id: me.pets.button
+- assertVisible:
+    id: pets.title
+- assertVisible:
+    id: pets.item
+- tapOn:
+    id: pets.item
+- assertVisible:
+    id: pet-detail.title
+- scrollUntilVisible:
+    element:
+      id: pet-detail.weight.card
+    direction: DOWN
+- assertVisible:
+    id: pet-detail.weight.latest
+- assertVisible:
+    id: pet-detail.weight.bar

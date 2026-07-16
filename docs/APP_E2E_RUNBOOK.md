@@ -1,10 +1,11 @@
 # App E2E 验收运行说明
 
-当前已提供三条 Maestro 冒烟流程：
+当前已提供四条 Maestro 冒烟流程：
 
 - `.maestro/01-login-onboarding.yaml`：覆盖开发文档中的 App E2E 主流程 1～2，手机号登录、创建家庭和创建第一只猫。
 - `.maestro/02-create-plan-complete-task.yaml`：覆盖 App E2E 主流程 4～5，创建照顾计划、生成任务、完成任务并在记录时间线查看生成记录。
 - `.maestro/03-vomit-health-event.yaml`：覆盖 App E2E 主流程 8，新增一次呕吐异常记录，并从记录详情建立已关联的健康事件。
+- `.maestro/04-weight-trend.yaml`：覆盖 App E2E 主流程 10，新增两条不同日期的体重记录，并在单猫档案查看体重趋势。
 
 运行前提：
 
@@ -46,6 +47,17 @@ maestro test .maestro/03-vomit-health-event.yaml
 
 该流程会从中央 `+` 打开新增记录，选择“呕吐”，填写一次带血/毛球呕吐并标记异常。保存后进入记录时间线，打开记录详情并建立健康事件，最后校验健康事件详情页存在关联记录。
 
+第四条流程会创建两条不同日期的体重记录，再进入“我的 → 猫咪档案 → 单猫档案”查看体重趋势：
+
+```bash
+CATDIARY_E2E_PHONE=13900139032 \
+CATDIARY_E2E_FAMILY='Maestro 体重验收家庭' \
+CATDIARY_E2E_PET='Maestro 体重验收猫' \
+maestro test .maestro/04-weight-trend.yaml
+```
+
+该流程使用固定历史日期 `2026-07-14` 和 `2026-07-15`，避免趋势图因为同一天记录被服务端按天聚合成单点而无法显示柱状趋势。
+
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
 `pnpm e2e:maestro` 会运行 `.maestro/` 目录下的全部流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。
@@ -66,4 +78,4 @@ maestro test .maestro/03-vomit-health-event.yaml
 
 如果要覆盖拍照路径，将第 3 步改为 `photo-new.take-photo.button`，并额外验证首次拒绝相机权限后的 `photo-new.permission.notice`。
 
-这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录和健康事件关联的自动化冒烟通过；照片上传、推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联和体重趋势查看的自动化冒烟通过；照片上传、推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

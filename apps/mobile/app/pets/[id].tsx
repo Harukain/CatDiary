@@ -263,7 +263,9 @@ export default function PetDetailRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>猫咪档案</Text>
+        <Text testID="pet-detail.title" style={styles.navTitle}>
+          猫咪档案
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -302,6 +304,7 @@ export default function PetDetailRoute() {
               </View>
               <View style={styles.quickActions}>
                 <Pressable
+                  testID="pet-detail.quick-record.button"
                   accessibilityRole="button"
                   onPress={() =>
                     guardedNavigate(
@@ -315,6 +318,7 @@ export default function PetDetailRoute() {
                   <Text style={styles.quickActionText}>记录</Text>
                 </Pressable>
                 <Pressable
+                  testID="pet-detail.quick-photos.button"
                   accessibilityRole="button"
                   onPress={() =>
                     guardedNavigate(
@@ -328,6 +332,7 @@ export default function PetDetailRoute() {
                   <Text style={styles.quickActionText}>相册</Text>
                 </Pressable>
                 <Pressable
+                  testID="pet-detail.quick-medical.button"
                   accessibilityRole="button"
                   onPress={() =>
                     guardedNavigate(
@@ -526,31 +531,35 @@ function WeightOverview({
   const min = Math.min(...values);
   const max = Math.max(...values);
   return (
-    <Card>
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.eyebrow}>体重趋势</Text>
-          <Title>{latest ? `${latest.weightKg.toFixed(2)} kg` : '暂无体重记录'}</Title>
+    <View testID="pet-detail.weight.card">
+      <Card>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.eyebrow}>体重趋势</Text>
+            <Text testID="pet-detail.weight.latest" style={styles.weightLatest}>
+              {latest ? `${latest.weightKg.toFixed(2)} kg` : '暂无体重记录'}
+            </Text>
+          </View>
+          {latest ? <Text style={styles.sectionDate}>{formatDate(latest.occurredAt)}</Text> : null}
         </View>
-        {latest ? <Text style={styles.sectionDate}>{formatDate(latest.occurredAt)}</Text> : null}
-      </View>
-      {recent.length >= 2 ? (
-        <View style={styles.chart}>
-          {recent.map((point) => {
-            const height = 14 + ((point.weightKg - min) / Math.max(max - min, 0.1)) * 46;
-            return (
-              <View key={point.recordId} style={styles.barSlot}>
-                <View style={[styles.bar, { height }]} />
-                <Text style={styles.barText}>{point.weightKg.toFixed(1)}</Text>
-                <Text style={styles.barDate}>{point.bucket.slice(5)}</Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : (
-        <Body>再记录一次体重后，这里会展示按天聚合的变化趋势。</Body>
-      )}
-    </Card>
+        {recent.length >= 2 ? (
+          <View style={styles.chart}>
+            {recent.map((point) => {
+              const height = 14 + ((point.weightKg - min) / Math.max(max - min, 0.1)) * 46;
+              return (
+                <View key={point.recordId} testID="pet-detail.weight.bar" style={styles.barSlot}>
+                  <View style={[styles.bar, { height }]} />
+                  <Text style={styles.barText}>{point.weightKg.toFixed(1)}</Text>
+                  <Text style={styles.barDate}>{point.bucket.slice(5)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Body>再记录一次体重后，这里会展示按天聚合的变化趋势。</Body>
+        )}
+      </Card>
+    </View>
   );
 }
 
@@ -857,6 +866,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '700', marginBottom: 2 },
+  weightLatest: { ...typography.h2, color: colors.ink },
   sectionDate: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
   statusPill: {
     borderRadius: radii.pill,
