@@ -276,3 +276,88 @@ describe('NotificationsService current device push test', () => {
     await service.onModuleDestroy();
   });
 });
+
+describe('NotificationsService Feishu test rate limit', () => {
+  function attachFeishuRateLimitQueue(
+    service: NotificationsService,
+    result: [number, number] = [1, 60 * 60 * 1000],
+  ) {
+    const client = {
+      defineCommand: vi.fn(),
+      runCommand: vi.fn().mockResolvedValue(result),
+    };
+    const queue = {
+      client: Promise.resolve(client),
+      close: vi.fn(),
+    };
+    (service as unknown as { queue: typeof queue }).queue = queue;
+    return { client, queue };
+  }
+
+  function feishuService(result: [number, number] = [1, 60 * 60 * 1000]) {
+    const prisma = {
+      notificationChannel: {
+        findUnique: vi.fn().mockResolvedValue({
+          enabled: true,
+          encryptedSecret: 'encrypted-webhook',
+        }),
+      },
+    };
+    const secrets = {
+      decrypt: vi.fn().mockReturnValue('https://open.feishu.cn/open-apis/bot/v2/hook/test'),
+    };
+    const service = new NotificationsService(
+      prisma as never,
+      { get: vi.fn().mockReturnValue('redis://localhost:6379') } as never,
+      secrets as never,
+    );
+    const queue = attachFeishuRateLimitQueue(service, result);
+    return { service, prisma, secrets, ...queue };
+  }
+
+  it('reserves a family-scoped hourly test slot before sending the Feishu webhook', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ code: 0 }),
+      }),
+    );
+    const { service, client } = feishuService([1, 60 * 60 * 1000]);
+
+    await expect(service.testFeishu('family-id')).resolves.toEqual({ success: true });
+
+    expect(client.defineCommand).toHaveBeenCalledWith(
+      'catDiaryFeishuTestRateLimit',
+      expect.objectContaining({ numberOfKeys: 1 }),
+    );
+    expect(client.runCommand).toHaveBeenCalledWith('catDiaryFeishuTestRateLimit', [
+      'catdiary:feishu-test:family-id',
+      60 * 60 * 1000,
+    ]);
+    expect(fetch).toHaveBeenCalledWith(
+      'https://open.feishu.cn/open-apis/bot/v2/hook/test',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    await service.onModuleDestroy();
+  });
+
+  it('returns 429 and does not call the webhook after five Feishu tests in one hour', async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const { service, secrets } = feishuService([6, 12 * 60 * 1000]);
+
+    await expect(service.testFeishu('family-id')).rejects.toMatchObject({
+      code: 'FEISHU_TEST_RATE_LIMITED',
+      status: 429,
+      details: {
+        limit: 5,
+        windowSeconds: 60 * 60,
+        retryAfterSeconds: 12 * 60,
+      },
+    });
+    expect(secrets.decrypt).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+    await service.onModuleDestroy();
+  });
+});

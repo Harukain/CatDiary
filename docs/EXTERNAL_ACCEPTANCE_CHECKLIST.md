@@ -113,6 +113,7 @@ adb shell am start -a android.intent.action.VIEW \
 - [ ] Prometheus 使用只读 Secret 抓取 API 与 Worker，公网无法访问两个指标端点
 - [ ] 6 条基础告警已导入，并通过一次测试告警验证通知接收链路
 - [ ] 5xx、P95、队列积压、推送失败和数据库连接告警可触发
+- [ ] 飞书 Webhook 测试发送每家庭每小时最多 5 次；第 6 次返回限流且飞书群不再收到测试消息
 
 ## 5. Preview 回归出口
 

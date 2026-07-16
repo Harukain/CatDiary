@@ -7,10 +7,23 @@ import { AppException } from '../common/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChannelSecretService } from './channel-secret.service';
 
+const FEISHU_TEST_RATE_LIMIT = 5;
+const FEISHU_TEST_WINDOW_MS = 60 * 60 * 1000;
+const FEISHU_TEST_RATE_LIMIT_COMMAND = 'catDiaryFeishuTestRateLimit';
+const FEISHU_TEST_RATE_LIMIT_SCRIPT = `
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+local ttl = redis.call('PTTL', KEYS[1])
+return { current, ttl }
+`;
+
 @Injectable()
 export class NotificationsService implements OnModuleDestroy {
   private readonly queue: Queue;
   private readonly enabled: boolean;
+  private rateLimitCommandDefined = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -319,6 +332,7 @@ export class NotificationsService implements OnModuleDestroy {
         '尚未配置飞书通知',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
+    await this.reserveFeishuTestAttempt(familyId);
     try {
       const response = await fetch(this.secrets.decrypt(channel.encryptedSecret), {
         method: 'POST',
@@ -364,6 +378,35 @@ export class NotificationsService implements OnModuleDestroy {
         },
       }),
     ]);
+  }
+
+  private async reserveFeishuTestAttempt(familyId: string) {
+    const client = await this.queue.client;
+    if (!this.rateLimitCommandDefined) {
+      client.defineCommand(FEISHU_TEST_RATE_LIMIT_COMMAND, {
+        numberOfKeys: 1,
+        lua: FEISHU_TEST_RATE_LIMIT_SCRIPT,
+      });
+      this.rateLimitCommandDefined = true;
+    }
+    const result = (await client.runCommand(FEISHU_TEST_RATE_LIMIT_COMMAND, [
+      `catdiary:feishu-test:${familyId}`,
+      FEISHU_TEST_WINDOW_MS,
+    ])) as [number | string, number | string];
+    const count = Number(result[0]);
+    const ttlMs = Math.max(0, Number(result[1]));
+    if (count <= FEISHU_TEST_RATE_LIMIT) return;
+    throw new AppException(
+      'FEISHU_TEST_RATE_LIMITED',
+      '飞书测试发送过于频繁，请稍后再试',
+      HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      {
+        limit: FEISHU_TEST_RATE_LIMIT,
+        windowSeconds: FEISHU_TEST_WINDOW_MS / 1000,
+        retryAfterSeconds: Math.ceil(ttlMs / 1000),
+      },
+    );
   }
 
   private requireEnabled() {
