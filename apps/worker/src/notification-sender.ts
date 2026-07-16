@@ -40,7 +40,7 @@ export async function sendNotification(prisma: PrismaClient, data: NotificationJ
       body: JSON.stringify({
         to: data.pushToken,
         title: '猫伴日记提醒',
-        body: message,
+        body: formatPushLockScreenBody(stage),
         sound: 'default',
         data: { taskId: data.id, familyId: data.familyId, category: 'TASK_REMINDER', stage },
       }),
@@ -76,6 +76,11 @@ export function formatTaskMessage(title: string, scheduledAt: Date, stage: Remin
   const time = scheduledAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
   if (stage === 'due') return `有一项照顾任务到时间了：${title} · ${time}`;
   return `有一项照顾任务已逾期：${title} · 原计划 ${time}`;
+}
+
+export function formatPushLockScreenBody(stage: ReminderStage = 'due') {
+  if (stage === 'due') return '有一项猫咪照顾任务到时间了，打开猫伴日记查看详情。';
+  return '有一项猫咪照顾任务已逾期，打开猫伴日记查看详情。';
 }
 
 function decryptSecret(value: string, secret: string) {

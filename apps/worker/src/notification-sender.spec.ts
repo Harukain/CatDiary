@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatTaskMessage, sendNotification } from './notification-sender';
+import {
+  formatPushLockScreenBody,
+  formatTaskMessage,
+  sendNotification,
+} from './notification-sender';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -43,5 +47,31 @@ describe('formatTaskMessage', () => {
         stage: 'due',
       },
     });
+  });
+
+  it('keeps lock-screen push copy generic while preserving routing payload', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { status: 'ok', id: 'expo-ticket' } }),
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    await sendNotification({} as never, {
+      id: 'task_12345678',
+      familyId: 'family_12345678',
+      title: 'Mimi 服用阿莫西林 1/2 片',
+      scheduledAt: '2026-07-12T08:30:00.000Z',
+      channel: 'EXPO_PUSH',
+      pushToken: 'ExponentPushToken[test]',
+      stage: 'overdue-1',
+    });
+
+    const request = fetcher.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(request.body)) as { body: string; data: { stage: string } };
+    expect(body.body).toBe(formatPushLockScreenBody('overdue-1'));
+    expect(body.body).not.toContain('Mimi');
+    expect(body.body).not.toContain('阿莫西林');
+    expect(body.body).not.toContain('2026');
+    expect(body.data.stage).toBe('overdue-1');
   });
 });
