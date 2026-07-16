@@ -40,6 +40,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint:eslint
+      - run: pnpm test:e2e-flows
       - run: pnpm db:validate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm exec prisma migrate status

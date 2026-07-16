@@ -14,6 +14,8 @@
 - `.maestro-android/08-offline-record-sync.yaml`：覆盖 App E2E 主流程 6，Android 真机或模拟器上断网新增饮食记录，本机时间线展示“待同步”，恢复联网后自动重放并显示同步完成。
 - `scripts/verify-task-concurrency.mjs`：覆盖 App E2E 主流程 7 的服务端一致性门禁，真实启动 API/Worker/PostgreSQL/Redis 后验证两个家庭成员基于同一任务版本并发完成时，只能成功一次，失败方收到明确 409，刷新后看到已完成状态。
 
+提交前会执行 `pnpm test:e2e-flows` 静态检查 Maestro 流程清单、默认手机号唯一性、关键 testID、脚本入口和本说明文档引用，防止真机回归前流程被误删或入口漂移。该检查只证明脚本结构完整，不代表已在真机上运行通过。
+
 运行前提：
 
 - 已安装 Maestro CLI。
@@ -139,6 +141,12 @@ pnpm e2e:maestro:android-offline
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
 `pnpm e2e:maestro` 会运行 `.maestro/` 目录下的九条通用流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。Android 离线流程独立执行，不纳入默认通用目录，避免 iOS 或非离线环境误跑。
+
+如果只想在提交前确认 E2E 脚本结构没有漂移，执行：
+
+```bash
+pnpm test:e2e-flows
+```
 
 ## 双设备并发完成任务验收
 
