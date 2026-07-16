@@ -162,7 +162,7 @@
 - App E2E 自动化基础：已新增 `pnpm e2e:maestro` 与九条通用 Maestro 冒烟流程，覆盖产品文档 App E2E 主流程 1～5、8、10～11、13～14，并补齐主流程 12 中不依赖外部服务的飞书配置入口、Webhook 本地校验、通知日志失败筛选与刷新链路；另新增 `pnpm e2e:maestro:android-offline` Android 专用流程覆盖主流程 6（离线新增记录、时间线待同步、恢复联网后同步完成），该流程依赖 Android 飞行模式或真实断开 API 链路，仍需在装有 Maestro CLI 的 Android 环境执行；相册/照片上传因依赖系统媒体库和权限弹窗，当前按 `docs/APP_E2E_RUNBOOK.md` 执行真机手工验收；真实推送、真实飞书 Webhook、双设备并发和系统分享面板仍需继续按外部验收清单回归。
 - App E2E 静态门禁：新增 `pnpm test:e2e-flows` 并纳入本地 `pnpm verify` 与 CI，检查 10 条 Maestro 流程存在、App ID、默认手机号唯一性、关键 testID、脚本入口和 runbook 引用，防止真机回归前脚本漂移；该门禁不替代真实设备运行。
 - iOS Development Build 真机预检：新增 `pnpm ios:preflight`，只读检查 Xcode 命令行工具、已信任 iPhone/iPad、本机 Metro、局域网 Metro 和局域网 API `/health/live`，并在提供 `IOS_METRO_URL` 时输出 Development Client 深链；该工具用于降低 iPhone 真机连不上本地服务的排障成本，不代表 iPhone 真机回归已完成。
-- 真机验收证据门禁：新增 `docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json` 与 `pnpm acceptance:evidence`，要求双平台设备记录、14 条 App E2E 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查和崩溃日志均有脱敏证据；模板结构校验已纳入 `pnpm verify` 与 CI，真实证据仍需在真机跑完后用 `--require-passed` 校验。
+- 真机验收证据门禁：新增 `docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json` 与 `pnpm acceptance:evidence`，要求双平台设备记录、14 条 App E2E 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查和崩溃日志均有脱敏证据；模板结构校验已纳入 `pnpm verify` 与 CI，真实证据仍需在真机跑完后用 `--require-passed` 校验。E2E 静态门禁与真机证据校验已共用 `scripts/acceptance-definitions.mjs` 中的 App ID、主流程 ID 和标题，避免自动化脚本、证据模板与验收清单漂移。
 - App E2E 主流程 7 服务端门禁：新增 `scripts/verify-task-concurrency.mjs` 并纳入 `pnpm test:integration`，真实启动 API/Worker/PostgreSQL/Redis 后验证两个家庭成员基于同一任务版本并发完成时只有一个请求成功，失败方收到明确 409，最终任务与任务记录只写入一次，失败方刷新后能看到已完成状态；两台物理真机同时点击完成仍按真机手工回归验收。
 - 设备端敏感数据生命周期已补齐：加密会话快照支持断网重启但校验 Token 世代；记录/任务缓存分别保留 90/7 天，孤儿照片 24 小时回收；退出或会话撤销会清除缓存、待同步操作和待上传照片，Android 系统备份关闭。
 - PostgreSQL 恢复演练已自动化：兼容 Prisma `schema` URL 参数、强制数据库名二次确认与 SHA-256、拒绝系统库，随机创建隔离库并逐表比对、校验 16 个迁移后自动清理；已纳入 CI。

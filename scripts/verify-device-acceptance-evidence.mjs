@@ -1,40 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
+import { REQUIRED_DEVICE_CHECKS, REQUIRED_MVP_FLOWS } from './acceptance-definitions.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const defaultEvidencePath = resolve(root, 'docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json');
-
-const requiredMvpFlows = [
-  'login-otp',
-  'onboarding-family-pet',
-  'family-invite-role',
-  'create-plan',
-  'complete-task-record',
-  'offline-record-sync',
-  'task-concurrency',
-  'vomit-health-event',
-  'photo-upload-filter',
-  'weight-trend',
-  'medical-next-reminder',
-  'feishu-failure-retry',
-  'data-export-medical-summary',
-  'logout-all',
-];
-
-const requiredDeviceChecks = [
-  'camera-permission-denied-recovery',
-  'photo-library-permission-denied-recovery',
-  'notification-permission-denied-recovery',
-  'push-device-registration',
-  'push-test-notification',
-  'push-privacy-lockscreen',
-  'push-deeplink-task',
-  'photo-upload-queue-recovery',
-  'offline-cold-start-cache-sync',
-  'offline-token-refresh-preserves-operations',
-  'small-screen-layout',
-  'release-cold-start',
-];
 
 const allowedStatuses = new Set(['pending', 'passed', 'failed', 'blocked', 'not-applicable']);
 const acceptedPlatforms = new Set(['ios', 'android']);
@@ -86,8 +55,8 @@ try {
 detectSensitiveStrings(raw);
 validateTopLevel(evidence);
 validateDeviceRuns(evidence.deviceRuns ?? []);
-validateItems('mvpFlows', evidence.mvpFlows ?? [], requiredMvpFlows);
-validateItems('deviceChecks', evidence.deviceChecks ?? [], requiredDeviceChecks);
+validateItems('mvpFlows', evidence.mvpFlows ?? [], REQUIRED_MVP_FLOWS);
+validateItems('deviceChecks', evidence.deviceChecks ?? [], REQUIRED_DEVICE_CHECKS);
 validateOpenIssues(evidence.openIssues ?? []);
 
 if (!allowTemplate) detectPlaceholders(evidence);
@@ -214,8 +183,9 @@ function validateDeviceRuns(deviceRuns) {
   }
 }
 
-function validateItems(name, items, requiredIds) {
+function validateItems(name, items, requiredDefinitions) {
   const seen = new Set();
+  const requiredById = new Map(requiredDefinitions.map((item) => [item.id, item]));
   for (const [index, item] of items.entries()) {
     const prefix = `${name}[${index}]`;
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -224,6 +194,10 @@ function validateItems(name, items, requiredIds) {
     }
     requireString(item, 'id', prefix);
     requireString(item, 'title', prefix);
+    const requiredItem = requiredById.get(item.id);
+    if (requiredItem && item.title !== requiredItem.title) {
+      fail(`${prefix}.title 必须为“${requiredItem.title}”，当前为“${item.title}”`);
+    }
     validateStatus(item.status, `${prefix}.status`);
     if (typeof item.evidence !== 'string' || item.evidence.trim().length === 0)
       fail(`${prefix}.evidence 必须填写证据说明、日志路径或截图说明`);
@@ -232,7 +206,7 @@ function validateItems(name, items, requiredIds) {
       fail(`严格模式要求 ${prefix}（${item.id ?? 'unknown'}）状态为 passed`);
   }
 
-  for (const id of requiredIds) {
+  for (const { id } of requiredDefinitions) {
     if (!seen.has(id)) fail(`${name} 缺少必需项：${id}`);
   }
 }

@@ -1,177 +1,17 @@
 import { readFile } from 'node:fs/promises';
+import {
+  APP_ID,
+  MAESTRO_FLOWS,
+  REQUIRED_MAESTRO_SCRIPTS,
+  REQUIRED_MVP_FLOWS,
+} from './acceptance-definitions.mjs';
 
-const APP_ID = 'com.haruka.catdiary';
-
-const flows = [
-  {
-    file: '.maestro/01-login-onboarding.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET'],
-    ids: [
-      'login.phone.input',
-      'login.send-code.button',
-      'login.code.input',
-      'login.verify.button',
-      'onboarding.family.name.input',
-      'onboarding.family.submit.button',
-      'onboarding.pet.name.input',
-      'onboarding.pet.submit.button',
-      'home.title',
-    ],
-  },
-  {
-    file: '.maestro/02-create-plan-complete-task.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET', 'CATDIARY_E2E_PLAN'],
-    ids: [
-      'quick-add.action.new-plan',
-      'plan.type.LITTER',
-      'plan.pet.public',
-      'plan.frequency.daily',
-      'tasks.scope.upcoming',
-      'tasks.item.complete',
-      'task-completion.sheet.title',
-      'task-completion.submit.button',
-      'tasks.undo.banner',
-      'records.item',
-    ],
-  },
-  {
-    file: '.maestro/03-vomit-health-event.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET', 'CATDIARY_E2E_EVENT'],
-    ids: [
-      'quick-add.action.more-records',
-      'record-new.type.VOMIT',
-      'record-new.option.HAIRBALL',
-      'record-new.blood.switch',
-      'record-detail.create-health-event.button',
-      'health-event-new.linked-record',
-      'health-event-new.submit.button',
-      'health-event-detail.record.item',
-    ],
-  },
-  {
-    file: '.maestro/04-weight-trend.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET'],
-    ids: [
-      'quick-add.action.weight',
-      'record-new.occurred-date.input',
-      'record-new.primary.input',
-      'me.pets.button',
-      'pets.item',
-      'pet-detail.weight.card',
-      'pet-detail.weight.latest',
-      'pet-detail.weight.bar',
-    ],
-  },
-  {
-    file: '.maestro/05-logout-all.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET'],
-    ids: ['me.account.button', 'account.title', 'account.logout-all.button', 'login.phone.input'],
-  },
-  {
-    file: '.maestro/06-medical-next-reminder.yaml',
-    tags: ['smoke', 'mvp'],
-    env: [
-      'CATDIARY_E2E_PHONE',
-      'CATDIARY_E2E_FAMILY',
-      'CATDIARY_E2E_PET',
-      'CATDIARY_E2E_MEDICAL_TITLE',
-    ],
-    ids: [
-      'pet-detail.quick-medical.button',
-      'medical-records.add.button',
-      'medical-new.type.VACCINE',
-      'medical-new.occurred-date.input',
-      'medical-new.next-date.input',
-      'medical-records.next-date',
-      'pet-detail.medical.next-due.item',
-    ],
-  },
-  {
-    file: '.maestro/07-data-export-medical-summary.yaml',
-    tags: ['smoke', 'mvp'],
-    env: [
-      'CATDIARY_E2E_PHONE',
-      'CATDIARY_E2E_FAMILY',
-      'CATDIARY_E2E_PET',
-      'CATDIARY_E2E_MEDICAL_TITLE',
-    ],
-    ids: [
-      'medical-records.export.button',
-      'medical-records.summary-ready.text',
-      'medical-records.summary-share.button',
-      'me.export.button',
-      'export.generate.button',
-      'export.ready.text',
-      'export.share.button',
-    ],
-  },
-  {
-    file: '.maestro/08-family-invite-role.yaml',
-    tags: ['smoke', 'mvp'],
-    env: [
-      'CATDIARY_E2E_OWNER_PHONE',
-      'CATDIARY_E2E_MEMBER_PHONE',
-      'CATDIARY_E2E_FAMILY',
-      'CATDIARY_E2E_PET',
-    ],
-    ids: [
-      'me.family-members.button',
-      'family-members.invite-phone.input',
-      'family-members.invite-submit.button',
-      'family-members.dev-invite.link',
-      'family-invite.accept.button',
-      'family-members.member.role.button',
-      'family-members.success.text',
-    ],
-    requiredText: ['copyTextFrom:', 'openLink: ${maestro.copiedText}', '设为管理员'],
-  },
-  {
-    file: '.maestro/09-feishu-settings-notification-logs.yaml',
-    tags: ['smoke', 'mvp'],
-    env: ['CATDIARY_E2E_PHONE', 'CATDIARY_E2E_FAMILY', 'CATDIARY_E2E_PET'],
-    ids: [
-      'me.notifications.button',
-      'notifications.feishu.button',
-      'feishu.webhook.input',
-      'feishu.back.button',
-      'me.notification-logs.button',
-      'notification-logs.filter.FAILED',
-      'notification-logs.empty.card',
-      'notification-logs.refresh.button',
-    ],
-    requiredText: ['https://example.com/open-apis/bot/v2/hook/maestro'],
-  },
-  {
-    file: '.maestro-android/08-offline-record-sync.yaml',
-    tags: ['android', 'offline', 'mvp'],
-    env: [
-      'CATDIARY_E2E_PHONE',
-      'CATDIARY_E2E_FAMILY',
-      'CATDIARY_E2E_PET',
-      'CATDIARY_E2E_FOOD',
-      'CATDIARY_E2E_NOTE',
-    ],
-    ids: [
-      'quick-add.action.food',
-      'record-new.primary.input',
-      'record-new.secondary.input',
-      'record-new.note.input',
-      'records.route-notice.text',
-      'records.sync.offline',
-      'records.pending.badge',
-      'records.sync.synced',
-    ],
-    requiredText: ['setAirplaneMode: enabled', 'setAirplaneMode: disabled'],
-  },
-];
+const flows = MAESTRO_FLOWS;
 
 const errors = [];
 const phoneDefaults = new Map();
+const requiredMvpFlowIds = new Set(REQUIRED_MVP_FLOWS.map((flow) => flow.id));
+const coveredMvpFlowIds = new Set();
 
 function fail(message) {
   errors.push(message);
@@ -194,6 +34,16 @@ function parseEnv(content) {
 for (const flow of flows) {
   const content = await readFile(flow.file, 'utf8');
   const env = parseEnv(content);
+
+  if (!Array.isArray(flow.mvpFlowIds) || flow.mvpFlowIds.length === 0) {
+    fail(`${flow.file}: missing mvpFlowIds`);
+  } else {
+    for (const flowId of flow.mvpFlowIds) {
+      if (!requiredMvpFlowIds.has(flowId))
+        fail(`${flow.file}: unknown mvpFlowId ${flowId} in shared acceptance definitions`);
+      coveredMvpFlowIds.add(flowId);
+    }
+  }
 
   checkIncludes(content, `appId: ${APP_ID}`, flow.file, 'appId');
   checkIncludes(content, 'name:', flow.file, 'name');
@@ -232,12 +82,7 @@ checkIncludes(
 
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const scripts = packageJson.scripts ?? {};
-const requiredScripts = {
-  'e2e:maestro': 'maestro test .maestro',
-  'e2e:maestro:feishu-logs': 'maestro test .maestro/09-feishu-settings-notification-logs.yaml',
-  'e2e:maestro:android-offline': 'maestro test .maestro-android/08-offline-record-sync.yaml',
-};
-for (const [name, expected] of Object.entries(requiredScripts)) {
+for (const [name, expected] of Object.entries(REQUIRED_MAESTRO_SCRIPTS)) {
   if (scripts[name] !== expected) fail(`package.json: script ${name} must be "${expected}"`);
 }
 
@@ -259,6 +104,7 @@ if (errors.length > 0) {
 console.log(
   `MAESTRO_FLOWS_OK ${JSON.stringify({
     flows: flows.length,
+    mvpFlowIds: coveredMvpFlowIds.size,
     defaultPhones: phoneDefaults.size,
     appId: APP_ID,
   })}`,
