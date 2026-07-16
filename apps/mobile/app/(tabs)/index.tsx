@@ -62,7 +62,9 @@ export default function HomeTab() {
           <Text style={styles.eyebrow}>
             {formatToday()} · {activeFamily?.name ?? '尚未选择家庭'}
           </Text>
-          <Text style={styles.title}>今天，先照顾好它们</Text>
+          <Text testID="home.title" style={styles.title}>
+            今天，先照顾好它们
+          </Text>
           <Text style={styles.date}>照顾任务和重要变化会优先出现在这里</Text>
         </View>
         <View style={styles.taskPanel}>

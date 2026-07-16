@@ -87,15 +87,21 @@ export function PrimaryButton({
   onPress,
   disabled,
   busy,
+  testID,
+  accessibilityLabel,
 }: {
   label: string;
   onPress(): void;
   disabled?: boolean;
   busy?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!disabled || !!busy }}
       disabled={disabled || busy}
       onPress={onPress}
@@ -119,15 +125,21 @@ export function TextButton({
   onPress,
   disabled,
   danger,
+  testID,
+  accessibilityLabel,
 }: {
   label: string;
   onPress(): void;
   disabled?: boolean;
   danger?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={disabled}
       onPress={onPress}
       style={styles.textButton}

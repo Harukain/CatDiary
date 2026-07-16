@@ -42,6 +42,7 @@ export default function CreateFamilyRoute() {
         <Title>先给家庭起个名字</Title>
         <Body>之后可以在“我的”中修改，也可以邀请家人共同照顾。</Body>
         <Field
+          testID="onboarding.family.name.input"
           label="家庭名称"
           value={name}
           maxLength={40}
@@ -54,6 +55,7 @@ export default function CreateFamilyRoute() {
           }}
         />
         <PrimaryButton
+          testID="onboarding.family.submit.button"
           label="创建家庭"
           busy={busy}
           disabled={!name.trim() || name.trim().length > 40}

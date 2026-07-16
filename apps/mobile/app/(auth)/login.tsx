@@ -93,6 +93,7 @@ export default function LoginRoute() {
               : `验证码已发送至 ${phone.slice(0, 3)}****${phone.slice(-4)}`}
           </Body>
           <Field
+            testID={step === 'phone' ? 'login.phone.input' : 'login.code.input'}
             label={step === 'phone' ? '手机号' : '验证码'}
             keyboardType="number-pad"
             maxLength={step === 'phone' ? 11 : 6}
@@ -107,6 +108,7 @@ export default function LoginRoute() {
             }}
           />
           <PrimaryButton
+            testID={step === 'phone' ? 'login.send-code.button' : 'login.verify.button'}
             label={step === 'phone' ? '获取验证码' : '登录'}
             busy={busy}
             disabled={step === 'phone' ? !phoneValid : !codeValid}
@@ -137,6 +139,7 @@ export default function LoginRoute() {
           {step === 'code' ? (
             <View style={styles.actions}>
               <TextButton
+                testID="login.change-phone.button"
                 label="更换手机号"
                 onPress={() => {
                   setStep('phone');
@@ -145,6 +148,7 @@ export default function LoginRoute() {
                 }}
               />
               <TextButton
+                testID="login.resend-code.button"
                 label={cooldown ? `${cooldown} 秒后重发` : '重新发送'}
                 disabled={cooldown > 0}
                 onPress={sendCode}

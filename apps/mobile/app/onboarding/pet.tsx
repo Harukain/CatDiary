@@ -151,6 +151,7 @@ export default function CreateFirstPetRoute() {
             <Title>它叫什么名字？</Title>
             <Body>先创建基础档案，生日、品种和头像可以稍后补充。</Body>
             <Field
+              testID="onboarding.pet.name.input"
               label="猫咪名字"
               value={name}
               maxLength={30}
@@ -164,6 +165,7 @@ export default function CreateFirstPetRoute() {
               }}
             />
             <PrimaryButton
+              testID="onboarding.pet.submit.button"
               label="创建猫咪档案"
               busy={busy}
               disabled={!name.trim() || name.trim().length > 30}
