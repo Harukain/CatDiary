@@ -90,10 +90,17 @@ export default function MedicalRecordsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heading}>
           <View>
-            <Text style={styles.title}>医疗档案</Text>
+            <Text testID="medical-records.title" style={styles.title}>
+              医疗档案
+            </Text>
             <Text style={styles.subtitle}>结构化保存疫苗、驱虫和用药事实</Text>
           </View>
-          <Pressable accessibilityLabel="关闭" onPress={() => router.back()} style={styles.close}>
+          <Pressable
+            testID="medical-records.close.button"
+            accessibilityLabel="关闭"
+            onPress={() => router.back()}
+            style={styles.close}
+          >
             <Ionicons name="close" size={22} color={colors.ink} />
           </Pressable>
         </View>
@@ -105,6 +112,7 @@ export default function MedicalRecordsScreen() {
           {pets.map((pet) => (
             <Pressable
               key={pet.id}
+              testID="medical-records.pet.filter"
               onPress={() => void selectPet(pet.id)}
               style={[styles.filter, pet.id === petId && styles.filterActive]}
             >
@@ -116,12 +124,17 @@ export default function MedicalRecordsScreen() {
         </ScrollView>
         <View style={styles.actions}>
           {canEdit ? (
-            <Pressable onPress={() => router.push('/medical-records/new')} style={styles.action}>
+            <Pressable
+              testID="medical-records.add.button"
+              onPress={() => router.push('/medical-records/new')}
+              style={styles.action}
+            >
               <Ionicons name="add-circle-outline" size={20} color={colors.brand} />
               <Text style={styles.actionText}>新增档案</Text>
             </Pressable>
           ) : null}
           <Pressable
+            testID="medical-records.export.button"
             disabled={!petId || exporting}
             onPress={() => void exportSummary()}
             style={[styles.action, (!petId || exporting) && styles.disabled]}
@@ -147,6 +160,7 @@ export default function MedicalRecordsScreen() {
           records.map((record) => (
             <Pressable
               accessibilityRole="button"
+              testID="medical-records.item"
               key={record.id}
               onPress={() =>
                 router.push({ pathname: '/medical-records/[id]', params: { id: record.id } })
@@ -167,7 +181,7 @@ export default function MedicalRecordsScreen() {
               </Text>
               {record.provider ? <Text style={styles.detail}>机构：{record.provider}</Text> : null}
               {record.nextDueAt ? (
-                <Text style={styles.next}>
+                <Text testID="medical-records.next-date" style={styles.next}>
                   下次日期：{new Date(record.nextDueAt).toLocaleDateString('zh-CN')}
                 </Text>
               ) : null}

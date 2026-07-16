@@ -149,7 +149,7 @@ export default function NewMedicalRecordScreen() {
         reaction: reaction.trim() || undefined,
         note: note.trim() || undefined,
       });
-      Alert.alert('已保存', '医疗档案已加入猫咪记录');
+      Alert.alert('已保存', '医疗档案已加入猫咪记录', [{ text: '知道了' }]);
       allowLeave.current = true;
       router.back();
     } catch (cause) {
@@ -178,7 +178,9 @@ export default function NewMedicalRecordScreen() {
           </Pressable>
           <View style={styles.navCopy}>
             <Text style={styles.eyebrow}>管理员维护</Text>
-            <Text style={styles.title}>新增医疗档案</Text>
+            <Text testID="medical-new.title" style={styles.title}>
+              新增医疗档案
+            </Text>
           </View>
         </View>
         <Card>
@@ -190,6 +192,7 @@ export default function NewMedicalRecordScreen() {
                 active={pet.id === petId}
                 label={pet.name}
                 onPress={() => setPetId(pet.id)}
+                testID="medical-new.pet.item"
               />
             ))}
           </View>
@@ -201,6 +204,7 @@ export default function NewMedicalRecordScreen() {
                 active={item.value === type}
                 label={item.label}
                 onPress={() => setType(item.value)}
+                testID={`medical-new.type.${item.value}`}
               />
             ))}
           </View>
@@ -208,6 +212,7 @@ export default function NewMedicalRecordScreen() {
             label="项目名称"
             value={title}
             onChangeText={setTitle}
+            testID="medical-new.title.input"
             placeholder={
               type === 'VACCINE'
                 ? '例如：猫三联加强针'
@@ -220,6 +225,7 @@ export default function NewMedicalRecordScreen() {
             label="发生日期"
             value={occurredDate}
             onChangeText={setOccurredDate}
+            testID="medical-new.occurred-date.input"
             keyboardType="numbers-and-punctuation"
             placeholder="YYYY-MM-DD"
             maxLength={10}
@@ -228,47 +234,85 @@ export default function NewMedicalRecordScreen() {
             label="下次日期（选填）"
             value={nextDate}
             onChangeText={setNextDate}
+            testID="medical-new.next-date.input"
             keyboardType="numbers-and-punctuation"
             placeholder="YYYY-MM-DD"
             maxLength={10}
           />
-          <Field label="品牌/药品" value={brand} onChangeText={setBrand} placeholder="选填" />
-          <Field label="批次号" value={batch} onChangeText={setBatch} placeholder="疫苗建议填写" />
+          <Field
+            label="品牌/药品"
+            value={brand}
+            onChangeText={setBrand}
+            placeholder="选填"
+            testID="medical-new.brand.input"
+          />
+          <Field
+            label="批次号"
+            value={batch}
+            onChangeText={setBatch}
+            placeholder="疫苗建议填写"
+            testID="medical-new.batch.input"
+          />
           <Field
             label="剂量"
             value={dose}
             onChangeText={setDose}
             placeholder="例如：0.5 ml / 1 片"
+            testID="medical-new.dose.input"
           />
           <Field
             label="医院或服务机构"
             value={provider}
             onChangeText={setProvider}
             placeholder="选填"
+            testID="medical-new.provider.input"
           />
           <Field
             label="反应"
             value={reaction}
             onChangeText={setReaction}
             placeholder="例如：接种后轻微嗜睡"
+            testID="medical-new.reaction.input"
           />
-          <Field label="备注" value={note} onChangeText={setNote} placeholder="选填" />
+          <Field
+            label="备注"
+            value={note}
+            onChangeText={setNote}
+            placeholder="选填"
+            testID="medical-new.note.input"
+          />
           {error ? <ErrorText>{error}</ErrorText> : null}
           <PrimaryButton
             label="保存医疗档案"
             busy={busy}
             disabled={!petId || !title.trim()}
             onPress={submit}
+            testID="medical-new.submit.button"
           />
         </Card>
-        <TextButton label="取消" disabled={busy} onPress={requestClose} />
+        <TextButton
+          label="取消"
+          disabled={busy}
+          onPress={requestClose}
+          testID="medical-new.cancel.button"
+        />
       </ScrollView>
     </Screen>
   );
 }
-function Chip({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+function Chip({
+  active,
+  label,
+  onPress,
+  testID,
+}: {
+  active: boolean;
+  label: string;
+  onPress(): void;
+  testID?: string;
+}) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable testID={testID} onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );

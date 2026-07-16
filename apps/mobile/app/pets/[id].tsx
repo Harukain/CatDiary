@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import {
@@ -89,35 +89,37 @@ export default function PetDetailRoute() {
   const [success, setSuccess] = useState('');
   const allowLeave = useRef(false);
 
-  useEffect(() => {
-    if (!session || !activeFamily || !id) return;
-    let mounted = true;
-    setError('');
-    void Promise.all([
-      authApi.getPet(session.accessToken, activeFamily.id, id),
-      authApi.getPetProfileSummary(session.accessToken, activeFamily.id, id),
-    ])
-      .then(([detail, summary]) => {
-        if (!mounted) return;
-        setPet(detail);
-        setProfile(summary);
-        setName(detail.name);
-        setSex(detail.sex ?? 'UNKNOWN');
-        setBirthDate(detail.birthDate?.slice(0, 10) ?? '');
-        setBreed(detail.breed ?? '');
-        setChipNumber(detail.chipNumber ?? '');
-        setNeutered(detail.neutered ?? null);
-        setInitialDraft(petDraftFromDetail(detail));
-        allowLeave.current = false;
-      })
-      .catch((cause) => {
-        if (!mounted) return;
-        setError(cause instanceof Error ? cause.message : '猫咪档案加载失败');
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [activeFamily, id, session]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!session || !activeFamily || !id) return;
+      let mounted = true;
+      setError('');
+      void Promise.all([
+        authApi.getPet(session.accessToken, activeFamily.id, id),
+        authApi.getPetProfileSummary(session.accessToken, activeFamily.id, id),
+      ])
+        .then(([detail, summary]) => {
+          if (!mounted) return;
+          setPet(detail);
+          setProfile(summary);
+          setName(detail.name);
+          setSex(detail.sex ?? 'UNKNOWN');
+          setBirthDate(detail.birthDate?.slice(0, 10) ?? '');
+          setBreed(detail.breed ?? '');
+          setChipNumber(detail.chipNumber ?? '');
+          setNeutered(detail.neutered ?? null);
+          setInitialDraft(petDraftFromDetail(detail));
+          allowLeave.current = false;
+        })
+        .catch((cause) => {
+          if (!mounted) return;
+          setError(cause instanceof Error ? cause.message : '猫咪档案加载失败');
+        });
+      return () => {
+        mounted = false;
+      };
+    }, [activeFamily, id, session]),
+  );
 
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const currentDraft = useMemo<PetProfileDraft>(
@@ -565,48 +567,62 @@ function WeightOverview({
 
 function MedicalOverview({ medical }: { medical: PetProfileSummary['medical'] }) {
   return (
-    <Card>
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.eyebrow}>医疗档案</Text>
-          <Title>
-            疫苗 {medical.counts.vaccines} · 驱虫 {medical.counts.deworming} · 用药{' '}
-            {medical.counts.medications}
-          </Title>
+    <View testID="pet-detail.medical.card">
+      <Card>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.eyebrow}>医疗档案</Text>
+            <Title>
+              疫苗 {medical.counts.vaccines} · 驱虫 {medical.counts.deworming} · 用药{' '}
+              {medical.counts.medications}
+            </Title>
+          </View>
         </View>
-      </View>
-      {medical.nextDue.length ? (
-        <View style={styles.block}>
-          <Text style={styles.blockTitle}>下次日期</Text>
-          {medical.nextDue.slice(0, 3).map((record) => (
-            <MedicalRow key={record.id} record={record} mode="due" />
-          ))}
-        </View>
-      ) : (
-        <Body>暂时没有即将到期的疫苗、驱虫或用药事项。</Body>
-      )}
-      {medical.latestRecords.length ? (
-        <View style={styles.block}>
-          <Text style={styles.blockTitle}>最近记录</Text>
-          {medical.latestRecords.slice(0, 3).map((record) => (
-            <MedicalRow key={record.id} record={record} mode="occurred" />
-          ))}
-        </View>
-      ) : null}
-    </Card>
+        {medical.nextDue.length ? (
+          <View testID="pet-detail.medical.next-due.section" style={styles.block}>
+            <Text style={styles.blockTitle}>下次日期</Text>
+            {medical.nextDue.slice(0, 3).map((record) => (
+              <MedicalRow
+                key={record.id}
+                record={record}
+                mode="due"
+                testID="pet-detail.medical.next-due.item"
+              />
+            ))}
+          </View>
+        ) : (
+          <Body>暂时没有即将到期的疫苗、驱虫或用药事项。</Body>
+        )}
+        {medical.latestRecords.length ? (
+          <View testID="pet-detail.medical.latest.section" style={styles.block}>
+            <Text style={styles.blockTitle}>最近记录</Text>
+            {medical.latestRecords.slice(0, 3).map((record) => (
+              <MedicalRow
+                key={record.id}
+                record={record}
+                mode="occurred"
+                testID="pet-detail.medical.latest.item"
+              />
+            ))}
+          </View>
+        ) : null}
+      </Card>
+    </View>
   );
 }
 
 function MedicalRow({
   record,
   mode,
+  testID,
 }: {
   record: PetProfileMedicalRecordSummary;
   mode: 'due' | 'occurred';
+  testID?: string;
 }) {
   const date = mode === 'due' ? record.nextDueAt : record.occurredAt;
   return (
-    <View style={styles.row}>
+    <View testID={testID} style={styles.row}>
       <View style={styles.rowBody}>
         <Text style={styles.rowType}>{medicalLabels[record.type]}</Text>
         <Text style={styles.rowTitle}>{record.title}</Text>
