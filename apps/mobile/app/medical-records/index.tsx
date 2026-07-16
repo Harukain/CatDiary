@@ -1,13 +1,5 @@
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
@@ -17,8 +9,12 @@ import {
   type PetSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { shareMedicalSummary } from '../../src/features/medical/share-summary';
-import { Body, Card, ErrorText, Screen, Title } from '../../src/shared/ui/primitives';
+import {
+  prepareMedicalSummary,
+  sharePreparedMedicalSummary,
+  type PreparedMedicalSummary,
+} from '../../src/features/medical/share-summary';
+import { Body, Card, ErrorText, Screen, SuccessText, Title } from '../../src/shared/ui/primitives';
 
 const labels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用药' } as const;
 
@@ -30,7 +26,10 @@ export default function MedicalRecordsScreen() {
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState(params.petId ?? '');
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [summaryOperation, setSummaryOperation] = useState<'' | 'generate' | 'share'>('');
+  const [preparedSummary, setPreparedSummary] = useState<PreparedMedicalSummary>();
+  const [summarySuccess, setSummarySuccess] = useState('');
+  const [summaryError, setSummaryError] = useState('');
   const [error, setError] = useState('');
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
@@ -62,6 +61,9 @@ export default function MedicalRecordsScreen() {
   async function selectPet(nextPetId: string) {
     if (!session || !activeFamily) return;
     setPetId(nextPetId);
+    setPreparedSummary(undefined);
+    setSummarySuccess('');
+    setSummaryError('');
     setLoading(true);
     try {
       setRecords(await authApi.listMedicalRecords(session.accessToken, activeFamily.id, nextPetId));
@@ -71,20 +73,44 @@ export default function MedicalRecordsScreen() {
       setLoading(false);
     }
   }
-  async function exportSummary() {
+  async function generateSummary() {
     if (!session || !activeFamily || !petId) return;
     const pet = pets.find((item) => item.id === petId);
     if (!pet) return;
-    setExporting(true);
+    setSummaryOperation('generate');
+    setPreparedSummary(undefined);
+    setSummarySuccess('');
+    setSummaryError('');
     try {
-      await shareMedicalSummary(session.accessToken, activeFamily.id, pet.id, pet.name);
+      const summary = await prepareMedicalSummary(
+        session.accessToken,
+        activeFamily.id,
+        pet.id,
+        pet.name,
+      );
+      setPreparedSummary(summary);
+      setSummarySuccess('就医摘要已生成，可点击分享摘要保存或转发。');
     } catch (cause) {
-      Alert.alert('导出失败', cause instanceof Error ? cause.message : '请稍后重试');
+      setSummaryError(cause instanceof Error ? cause.message : '就医摘要生成失败，请稍后重试');
     } finally {
-      setExporting(false);
+      setSummaryOperation('');
+    }
+  }
+  async function shareSummary() {
+    if (!preparedSummary) return;
+    setSummaryOperation('share');
+    setSummaryError('');
+    try {
+      await sharePreparedMedicalSummary(preparedSummary);
+      setSummarySuccess('已打开系统分享。');
+    } catch (cause) {
+      setSummaryError(cause instanceof Error ? cause.message : '系统分享打开失败，请稍后重试');
+    } finally {
+      setSummaryOperation('');
     }
   }
   const canEdit = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+  const summaryBusy = summaryOperation !== '';
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -135,18 +161,52 @@ export default function MedicalRecordsScreen() {
           ) : null}
           <Pressable
             testID="medical-records.export.button"
-            disabled={!petId || exporting}
-            onPress={() => void exportSummary()}
-            style={[styles.action, (!petId || exporting) && styles.disabled]}
+            disabled={!petId || summaryBusy}
+            onPress={() => void generateSummary()}
+            style={[styles.action, (!petId || summaryBusy) && styles.disabled]}
           >
-            {exporting ? (
+            {summaryOperation === 'generate' ? (
               <ActivityIndicator size="small" color={colors.brand} />
             ) : (
               <Ionicons name="document-text-outline" size={20} color={colors.brand} />
             )}
-            <Text style={styles.actionText}>导出摘要</Text>
+            <Text style={styles.actionText}>{preparedSummary ? '重新生成摘要' : '生成摘要'}</Text>
           </Pressable>
         </View>
+        {preparedSummary || summarySuccess || summaryError ? (
+          <Card>
+            <Title>就医摘要</Title>
+            {summarySuccess ? (
+              <View testID="medical-records.summary-ready.text">
+                <SuccessText>{summarySuccess}</SuccessText>
+              </View>
+            ) : null}
+            {summaryError ? <ErrorText>{summaryError}</ErrorText> : null}
+            {preparedSummary ? (
+              <Pressable
+                testID="medical-records.summary-share.button"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: summaryBusy }}
+                disabled={summaryBusy}
+                onPress={() => void shareSummary()}
+                style={({ pressed }) => [
+                  styles.shareButton,
+                  summaryBusy && styles.disabled,
+                  pressed && styles.pressed,
+                ]}
+              >
+                {summaryOperation === 'share' ? (
+                  <ActivityIndicator color={colors.surface} />
+                ) : (
+                  <Ionicons name="share-outline" size={18} color={colors.surface} />
+                )}
+                <Text style={styles.shareButtonText}>
+                  {summaryOperation === 'share' ? '打开系统分享…' : '分享摘要'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </Card>
+        ) : null}
         <View style={styles.notice}>
           <Text style={styles.noticeText}>
             医疗档案不代替兽医诊断或处方。紧急情况请及时联系执业兽医。
@@ -236,6 +296,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionText: { ...typography.h3, color: colors.brand },
+  shareButton: {
+    minHeight: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  shareButtonText: { ...typography.body, color: colors.surface, fontWeight: '700' },
   disabled: { opacity: 0.45 },
   notice: { padding: spacing.md, borderRadius: radii.input, backgroundColor: colors.brandSoft },
   noticeText: { ...typography.caption, color: colors.warningDark },

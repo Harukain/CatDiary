@@ -22,7 +22,7 @@ describe('data export flow rules', () => {
   });
 
   it('uses explicit button labels for each export phase', () => {
-    expect(dataExportButtonLabel('idle')).toBe('生成并分享导出文件');
+    expect(dataExportButtonLabel('idle')).toBe('生成导出文件');
     expect(dataExportButtonLabel('queued')).toBe('等待生成…');
     expect(dataExportButtonLabel('processing')).toBe('正在整理数据…');
     expect(dataExportButtonLabel('sharing')).toBe('打开系统分享…');

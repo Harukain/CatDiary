@@ -253,6 +253,7 @@ export default function PetDetailRoute() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={styles.nav}>
         <Pressable
+          testID="pet-detail.back.button"
           accessibilityRole="button"
           accessibilityLabel="返回"
           disabled={busy}

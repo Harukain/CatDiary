@@ -1,6 +1,6 @@
 # App E2E 验收运行说明
 
-当前已提供六条 Maestro 冒烟流程：
+当前已提供七条 Maestro 冒烟流程：
 
 - `.maestro/01-login-onboarding.yaml`：覆盖开发文档中的 App E2E 主流程 1～2，手机号登录、创建家庭和创建第一只猫。
 - `.maestro/02-create-plan-complete-task.yaml`：覆盖 App E2E 主流程 4～5，创建照顾计划、生成任务、完成任务并在记录时间线查看生成记录。
@@ -8,6 +8,7 @@
 - `.maestro/04-weight-trend.yaml`：覆盖 App E2E 主流程 10，新增两条不同日期的体重记录，并在单猫档案查看体重趋势。
 - `.maestro/05-logout-all.yaml`：覆盖 App E2E 主流程 14，从“我的 → 账号与注销”执行退出全部设备并回到登录页。
 - `.maestro/06-medical-next-reminder.yaml`：覆盖 App E2E 主流程 11，新增疫苗医疗档案、填写下次日期，并在医疗档案列表和单猫档案聚合中查看。
+- `.maestro/07-data-export-medical-summary.yaml`：覆盖 App E2E 主流程 13，生成单猫就医摘要，并生成家庭数据导出文件到可分享状态。
 
 运行前提：
 
@@ -83,6 +84,18 @@ maestro test .maestro/06-medical-next-reminder.yaml
 
 该流程会从“我的 → 猫咪档案 → 单猫档案 → 医疗档案”进入新增医疗档案，填写疫苗项目、发生日期、下次日期和品牌；保存后必须在医疗档案列表看到该条记录及下次日期，返回单猫档案后也必须在医疗档案聚合中看到下次日期。
 
+第七条流程会验证就医摘要和家庭数据导出：
+
+```bash
+CATDIARY_E2E_PHONE=13900139062 \
+CATDIARY_E2E_FAMILY='Maestro 导出验收家庭' \
+CATDIARY_E2E_PET='Maestro 导出验收猫' \
+CATDIARY_E2E_MEDICAL_TITLE='Maestro 摘要疫苗记录' \
+maestro test .maestro/07-data-export-medical-summary.yaml
+```
+
+该流程会创建一条疫苗医疗档案，点击“生成摘要”并等待摘要生成到可分享状态；随后进入“我的 → 数据导出”，生成 JSON 家庭导出并等待服务端异步任务变为可分享状态。流程不会点击系统分享按钮，避免原生分享面板在不同 iOS/Android 设备上造成自动化不稳定；分享按钮本身会在真机手工验收中单独点击确认。
+
 如果使用默认手机号重复运行，需要先重置测试数据库，或等待验证码冷却后换一个测试手机号。
 
 `pnpm e2e:maestro` 会运行 `.maestro/` 目录下的全部流程。只有在数据库已清理，或确认每条流程使用不同手机号时，才建议直接运行全部流程。
@@ -103,4 +116,4 @@ maestro test .maestro/06-medical-next-reminder.yaml
 
 如果要覆盖拍照路径，将第 3 步改为 `photo-new.take-photo.button`，并额外验证首次拒绝相机权限后的 `photo-new.permission.notice`。
 
-这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期和退出全部设备的自动化冒烟通过；照片上传、推送、相机/相册权限、弱网、照片队列恢复、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。
+这些流程只能证明登录建档、创建计划、任务完成、任务生成记录、手动异常记录、健康事件关联、体重趋势查看、疫苗下次日期、数据导出、就医摘要和退出全部设备的自动化冒烟通过；照片上传、推送、相机/相册权限、弱网、照片队列恢复、系统分享面板、真机冷启动和 Preview/Production 环境仍以 `docs/EXTERNAL_ACCEPTANCE_CHECKLIST.md` 为准。

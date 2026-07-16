@@ -1,0 +1,138 @@
+appId: com.haruka.catdiary
+name: '07 数据导出与就医摘要'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139061'
+  CATDIARY_E2E_FAMILY: 'Maestro 导出验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 导出验收猫'
+  CATDIARY_E2E_MEDICAL_TITLE: 'Maestro 摘要疫苗记录'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.pets.button
+    direction: DOWN
+- tapOn:
+    id: me.pets.button
+- assertVisible:
+    id: pets.title
+- assertVisible:
+    id: pets.item
+- tapOn:
+    id: pets.item
+- assertVisible:
+    id: pet-detail.title
+- tapOn:
+    id: pet-detail.quick-medical.button
+- assertVisible:
+    id: medical-records.title
+- tapOn:
+    id: medical-records.add.button
+- assertVisible:
+    id: medical-new.title
+- tapOn:
+    id: medical-new.type.VACCINE
+- tapOn:
+    id: medical-new.title.input
+- inputText: ${CATDIARY_E2E_MEDICAL_TITLE}
+- tapOn:
+    id: medical-new.occurred-date.input
+- eraseText
+- inputText: '2026-07-15'
+- tapOn:
+    id: medical-new.next-date.input
+- eraseText
+- inputText: '2027-07-15'
+- tapOn:
+    id: medical-new.brand.input
+- inputText: '妙三多'
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: medical-new.submit.button
+    direction: DOWN
+- tapOn:
+    id: medical-new.submit.button
+- tapOn: 知道了
+- assertVisible:
+    id: medical-records.item
+- tapOn:
+    id: medical-records.export.button
+- extendedWaitUntil:
+    visible:
+      id: medical-records.summary-ready.text
+    timeout: 60000
+- assertVisible:
+    id: medical-records.summary-share.button
+- tapOn:
+    id: medical-records.close.button
+- assertVisible:
+    id: pet-detail.title
+- tapOn:
+    id: pet-detail.back.button
+- assertVisible:
+    id: pets.title
+- tapOn:
+    id: pets.back.button
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.export.button
+    direction: DOWN
+- tapOn:
+    id: me.export.button
+- assertVisible:
+    id: export.title
+- assertVisible:
+    id: export.format.json
+- assertVisible:
+    id: export.scope.family
+- tapOn:
+    id: export.generate.button
+- extendedWaitUntil:
+    visible:
+      id: export.ready.text
+    timeout: 120000
+- assertVisible:
+    id: export.status.text
+- assertVisible:
+    id: export.share.button

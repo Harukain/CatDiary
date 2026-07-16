@@ -102,6 +102,7 @@ export default function MeTab() {
           </Row>
           <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
             <Pressable
+              testID="me.export.button"
               accessibilityRole="button"
               onPress={() => router.push('/settings/export')}
               style={styles.rowPress}

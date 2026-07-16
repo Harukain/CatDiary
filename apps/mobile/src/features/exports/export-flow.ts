@@ -12,7 +12,7 @@ export function dataExportButtonLabel(phase: DataExportPhase) {
   if (phase === 'queued') return '等待生成…';
   if (phase === 'processing') return '正在整理数据…';
   if (phase === 'sharing') return '打开系统分享…';
-  return '生成并分享导出文件';
+  return '生成导出文件';
 }
 
 export function canEditDataExportOptions(phase: DataExportPhase) {

@@ -43,6 +43,7 @@ export default function PetsRoute() {
     <Screen>
       <View style={styles.nav}>
         <Pressable
+          testID="pets.back.button"
           accessibilityRole="button"
           accessibilityLabel="返回"
           onPress={() => router.back()}
