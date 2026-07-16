@@ -69,6 +69,22 @@ pnpm ios:preflight
 
 该脚本只做只读检查：Xcode 命令行工具、可见且已信任的 iPhone/iPad、本机 Metro、iPhone 可访问的 Metro、以及 iPhone 可访问的 API `/health/live`。预检通过后，如果 Development Build 没有自动发现项目，可复制脚本输出的 `exp+catdiary://...` 深链到 iPhone Safari 打开。
 
+如果需要把 iOS 预检结果写入本轮真机验收草稿，使用脱敏证据文件。`--screen` 需要填写目标 iPhone 逻辑屏幕尺寸，例如 `393x852`；如果 `xctrace` 解析出的设备名称或 iOS 版本不准确，可用 `--device-model` 与 `--os-version` 覆盖：
+
+```bash
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+IOS_METRO_URL='http://开发机局域网IP:8081' \
+pnpm ios:preflight -- \
+  --screen 393x852 \
+  --evidence-file docs/device-acceptance/2026-07-17-ios-preflight.json
+
+pnpm acceptance:ios-preflight-evidence -- \
+  --file docs/device-acceptance/2026-07-17-development-build.json \
+  --preflight-file docs/device-acceptance/2026-07-17-ios-preflight.json
+```
+
+`acceptance:ios-preflight-evidence` 只更新 iOS `deviceRuns` 里的设备型号、系统版本、屏幕、App version/runtimeVersion 和预检状态，不会把 iOS 崩溃日志、14 条 MVP 主流程、权限、照片、推送、飞书或离线验收标记为通过。
+
 ## 真机验收证据
 
 真机回归不能只口头记录“已跑过”。仓库提供证据模板 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json)，覆盖 14 条 App E2E 主流程、双平台设备信息、预检结果、权限、推送、离线、照片队列、小屏布局和冷启动专项检查。

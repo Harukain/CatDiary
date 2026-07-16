@@ -113,6 +113,22 @@ pnpm ios:preflight
 
 若没有设置 `IOS_METRO_URL`，脚本仍会检查本机 Metro 和 API，并输出可尝试的局域网 IPv4；但无法生成 iPhone 可直接打开的 Development Client 深链。预检通过后，在 iPhone 的 Development Build 中选择该 Metro 项目；如果自动发现失败，可把脚本输出的 `exp+catdiary://...` 深链复制到 iPhone Safari 打开。
 
+如需沉淀 iOS 预检证据并自动填充本轮真机验收草稿：
+
+```bash
+EXPO_PUBLIC_API_URL='http://开发机局域网IP:3000/api/v1' \
+IOS_METRO_URL='http://开发机局域网IP:8081' \
+pnpm ios:preflight -- \
+  --screen 393x852 \
+  --evidence-file docs/device-acceptance/2026-07-17-ios-preflight.json
+
+pnpm acceptance:ios-preflight-evidence -- \
+  --file docs/device-acceptance/2026-07-17-development-build.json \
+  --preflight-file docs/device-acceptance/2026-07-17-ios-preflight.json
+```
+
+该合并只会更新 iOS 设备信息、App 版本和预检状态；iOS 崩溃日志、MVP 主流程、权限、照片、推送、飞书和离线专项仍需后续真机验收。
+
 ### Android USB 稳定调试（推荐用于局域网不稳定时）
 
 保持 USB 调试已授权。该模式下，Metro 与 API 都通过 ADB 转发到开发机本机，避免手机 Wi-Fi、热点隔离或 VPN 影响数据请求：
