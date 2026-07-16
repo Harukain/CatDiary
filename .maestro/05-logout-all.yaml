@@ -1,0 +1,64 @@
+appId: com.haruka.catdiary
+name: '05 退出全部设备'
+tags:
+  - smoke
+  - mvp
+env:
+  CATDIARY_E2E_PHONE: '13900139041'
+  CATDIARY_E2E_FAMILY: 'Maestro 账号验收家庭'
+  CATDIARY_E2E_PET: 'Maestro 账号验收猫'
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible:
+    id: login.phone.input
+- tapOn:
+    id: login.phone.input
+- inputText: ${CATDIARY_E2E_PHONE}
+- tapOn:
+    id: login.send-code.button
+- assertVisible:
+    id: login.code.input
+- tapOn:
+    id: login.code.input
+- inputText: '123456'
+- tapOn:
+    id: login.verify.button
+- assertVisible:
+    id: onboarding.family.name.input
+- tapOn:
+    id: onboarding.family.name.input
+- eraseText
+- inputText: ${CATDIARY_E2E_FAMILY}
+- tapOn:
+    id: onboarding.family.submit.button
+- assertVisible:
+    id: onboarding.pet.name.input
+- tapOn:
+    id: onboarding.pet.name.input
+- inputText: ${CATDIARY_E2E_PET}
+- tapOn:
+    id: onboarding.pet.submit.button
+- assertVisible:
+    id: home.title
+- tapOn: 我的
+- assertVisible:
+    id: me.title
+- scrollUntilVisible:
+    element:
+      id: me.account.button
+    direction: DOWN
+- tapOn:
+    id: me.account.button
+- assertVisible:
+    id: account.title
+- scrollUntilVisible:
+    element:
+      id: account.logout-all.button
+    direction: DOWN
+- tapOn:
+    id: account.logout-all.button
+- tapOn: 确认退出全部设备
+- assertVisible:
+    id: login.phone.input

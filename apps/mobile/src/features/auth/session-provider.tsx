@@ -27,6 +27,7 @@ interface SessionContextValue {
   activeFamily: FamilySummary | null;
   signIn(session: AuthSession): Promise<void>;
   signOut(): Promise<void>;
+  signOutAll(): Promise<{ revokedCount: number }>;
   addFamily(family: FamilySummary): void;
   selectFamily(family: FamilySummary): void;
 }
@@ -112,6 +113,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
         await Promise.all([clearAuthSession(), clearSensitiveLocalData()]);
         setSession(null);
         setActiveFamily(null);
+      },
+      async signOutAll() {
+        if (!session) {
+          await Promise.all([clearAuthSession(), clearSensitiveLocalData()]);
+          setSession(null);
+          setActiveFamily(null);
+          return { revokedCount: 0 };
+        }
+        const result = await authApi.logoutAll(session.accessToken);
+        await Promise.all([clearAuthSession(), clearSensitiveLocalData()]);
+        setSession(null);
+        setActiveFamily(null);
+        return result;
       },
       addFamily(family) {
         setSession((current) =>

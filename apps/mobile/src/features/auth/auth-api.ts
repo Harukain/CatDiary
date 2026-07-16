@@ -420,6 +420,14 @@ export const authApi = {
     if (!response.ok && response.status !== 401)
       throw new AuthApiError('LOGOUT_FAILED', '退出登录失败');
   },
+  logoutAll(accessToken: string) {
+    return authenticatedPost<{ revokedCount: number }>(
+      '/auth/logout-all',
+      accessToken,
+      undefined,
+      {},
+    );
+  },
   listPets(accessToken: string, familyId: string) {
     return authenticatedGet<PetSummary[]>('/pets', accessToken, familyId);
   },

@@ -35,7 +35,7 @@ import {
 
 export default function AccountSettingsRoute() {
   const router = useRouter();
-  const { session, signOut } = useSession();
+  const { session, signOut, signOutAll } = useSession();
   const [status, setStatus] = useState<AccountDeletionStatus>();
   const [code, setCode] = useState('');
   const [maskedPhone, setMaskedPhone] = useState('');
@@ -145,6 +145,33 @@ export default function AccountSettingsRoute() {
       setBusy(false);
     }
   }
+  function confirmLogoutAll() {
+    if (busy) return;
+    Alert.alert(
+      '退出全部设备？',
+      '所有已登录设备都会失效，当前设备也会清除本机缓存、待同步操作和待上传照片。请先确认重要内容已经同步。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认退出全部设备',
+          style: 'destructive',
+          onPress: () => void logoutAllDevices(),
+        },
+      ],
+    );
+  }
+  async function logoutAllDevices() {
+    if (!session) return;
+    setBusy(true);
+    setError('');
+    try {
+      await signOutAll();
+      router.replace('/(auth)/login');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '退出全部设备失败');
+      setBusy(false);
+    }
+  }
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
@@ -161,7 +188,9 @@ export default function AccountSettingsRoute() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.navTitle}>账号与注销</Text>
+        <Text testID="account.title" style={styles.navTitle}>
+          账号与注销
+        </Text>
         <View style={styles.back} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -243,6 +272,27 @@ export default function AccountSettingsRoute() {
                 onPress={confirmRequest}
               />
             </Card>
+            <Card>
+              <Title>登录设备</Title>
+              <Body>
+                如果手机遗失、借用设备未退出，或你想重新建立所有设备登录状态，可以一次性退出全部设备。
+              </Body>
+              <Pressable
+                testID="account.logout-all.button"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                disabled={busy}
+                onPress={confirmLogoutAll}
+                style={({ pressed }) => [
+                  styles.logoutAllButton,
+                  busy && styles.logoutAllButtonDisabled,
+                  pressed && styles.pressed,
+                ]}
+              >
+                {busy ? <ActivityIndicator size="small" color={colors.dangerDark} /> : null}
+                <Text style={styles.logoutAllButtonText}>退出全部设备</Text>
+              </Pressable>
+            </Card>
             <View style={styles.notice}>
               <Ionicons name="shield-checkmark-outline" size={20} color={colors.brand} />
               <Body>注销到期后手机号会被不可逆匿名化；历史照顾记录仅保留匿名署名。</Body>
@@ -275,6 +325,20 @@ const styles = StyleSheet.create({
   },
   codeButtonDisabled: { opacity: 0.5 },
   codeButtonText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
+  logoutAllButton: {
+    minHeight: 48,
+    borderRadius: radii.pill,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  logoutAllButtonDisabled: { opacity: 0.62 },
+  logoutAllButtonText: { ...typography.body, color: colors.dangerDark, fontWeight: '700' },
   hint: { ...typography.caption, color: colors.textSecondary },
   notice: {
     flexDirection: 'row',
