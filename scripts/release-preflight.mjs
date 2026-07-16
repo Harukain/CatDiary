@@ -137,6 +137,11 @@ function value(name) {
   return typeof raw === 'string' ? raw.trim() : raw;
 }
 
+function deploymentValue(name) {
+  const raw = serviceEnv[name] ?? process.env[name];
+  return typeof raw === 'string' ? raw.trim() : raw;
+}
+
 function record(name, ok, detail, extra = {}) {
   checks.push({
     name,
@@ -284,6 +289,7 @@ function checkServerEnvironment() {
   validateCos();
   validateSms();
   validateWorker();
+  validatePreviewComposeOverrides();
   validateThrottles();
   validateNoLocalStorageDirs();
 }
@@ -413,6 +419,30 @@ function validateWorker() {
   );
 }
 
+function validatePreviewComposeOverrides() {
+  const apiBindAddress = deploymentValue('API_BIND_ADDRESS');
+  record(
+    'API_BIND_ADDRESS',
+    !apiBindAddress || isLoopbackHost(apiBindAddress),
+    apiBindAddress ? safeState(apiBindAddress) : 'default:127.0.0.1',
+    {
+      action:
+        'Preview Compose 的 API_BIND_ADDRESS 必须留空或绑定 127.0.0.1/::1，由 HTTPS 反向代理对外服务',
+    },
+  );
+
+  const rawApiPort = deploymentValue('API_PORT');
+  const apiPort = Number(rawApiPort ?? 3000);
+  record(
+    'API_PORT',
+    Number.isInteger(apiPort) && apiPort > 0 && apiPort <= 65535,
+    rawApiPort ? safeState(rawApiPort) : 'default:3000',
+    {
+      action: 'Preview Compose 的 API_PORT 必须为 1-65535 的端口号',
+    },
+  );
+}
+
 function validateThrottles() {
   for (const key of [
     'THROTTLE_DEFAULT_LIMIT',
@@ -489,12 +519,13 @@ function parseUrl(input) {
 function isLocalHost(hostname) {
   const host = String(hostname ?? '').toLowerCase();
   return (
-    host === 'localhost' ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host === '10.0.2.2' ||
-    host.startsWith('127.')
+    isLoopbackHost(host) || host === '0.0.0.0' || host === '10.0.2.2' || host.startsWith('127.')
   );
+}
+
+function isLoopbackHost(hostname) {
+  const host = String(hostname ?? '').toLowerCase();
+  return host === 'localhost' || host === '::1' || host === '[::1]' || host.startsWith('127.');
 }
 
 function looksPlaceholder(value) {

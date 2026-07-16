@@ -21,6 +21,14 @@ try {
     SMS_SECRET_ID: sampleEnv('preview').COS_SECRET_ID,
     SMS_SECRET_KEY: sampleEnv('preview').COS_SECRET_KEY,
   });
+  const publicApiBind = writeEnv('public-api-bind.env', {
+    ...sampleEnv('preview'),
+    API_BIND_ADDRESS: '0.0.0.0',
+  });
+  const invalidApiPort = writeEnv('invalid-api-port.env', {
+    ...sampleEnv('preview'),
+    API_PORT: 'not-a-port',
+  });
 
   const checks = {
     validPreviewPasses: runPreflight('preview', validPreview).status === 0,
@@ -28,6 +36,14 @@ try {
     rejectsFixedDevelopmentOtp: rejectsWith('preview', fixedOtp, {}, 'DEV_OTP_CODE'),
     rejectsLocalApi: rejectsWith('preview', localApi, {}, 'EXPO_PUBLIC_API_URL'),
     rejectsSharedSmsCosSecret: rejectsWith('preview', sharedSmsCos, {}, 'SMS_SECRET_SEPARATION'),
+    rejectsPublicApiBind: rejectsWith('preview', publicApiBind, {}, 'API_BIND_ADDRESS'),
+    rejectsPublicApiBindEnvOverride: rejectsWith(
+      'preview',
+      validPreview,
+      { API_BIND_ADDRESS: '0.0.0.0' },
+      'API_BIND_ADDRESS',
+    ),
+    rejectsInvalidApiPort: rejectsWith('preview', invalidApiPort, {}, 'API_PORT'),
     rejectsLatestImage: rejectsWith(
       'preview',
       validPreview,
@@ -76,7 +92,7 @@ function runPreflight(target, envFile, overrides = {}) {
       '--skip-git-clean',
       '--json',
     ],
-    { cwd: root, encoding: 'utf8' },
+    { cwd: root, encoding: 'utf8', env: { ...process.env, ...overrides } },
   );
 }
 
@@ -101,7 +117,7 @@ function sampleEnv(target) {
     APP_ENV: target,
     PORT: '3000',
     DATABASE_URL:
-      'postgresql://catdiary:prod-password@postgres.catdiary.harukains.internal:5432/catdiary?schema=public',
+      'postgresql://catdiary:prodpass@postgres.catdiary.harukains.internal:5432/catdiary?schema=public',
     REDIS_URL: 'rediss://redis.catdiary.harukains.internal:6380/0',
     JWT_ACCESS_SECRET: 'release-jwt-access-material-32-characters',
     JWT_REFRESH_SECRET: 'release-jwt-refresh-material-32-characters',
