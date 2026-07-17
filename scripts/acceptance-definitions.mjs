@@ -215,6 +215,8 @@ export const MAESTRO_FLOWS = [
 
 export const REQUIRED_MAESTRO_SCRIPTS = {
   'e2e:maestro': 'maestro test .maestro',
+  'e2e:maestro:no-reinstall': 'maestro test --no-reinstall-driver .maestro',
+  'e2e:maestro:preflight': 'node scripts/android-maestro-preflight.mjs',
   'e2e:maestro:feishu-logs': 'maestro test .maestro/09-feishu-settings-notification-logs.yaml',
   'e2e:maestro:android-offline': 'maestro test .maestro-android/08-offline-record-sync.yaml',
 };

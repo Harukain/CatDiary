@@ -18,6 +18,22 @@
 
 部分 Android OEM Development Build 会拒绝 shell 执行 `pm clear com.haruka.catdiary`，导致 Maestro 的 `launchApp: clearState: true` 在真机上卡住或失败。因此项目流程不再依赖 OS 级清数据；每条 Maestro 流程启动后会打开仅 Development Build 可用的 `catdiary:///e2e-reset`，由 App 自己清理本机会话、离线队列和待上传照片，再回到登录页。Preview/Production 构建会拒绝执行该入口。
 
+Android 真机跑 Maestro 前先执行：
+
+```bash
+pnpm e2e:maestro:preflight
+```
+
+该预检会检查 Maestro CLI、ADB 单设备连接、`com.haruka.catdiary` 安装状态，以及手机是否仍停留在锁屏或输入受限状态。若提示锁屏，需要先手动解锁并保持屏幕亮起；否则 Maestro 可能无法打开深链或输入表单。
+
+OPPO/一加/ColorOS 类设备可能会在 Maestro 首次运行时弹出 `dev.mobile.maestro` 辅助应用的“中风险应用/安装完成”系统页。第一次需要手动选择继续安装并点完成；后续运行优先使用：
+
+```bash
+pnpm e2e:maestro:no-reinstall
+```
+
+该命令会复用已安装的 Maestro driver/server，避免反复触发厂商安装页。如果仍然卡在 `Launch app "com.haruka.catdiary"`，或日志出现 `DEADLINE_EXCEEDED`、`Couldn't close Maestro Android driver due to gRPC timeout`，说明当前设备的厂商安全机制仍阻断 Maestro driver 通道。此时不要把问题归因到猫伴日记代码，应改用 Pixel/三星/Android Emulator 跑 Maestro，或用 `pnpm android:preflight -- --fix --launch` 加 adb/手工路径完成真机截图与 logcat 验收。
+
 运行前提：
 
 - 已安装 Maestro CLI。
@@ -26,6 +42,16 @@
 - API 处于开发或测试环境，验证码为 `123456`。
 
 Android 调试机如果遇到 3000 或 8081 端口被其它项目占用，可以用备用端口启动 API/Metro，并在预检时传入 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`。这两个值必须和 `PORT`、`EXPO_PUBLIC_API_URL` 以及 Expo `--port` 保持一致。
+
+Android 真机通过 USB reverse 加载 Metro 时，Expo 建议使用 `--lan` 或确保 Metro 同时响应 `http://127.0.0.1:<port>/status`。如果只用 `--localhost`，部分 macOS/Node 组合可能只监听 IPv6 `localhost`，导致本机 `curl http://localhost:<port>/status` 正常，但 `curl http://127.0.0.1:<port>/status` 和 Android reverse 失败。此时重启 Metro，例如：
+
+```bash
+EXPO_PUBLIC_API_URL='http://127.0.0.1:3310/api/v1' \
+  pnpm --filter @cat-diary/mobile exec expo start --dev-client --lan --port 8090 --clear
+
+ANDROID_API_PORT=3310 ANDROID_METRO_PORT=8090 \
+  pnpm android:preflight -- --fix --launch
+```
 
 如果 Maestro 未安装，或只需要先确认 Development Build 是否成功加载当前 bundle，可先执行轻量冒烟检查：
 
