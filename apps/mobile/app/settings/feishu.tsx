@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type NotificationChannelSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -38,6 +42,7 @@ type Operation = '' | 'save' | 'test' | 'remove';
 
 export default function FeishuSettingsRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [channels, setChannels] = useState<NotificationChannelSummary[]>([]);
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -46,6 +51,7 @@ export default function FeishuSettingsRoute() {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const canManage = isFamilyManagerRole(activeFamily?.role);
   const feishuChannel = useMemo(
     () => channels.find((channel) => channel.type === 'FEISHU'),
@@ -57,6 +63,9 @@ export default function FeishuSettingsRoute() {
   const webhookError = validateFeishuWebhookUrl(webhookUrl);
   const showWebhookError = touched && webhookError ? webhookError : '';
   const busy = Boolean(operation);
+  const canSaveWebhook = canManage && !loading && !busy && draftDirty && !webhookError;
+  const canTestWebhook = canManage && !loading && !busy && !!feishuChannel;
+  const canRemoveWebhook = canManage && !loading && !busy && !!feishuChannel;
 
   const load = useCallback(async () => {
     if (!session || !activeFamily) {
@@ -105,9 +114,22 @@ export default function FeishuSettingsRoute() {
     return () => subscription.remove();
   }, [busy, draftDirty, requestReturn]);
 
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   async function saveWebhook() {
-    if (!session || !activeFamily || !canManage || busy) return;
     setTouched(true);
+    if (!session || !activeFamily || !canSaveWebhook) return;
     if (webhookError) return;
     setOperation('save');
     setError('');
@@ -130,7 +152,7 @@ export default function FeishuSettingsRoute() {
   }
 
   async function testWebhook() {
-    if (!session || !activeFamily || !canManage || !feishuChannel || busy) return;
+    if (!session || !activeFamily || !canTestWebhook) return;
     setOperation('test');
     setError('');
     setSuccess('');
@@ -145,7 +167,7 @@ export default function FeishuSettingsRoute() {
   }
 
   function confirmRemoveWebhook() {
-    if (!canManage || !feishuChannel || busy) return;
+    if (!canRemoveWebhook) return;
     Alert.alert('移除飞书通知？', '移除后，家庭任务提醒不会再发送到当前飞书群。', [
       { text: '取消', style: 'cancel' },
       { text: '移除', style: 'destructive', onPress: () => void removeWebhook() },
@@ -153,7 +175,7 @@ export default function FeishuSettingsRoute() {
   }
 
   async function removeWebhook() {
-    if (!session || !activeFamily || !canManage || !feishuChannel || busy) return;
+    if (!session || !activeFamily || !canRemoveWebhook) return;
     setOperation('remove');
     setError('');
     setSuccess('');
@@ -173,154 +195,218 @@ export default function FeishuSettingsRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          testID="feishu.back.button"
-          accessibilityLabel="返回"
-          accessibilityHint={busy || draftDirty ? '返回前会提示当前飞书配置状态' : '返回上一页'}
-          onPress={requestReturn}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="feishu.title" style={styles.navTitle}>
-          飞书通知
-        </Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-          <Text style={styles.title}>家庭飞书群提醒</Text>
-          <Text style={styles.subtitle}>配置后，家庭级照顾任务可通过飞书机器人同步提醒。</Text>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.nav}>
+          <Pressable
+            testID="feishu.back.button"
+            accessibilityLabel="返回"
+            accessibilityHint={busy || draftDirty ? '返回前会提示当前飞书配置状态' : '返回上一页'}
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text testID="feishu.title" style={styles.navTitle}>
+            飞书通知
+          </Text>
+          <View style={styles.back} />
         </View>
-
-        <Card testID="feishu.status.card">
-          <View style={styles.cardHeader}>
-            <Title>当前状态</Title>
-            <View
-              testID="feishu.status.pill"
-              style={[styles.statusPill, channelStatus === 'configured' && styles.statusOn]}
-            >
-              <Text
-                testID="feishu.status.text"
-                style={[styles.statusText, channelStatus === 'configured' && styles.statusTextOn]}
-              >
-                {statusCopy.title}
-              </Text>
-            </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <Text style={styles.title}>家庭飞书群提醒</Text>
+            <Text style={styles.subtitle}>配置后，家庭级照顾任务可通过飞书机器人同步提醒。</Text>
           </View>
-          {loading ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={colors.brand} />
-              <Text testID="feishu.loading.text" style={styles.loadingText}>
-                正在加载飞书通知配置…
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Body>{statusCopy.detail}</Body>
-              {feishuChannel?.maskedHint ? (
-                <Text testID="feishu.masked-hint.text" style={styles.meta}>
-                  Webhook 尾号：{feishuChannel.maskedHint}
-                </Text>
-              ) : null}
-              {feishuChannel?.updatedAt ? (
-                <Text testID="feishu.updated-at.text" style={styles.meta}>
-                  最近更新：{new Date(feishuChannel.updatedAt).toLocaleString('zh-CN')}
-                </Text>
-              ) : null}
-            </>
-          )}
-          {success ? <SuccessText testID="feishu.success.text">{success}</SuccessText> : null}
-          {error ? <ErrorText testID="feishu.error.text">{error}</ErrorText> : null}
-          {!loading && error ? (
-            <TextButton
-              testID="feishu.reload.button"
-              label="重新加载"
-              onPress={() => void load()}
-            />
-          ) : null}
-        </Card>
 
-        {canManage ? (
-          <Card testID="feishu.config.card">
-            <Title>配置 Webhook</Title>
+          <Card testID="feishu.status.card">
+            <View style={styles.cardHeader}>
+              <Title>当前状态</Title>
+              <View
+                testID="feishu.status.pill"
+                style={[styles.statusPill, channelStatus === 'configured' && styles.statusOn]}
+              >
+                <Text
+                  testID="feishu.status.text"
+                  style={[styles.statusText, channelStatus === 'configured' && styles.statusTextOn]}
+                >
+                  {statusCopy.title}
+                </Text>
+              </View>
+            </View>
+            {loading ? (
+              <View style={styles.loading}>
+                <ActivityIndicator color={colors.brand} />
+                <Text testID="feishu.loading.text" style={styles.loadingText}>
+                  正在加载飞书通知配置…
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Body>{statusCopy.detail}</Body>
+                {feishuChannel?.maskedHint ? (
+                  <Text testID="feishu.masked-hint.text" style={styles.meta}>
+                    Webhook 尾号：{feishuChannel.maskedHint}
+                  </Text>
+                ) : null}
+                {feishuChannel?.updatedAt ? (
+                  <Text testID="feishu.updated-at.text" style={styles.meta}>
+                    最近更新：{new Date(feishuChannel.updatedAt).toLocaleString('zh-CN')}
+                  </Text>
+                ) : null}
+              </>
+            )}
+            {success ? <SuccessText testID="feishu.success.text">{success}</SuccessText> : null}
+            {error ? <ErrorText testID="feishu.error.text">{error}</ErrorText> : null}
+            {!loading && error ? (
+              <TextButton
+                testID="feishu.reload.button"
+                label="重新加载"
+                disabled={busy}
+                onPress={() => void load()}
+              />
+            ) : null}
+          </Card>
+
+          {canManage ? (
+            <Card testID="feishu.config.card">
+              <Title>配置 Webhook</Title>
+              <Body>
+                在飞书群添加“自定义机器人”后，复制 Webhook
+                地址粘贴到这里。完整地址只会加密保存，不会在 App 中回显。
+              </Body>
+              <Field
+                label="飞书机器人 Webhook"
+                value={webhookUrl}
+                error={showWebhookError}
+                placeholder="https://open.feishu.cn/open-apis/bot/..."
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                editable={!busy}
+                testID="feishu.webhook.input"
+                onBlur={() => setTouched(true)}
+                onChangeText={(value) => {
+                  setWebhookUrl(value);
+                  setError('');
+                  setSuccess('');
+                  if (!touched && value.trim()) setTouched(true);
+                }}
+              />
+              {webhookError ? (
+                <Text style={styles.helper}>
+                  粘贴有效的飞书或 Lark 自定义机器人 Webhook 后即可保存。
+                </Text>
+              ) : null}
+              {keyboardVisible ? (
+                <>
+                  <PrimaryButton
+                    testID="feishu.save.inline-button"
+                    label="保存飞书 Webhook"
+                    busy={operation === 'save'}
+                    disabled={!canSaveWebhook}
+                    onPress={() => void saveWebhook()}
+                  />
+                  <View style={styles.actionRow}>
+                    <TextButton
+                      testID="feishu.test.inline-button"
+                      label="发送测试通知"
+                      disabled={!canTestWebhook}
+                      onPress={() => void testWebhook()}
+                    />
+                    <TextButton
+                      testID="feishu.remove.inline-button"
+                      label="移除飞书通知"
+                      danger
+                      disabled={!canRemoveWebhook}
+                      onPress={confirmRemoveWebhook}
+                    />
+                  </View>
+                  <TextButton
+                    testID="feishu.return.inline-button"
+                    label={busy ? '处理中，请等待' : '返回通知偏好'}
+                    disabled={busy}
+                    onPress={requestReturn}
+                  />
+                </>
+              ) : null}
+              {!feishuChannel ? (
+                <Text style={styles.helper}>保存 Webhook 后才能发送测试通知或移除。</Text>
+              ) : null}
+            </Card>
+          ) : (
+            <Card testID="feishu.readonly.card">
+              <Title>只读状态</Title>
+              <Body>
+                当前账号不是家庭管理员，可以查看飞书通知状态，但不能配置、测试或移除 Webhook。
+              </Body>
+            </Card>
+          )}
+
+          <View testID="feishu.security.notice" style={styles.notice}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.successDark} />
             <Body>
-              在飞书群添加“自定义机器人”后，复制 Webhook
-              地址粘贴到这里。完整地址只会加密保存，不会在 App 中回显。
+              飞书 Webhook
+              会作为家庭级通知渠道保存；个人是否接收手机推送仍由“通知偏好”里的开关控制。
             </Body>
-            <Field
-              label="飞书机器人 Webhook"
-              value={webhookUrl}
-              error={showWebhookError}
-              placeholder="https://open.feishu.cn/open-apis/bot/..."
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              editable={!busy}
-              testID="feishu.webhook.input"
-              onBlur={() => setTouched(true)}
-              onChangeText={(value) => {
-                setWebhookUrl(value);
-                if (!touched && value.trim()) setTouched(true);
-              }}
-            />
+          </View>
+        </ScrollView>
+        {canManage && !keyboardVisible ? (
+          <View
+            testID="feishu.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
             <PrimaryButton
               testID="feishu.save.button"
               label="保存飞书 Webhook"
               busy={operation === 'save'}
-              disabled={loading || busy || webhookError.length > 0}
+              disabled={!canSaveWebhook}
               onPress={() => void saveWebhook()}
             />
-            {webhookError ? (
-              <Text style={styles.helper}>
-                粘贴有效的飞书或 Lark 自定义机器人 Webhook 后即可保存。
-              </Text>
-            ) : null}
             <View style={styles.actionRow}>
               <TextButton
                 testID="feishu.test.button"
                 label="发送测试通知"
-                disabled={loading || busy || !feishuChannel}
+                disabled={!canTestWebhook}
                 onPress={() => void testWebhook()}
               />
               <TextButton
                 testID="feishu.remove.button"
                 label="移除飞书通知"
                 danger
-                disabled={loading || busy || !feishuChannel}
+                disabled={!canRemoveWebhook}
                 onPress={confirmRemoveWebhook}
               />
             </View>
-            {!feishuChannel ? (
-              <Text style={styles.helper}>保存 Webhook 后才能发送测试通知或移除。</Text>
-            ) : null}
-          </Card>
-        ) : (
-          <Card testID="feishu.readonly.card">
-            <Title>只读状态</Title>
-            <Body>
-              当前账号不是家庭管理员，可以查看飞书通知状态，但不能配置、测试或移除 Webhook。
-            </Body>
-          </Card>
-        )}
-
-        <View testID="feishu.security.notice" style={styles.notice}>
-          <Ionicons name="shield-checkmark-outline" size={20} color={colors.successDark} />
-          <Body>
-            飞书 Webhook 会作为家庭级通知渠道保存；个人是否接收手机推送仍由“通知偏好”里的开关控制。
-          </Body>
-        </View>
-      </ScrollView>
+            <TextButton
+              testID="feishu.return.button"
+              label={busy ? '处理中，请等待' : '返回通知偏好'}
+              disabled={busy}
+              onPress={requestReturn}
+            />
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h3, color: colors.ink },
-  content: { gap: spacing.xl, paddingBottom: 104 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   cardHeader: {
@@ -357,6 +443,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     backgroundColor: colors.successSoft,
     borderRadius: radii.input,
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
