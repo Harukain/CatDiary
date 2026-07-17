@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type TaskSummary } from '../src/features/auth/auth-api';
 import { useSession } from '../src/features/auth/session-provider';
@@ -34,13 +35,18 @@ type ConflictView = OfflineConflict & { serverTask?: TaskSummary; snapshotError?
 
 export default function SyncConflictsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [items, setItems] = useState<ConflictView[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState('');
   const [error, setError] = useState('');
   const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -74,6 +80,7 @@ export default function SyncConflictsScreen() {
       void load();
     }, [load]),
   );
+  const navigationDisabled = !!actionId;
   async function keepServer(item: ConflictView) {
     setActionId(item.id);
     try {
@@ -113,44 +120,87 @@ export default function SyncConflictsScreen() {
   }
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.heading}>
-          <View>
-            <Text style={styles.title}>同步冲突</Text>
-            <Text style={styles.subtitle}>逐条确认本机操作与家庭最新状态</Text>
+      <View style={styles.flex}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.heading}>
+            <View style={styles.headingCopy}>
+              <Text testID="sync-conflicts.title" style={styles.title}>
+                同步冲突
+              </Text>
+              <Text style={styles.subtitle}>逐条确认本机操作与家庭最新状态</Text>
+            </View>
+            <Pressable
+              testID="sync-conflicts.close.button"
+              accessibilityRole="button"
+              accessibilityLabel="关闭同步冲突"
+              disabled={navigationDisabled}
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.close,
+                navigationDisabled && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="close" size={22} color={colors.ink} />
+            </Pressable>
           </View>
-          <Pressable accessibilityLabel="关闭" onPress={() => router.back()} style={styles.close}>
-            <Ionicons name="close" size={22} color={colors.ink} />
-          </Pressable>
+          <View style={styles.notice}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.warningDark} />
+            <Text style={styles.noticeText}>
+              系统不会自动覆盖其他家庭成员已经提交的照顾或医疗结果。处理前请核对猫咪、时间和任务状态。
+            </Text>
+          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : error ? (
+            <View style={styles.stateCard}>
+              <ErrorText testID="sync-conflicts.error.text">{error}</ErrorText>
+              <Body>请重新加载冲突列表。未处理的本机操作仍会保留在设备中。</Body>
+            </View>
+          ) : items.length ? (
+            items.map((item) => (
+              <ConflictCard
+                key={item.id}
+                item={item}
+                busy={actionId === item.id}
+                onKeep={() => void keepServer(item)}
+                onRetry={() => void retry(item)}
+              />
+            ))
+          ) : (
+            <Card testID="sync-conflicts.empty.card">
+              <Title>没有待处理冲突</Title>
+              <Body>所有离线操作都已同步，或已按照你的选择完成处理。</Body>
+            </Card>
+          )}
+        </ScrollView>
+        <View
+          testID="sync-conflicts.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          <PrimaryButton
+            testID="sync-conflicts.reload.button"
+            label={error ? '重新加载冲突' : '重新检查冲突'}
+            busy={loading}
+            disabled={!session || !activeFamily || !!actionId}
+            onPress={() => void load()}
+          />
+          <TextButton
+            testID="sync-conflicts.return.button"
+            label="返回上一页"
+            disabled={navigationDisabled}
+            onPress={() => router.back()}
+          />
         </View>
-        <View style={styles.notice}>
-          <Ionicons name="shield-checkmark-outline" size={20} color={colors.warningDark} />
-          <Text style={styles.noticeText}>
-            系统不会自动覆盖其他家庭成员已经提交的照顾或医疗结果。
-          </Text>
-        </View>
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : error ? (
-          <ErrorText>{error}</ErrorText>
-        ) : items.length ? (
-          items.map((item) => (
-            <ConflictCard
-              key={item.id}
-              item={item}
-              busy={actionId === item.id}
-              onKeep={() => void keepServer(item)}
-              onRetry={() => void retry(item)}
-            />
-          ))
-        ) : (
-          <Card>
-            <Title>没有待处理冲突</Title>
-            <Body>所有离线操作都已同步，或已按照你的选择完成处理。</Body>
-            <PrimaryButton label="返回" onPress={() => router.back()} />
-          </Card>
-        )}
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
@@ -192,8 +242,8 @@ function ConflictCard({
       </View>
       <Text style={styles.actionTitle}>{action}</Text>
       <Text style={styles.code}>{errorLabel(item.lastError)}</Text>
-      <View style={styles.compare}>
-        <View style={styles.side}>
+      <View testID="sync-conflicts.compare" style={styles.compare}>
+        <View style={styles.comparisonSection}>
           <Text style={styles.sideLabel}>本机操作</Text>
           <Text style={styles.value}>版本：{String(item.body.version ?? '新记录')}</Text>
           {item.body.actualAt ? (
@@ -206,8 +256,7 @@ function ConflictCard({
             {safePayload(item.body)}
           </Text>
         </View>
-        <View style={styles.divider} />
-        <View style={styles.side}>
+        <View style={styles.comparisonSection}>
           <Text style={styles.sideLabel}>服务端最新状态</Text>
           {item.serverTask ? (
             <>
@@ -262,8 +311,11 @@ function safePayload(body: Record<string, unknown>) {
   return JSON.stringify(copy, null, 2);
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.lg, paddingBottom: 80 },
-  heading: { flexDirection: 'row', justifyContent: 'space-between' },
+  flex: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.lg, paddingBottom: spacing.xl },
+  heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headingCopy: { flex: 1, paddingRight: spacing.md },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   close: {
@@ -274,6 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  disabled: { opacity: 0.55 },
   notice: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -282,6 +335,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   noticeText: { ...typography.caption, color: colors.warningDark, flex: 1 },
+  stateCard: {
+    padding: spacing.lg,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
+  },
   card: {
     padding: spacing.lg,
     borderRadius: radii.card,
@@ -291,21 +350,34 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   badge: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    paddingVertical: spacing.xs,
     borderRadius: radii.pill,
     backgroundColor: colors.dangerSoft,
   },
   failedBadge: { backgroundColor: colors.warningSoft },
   badgeText: { ...typography.caption, color: colors.dangerDark, fontWeight: '700' },
-  time: { ...typography.caption, color: colors.textTertiary },
+  time: { ...typography.caption, color: colors.textTertiary, fontVariant: ['tabular-nums'] },
   actionTitle: { ...typography.h2, color: colors.ink },
   code: { ...typography.secondary, color: colors.dangerDark },
-  compare: { flexDirection: 'row', gap: spacing.md },
-  side: { flex: 1, gap: spacing.xs },
-  divider: { width: 1, backgroundColor: colors.divider },
+  compare: { gap: spacing.sm },
+  comparisonSection: {
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radii.input,
+    backgroundColor: colors.page,
+  },
   sideLabel: { ...typography.caption, color: colors.brand, fontWeight: '700' },
-  value: { ...typography.caption, color: colors.textSecondary },
-  payload: { fontSize: 10, lineHeight: 15, color: colors.textTertiary },
+  value: { ...typography.caption, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+  payload: { ...typography.caption, color: colors.textTertiary, fontVariant: ['tabular-nums'] },
   explain: { padding: spacing.md, borderRadius: radii.input, backgroundColor: colors.page },
   explainText: { ...typography.caption, color: colors.textSecondary },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
