@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   AuthApiError,
@@ -42,6 +43,7 @@ import {
   Body,
   Card,
   ErrorText,
+  PrimaryButton,
   Screen,
   SuccessText,
   TextButton,
@@ -50,6 +52,7 @@ import {
 
 export default function NotificationSettingsRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [preference, setPreference] = useState<NotificationPreference>();
   const [loading, setLoading] = useState(true);
@@ -206,170 +209,198 @@ export default function NotificationSettingsRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          testID="notifications.back.button"
-          accessibilityLabel="返回"
-          accessibilityHint={saving ? '通知设置保存中，点击会提示继续等待' : '返回上一页'}
-          onPress={requestReturn}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="notifications.title" style={styles.navTitle}>
-          通知偏好
-        </Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-          <Text style={styles.title}>由你决定何时提醒</Text>
-          <Text style={styles.subtitle}>设置仅影响你本人，不会停止家庭任务生成。</Text>
+      <View style={styles.flex}>
+        <View style={styles.nav}>
+          <Pressable
+            testID="notifications.back.button"
+            accessibilityLabel="返回"
+            accessibilityHint={saving ? '通知设置保存中，点击会提示继续等待' : '返回上一页'}
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text testID="notifications.title" style={styles.navTitle}>
+            通知偏好
+          </Text>
+          <View style={styles.back} />
         </View>
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.brand} />
-            <Text style={styles.loadingText}>正在加载通知设置…</Text>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <Text style={styles.title}>由你决定何时提醒</Text>
+            <Text style={styles.subtitle}>设置仅影响你本人，不会停止家庭任务生成。</Text>
           </View>
-        ) : preference ? (
-          <Card>
-            <Title>{activeFamily?.name}</Title>
-            {success ? (
-              <SuccessText testID="notifications.success.text">{success}</SuccessText>
-            ) : null}
-            {error ? <ErrorText testID="notifications.error.text">{error}</ErrorText> : null}
-            <Setting
-              title="照顾任务提醒"
-              detail="接收疫苗、驱虫、用药和铲屎等计划提醒"
-              value={preference.taskReminderEnabled}
-              effectiveEnabled={notificationPreferenceEffectiveEnabled(
-                preference,
-                'taskReminderEnabled',
-              )}
-              disabled={editingDisabled}
-              saving={saving === 'taskReminderEnabled'}
-              onChange={(value) => void change('taskReminderEnabled', value)}
-            />
-            <Setting
-              title="手机推送"
-              detail="开启前会先申请系统通知权限并登记当前设备"
-              value={preference.pushEnabled}
-              effectiveEnabled={notificationPreferenceEffectiveEnabled(preference, 'pushEnabled')}
-              disabled={editingDisabled}
-              saving={saving === 'pushEnabled'}
-              hint={notificationPreferenceDependencyHint(preference, 'pushEnabled')}
-              onChange={(value) => void change('pushEnabled', value)}
-            />
-            <Setting
-              title="逾期提醒"
-              detail="任务超过计划时间后继续提醒你处理"
-              value={preference.overdueEnabled}
-              effectiveEnabled={notificationPreferenceEffectiveEnabled(
-                preference,
-                'overdueEnabled',
-              )}
-              disabled={editingDisabled}
-              saving={saving === 'overdueEnabled'}
-              hint={notificationPreferenceDependencyHint(preference, 'overdueEnabled')}
-              onChange={(value) => void change('overdueEnabled', value)}
-            />
-          </Card>
-        ) : error ? (
-          <Card>
-            <Title>通知设置加载失败</Title>
-            <ErrorText>{error}</ErrorText>
-            <TextButton label="重新加载" onPress={() => void load()} />
-          </Card>
-        ) : null}
-        {preference ? (
-          <Card>
-            <Title>当前设备推送</Title>
-            <View style={styles.devicePushHeader}>
-              <View
-                style={[
-                  styles.statusDot,
-                  devicePushStatus === 'registered'
-                    ? styles.statusDotSuccess
-                    : devicePushStatus === 'failed'
-                      ? styles.statusDotDanger
-                      : styles.statusDotWarn,
-                ]}
-              />
-              <View style={styles.devicePushCopy}>
-                <Text style={styles.devicePushTitle}>
-                  {devicePushRegistrationTitle(devicePushStatus)}
-                </Text>
-                <Text style={styles.devicePushBody}>
-                  {devicePushRegistrationBody({
-                    status: devicePushStatus,
-                    maskedToken: maskExpoPushToken(devicePushToken),
-                  })}
-                </Text>
-              </View>
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color={colors.brand} />
+              <Text style={styles.loadingText}>正在加载通知设置…</Text>
             </View>
-            {devicePushError ? <ErrorText>{devicePushError}</ErrorText> : null}
-            {devicePushRecovery ? (
-              <View style={styles.devicePushRecovery}>
-                <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
-                <View style={styles.devicePushRecoveryBody}>
-                  <Text style={styles.devicePushRecoveryTitle}>{devicePushRecovery.title}</Text>
-                  <Text style={styles.devicePushRecoveryText}>{devicePushRecovery.body}</Text>
-                  <TextButton
-                    label={devicePushRecovery.actionLabel}
-                    danger
-                    disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
-                    onPress={() => void openDevicePushSettings()}
-                  />
+          ) : preference ? (
+            <Card>
+              <Title>{activeFamily?.name}</Title>
+              {success ? (
+                <SuccessText testID="notifications.success.text">{success}</SuccessText>
+              ) : null}
+              {error ? <ErrorText testID="notifications.error.text">{error}</ErrorText> : null}
+              <Setting
+                title="照顾任务提醒"
+                detail="接收疫苗、驱虫、用药和铲屎等计划提醒"
+                value={preference.taskReminderEnabled}
+                effectiveEnabled={notificationPreferenceEffectiveEnabled(
+                  preference,
+                  'taskReminderEnabled',
+                )}
+                disabled={editingDisabled}
+                saving={saving === 'taskReminderEnabled'}
+                onChange={(value) => void change('taskReminderEnabled', value)}
+              />
+              <Setting
+                title="手机推送"
+                detail="开启前会先申请系统通知权限并登记当前设备"
+                value={preference.pushEnabled}
+                effectiveEnabled={notificationPreferenceEffectiveEnabled(preference, 'pushEnabled')}
+                disabled={editingDisabled}
+                saving={saving === 'pushEnabled'}
+                hint={notificationPreferenceDependencyHint(preference, 'pushEnabled')}
+                onChange={(value) => void change('pushEnabled', value)}
+              />
+              <Setting
+                title="逾期提醒"
+                detail="任务超过计划时间后继续提醒你处理"
+                value={preference.overdueEnabled}
+                effectiveEnabled={notificationPreferenceEffectiveEnabled(
+                  preference,
+                  'overdueEnabled',
+                )}
+                disabled={editingDisabled}
+                saving={saving === 'overdueEnabled'}
+                hint={notificationPreferenceDependencyHint(preference, 'overdueEnabled')}
+                onChange={(value) => void change('overdueEnabled', value)}
+              />
+            </Card>
+          ) : error ? (
+            <Card>
+              <Title>通知设置加载失败</Title>
+              <ErrorText>{error}</ErrorText>
+              <TextButton label="重新加载" onPress={() => void load()} />
+            </Card>
+          ) : null}
+          {preference ? (
+            <Card>
+              <Title>当前设备推送</Title>
+              <View style={styles.devicePushHeader}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    devicePushStatus === 'registered'
+                      ? styles.statusDotSuccess
+                      : devicePushStatus === 'failed'
+                        ? styles.statusDotDanger
+                        : styles.statusDotWarn,
+                  ]}
+                />
+                <View style={styles.devicePushCopy}>
+                  <Text style={styles.devicePushTitle}>
+                    {devicePushRegistrationTitle(devicePushStatus)}
+                  </Text>
+                  <Text style={styles.devicePushBody}>
+                    {devicePushRegistrationBody({
+                      status: devicePushStatus,
+                      maskedToken: maskExpoPushToken(devicePushToken),
+                    })}
+                  </Text>
                 </View>
               </View>
-            ) : null}
-            {!preference.pushEnabled ? (
-              <Text style={styles.settingHint}>
-                当前个人偏好里的“手机推送”是关闭状态；登记设备不会改变任务生成。
-              </Text>
-            ) : null}
-            <TextButton
+              {devicePushError ? <ErrorText>{devicePushError}</ErrorText> : null}
+              {devicePushRecovery ? (
+                <View style={styles.devicePushRecovery}>
+                  <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
+                  <View style={styles.devicePushRecoveryBody}>
+                    <Text style={styles.devicePushRecoveryTitle}>{devicePushRecovery.title}</Text>
+                    <Text style={styles.devicePushRecoveryText}>{devicePushRecovery.body}</Text>
+                    <TextButton
+                      label={devicePushRecovery.actionLabel}
+                      danger
+                      disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
+                      onPress={() => void openDevicePushSettings()}
+                    />
+                  </View>
+                </View>
+              ) : null}
+              {!preference.pushEnabled ? (
+                <Text style={styles.settingHint}>
+                  当前个人偏好里的“手机推送”是关闭状态；登记设备不会改变任务生成。
+                </Text>
+              ) : null}
+            </Card>
+          ) : null}
+          <Card>
+            <Title>家庭通知渠道</Title>
+            <Pressable
+              testID="notifications.feishu.button"
+              accessibilityRole="button"
+              accessibilityLabel="飞书通知"
+              accessibilityHint="配置家庭级飞书机器人通知"
+              onPress={() => router.push('/settings/feishu' as Href)}
+              style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
+            >
+              <View style={styles.channelIcon}>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.brand} />
+              </View>
+              <View style={styles.channelBody}>
+                <Text style={styles.channelTitle}>飞书群机器人</Text>
+                <Text style={styles.channelDetail}>
+                  管理员配置 Webhook 后，家庭任务可同步到飞书群。
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </Pressable>
+          </Card>
+          <View style={styles.notice}>
+            <Ionicons name="information-circle-outline" size={20} color={colors.brand} />
+            <Body>关闭通知不会删除任务；你仍然可以在“任务”页面查看和完成它们。</Body>
+          </View>
+        </ScrollView>
+        {preference ? (
+          <View
+            testID="notifications.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            <PrimaryButton
+              testID="notifications.register-device.button"
               label={devicePushRegistrationActionLabel(devicePushStatus)}
-              disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
+              busy={devicePushRegistering}
+              disabled={devicePushTesting || Boolean(saving)}
               onPress={() => void registerCurrentDevicePush()}
             />
-            <View style={styles.devicePushTest}>
-              <TextButton
-                label={devicePushTestActionLabel(devicePushTestStatus)}
-                disabled={!canTestDevicePush}
-                onPress={() => void sendCurrentDevicePushTest()}
-              />
-              <Text style={styles.devicePushTestHint}>{devicePushTestHelp}</Text>
-            </View>
-          </Card>
+            <TextButton
+              testID="notifications.test-push.button"
+              label={devicePushTestActionLabel(devicePushTestStatus)}
+              disabled={!canTestDevicePush}
+              onPress={() => void sendCurrentDevicePushTest()}
+            />
+            <Text style={styles.devicePushTestHint}>{devicePushTestHelp}</Text>
+            <TextButton
+              testID="notifications.return.button"
+              label={
+                saving || devicePushRegistering || devicePushTesting
+                  ? '处理中，请等待'
+                  : '返回上一页'
+              }
+              disabled={Boolean(saving) || devicePushRegistering || devicePushTesting}
+              onPress={requestReturn}
+            />
+          </View>
         ) : null}
-        <Card>
-          <Title>家庭通知渠道</Title>
-          <Pressable
-            testID="notifications.feishu.button"
-            accessibilityRole="button"
-            accessibilityLabel="飞书通知"
-            accessibilityHint="配置家庭级飞书机器人通知"
-            onPress={() => router.push('/settings/feishu' as Href)}
-            style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
-          >
-            <View style={styles.channelIcon}>
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.brand} />
-            </View>
-            <View style={styles.channelBody}>
-              <Text style={styles.channelTitle}>飞书群机器人</Text>
-              <Text style={styles.channelDetail}>
-                管理员配置 Webhook 后，家庭任务可同步到飞书群。
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-          </Pressable>
-        </Card>
-        <View style={styles.notice}>
-          <Ionicons name="information-circle-outline" size={20} color={colors.brand} />
-          <Body>关闭通知不会删除任务；你仍然可以在“任务”页面查看和完成它们。</Body>
-        </View>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
@@ -417,10 +448,12 @@ function Setting({
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h3, color: colors.ink },
-  content: { gap: spacing.xl, paddingBottom: 104 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
@@ -467,7 +500,6 @@ const styles = StyleSheet.create({
   devicePushRecoveryBody: { flex: 1, gap: spacing.xs },
   devicePushRecoveryTitle: { ...typography.h3, color: colors.dangerDark },
   devicePushRecoveryText: { ...typography.caption, color: colors.dangerDark },
-  devicePushTest: { gap: spacing.xs },
   devicePushTestHint: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
   channelRow: {
     minHeight: 64,
@@ -499,6 +531,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     backgroundColor: colors.brandSoft,
     borderRadius: radii.input,
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
