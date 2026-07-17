@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
-const base = 'http://127.0.0.1:3000/api/v1';
+const base = process.env.CATDIARY_API_BASE_URL ?? 'http://127.0.0.1:3000/api/v1';
 const prisma = new PrismaClient();
+const sentPhones = new Set();
 
 async function request(path, init = {}) {
   const response = await fetch(base + path, {
@@ -12,20 +13,26 @@ async function request(path, init = {}) {
   return { status: response.status, body: payload?.data ?? payload?.error ?? payload };
 }
 async function login(phone, deviceId, deviceName) {
-  await request('/auth/sms/send', {
-    method: 'POST',
-    body: JSON.stringify({ phone, purpose: 'login' }),
-  });
-  return (
-    await request('/auth/sms/verify', {
+  if (!sentPhones.has(phone)) {
+    const sent = await request('/auth/sms/send', {
       method: 'POST',
-      body: JSON.stringify({
-        phone,
-        code: '123456',
-        device: { deviceId, deviceName, platform: 'IOS' },
-      }),
-    })
-  ).body;
+      body: JSON.stringify({ phone, purpose: 'login' }),
+    });
+    if (sent.status !== 200)
+      throw new Error(`${deviceName} SMS send failed: ${JSON.stringify(sent)}`);
+    sentPhones.add(phone);
+  }
+  const verified = await request('/auth/sms/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      phone,
+      code: '123456',
+      device: { deviceId, deviceName, platform: 'IOS' },
+    }),
+  });
+  if (verified.status !== 200)
+    throw new Error(`${deviceName} SMS verify failed: ${JSON.stringify(verified)}`);
+  return verified.body;
 }
 async function register(session, token) {
   return request('/devices/push-token', {
@@ -51,7 +58,9 @@ try {
   const sessions = await request('/auth/sessions', {
     headers: { Authorization: `Bearer ${first.accessToken}` },
   });
+  if (sessions.status !== 200) throw new Error(`sessions list failed: ${JSON.stringify(sessions)}`);
   const secondSession = sessions.body.find((item) => item.deviceName === 'Push B');
+  if (!secondSession) throw new Error(`second session missing: ${JSON.stringify(sessions)}`);
   const revoke = await request(`/auth/sessions/${secondSession?.id ?? 'missing'}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${first.accessToken}` },
