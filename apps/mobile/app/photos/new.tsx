@@ -4,7 +4,10 @@ import {
   Alert,
   BackHandler,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +16,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
@@ -66,6 +70,7 @@ type UploadItem = {
 
 export default function NewPhotoRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { session, activeFamily } = useSession();
   const routePetId = paramValue(params.petId) ?? paramValue(params.pet);
@@ -79,6 +84,7 @@ export default function NewPhotoRoute() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [permissionDeniedSource, setPermissionDeniedSource] =
     useState<PhotoPermissionSource | null>(null);
   const [restoreOwnershipWarning, setRestoreOwnershipWarning] = useState('');
@@ -157,6 +163,18 @@ export default function NewPhotoRoute() {
   useEffect(() => {
     loadPhotoContext();
   }, [loadPhotoContext]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   const submitState = useMemo(
     () =>
       resolvePhotoUploadSubmitState({
@@ -180,6 +198,9 @@ export default function NewPhotoRoute() {
   const fieldsDisabled =
     busy || petsLoading || Boolean(petLoadError) || submitState.reason === 'NO_PETS';
   const canPickPhotos = !fieldsDisabled && !photoLimitReached;
+  const submitLabel = items.some((item) => item.state === 'FAILED')
+    ? '重试失败照片'
+    : `上传 ${items.length || ''} 张照片`;
   const isDirty = useMemo(
     () =>
       isPhotoUploadDraftDirty({
@@ -431,223 +452,258 @@ export default function NewPhotoRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="关闭"
-          disabled={busy}
-          onPress={requestClose}
-          style={({ pressed }) => [
-            styles.navButton,
-            busy && styles.navButtonDisabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons name="close" size={23} color={colors.ink} />
-        </Pressable>
-        <View>
-          <Text testID="photo-new.title" style={styles.title}>
-            添加照片
-          </Text>
-          <Text style={styles.subtitle}>最多选择 9 张，上传前会自动压缩</Text>
-        </View>
-      </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.pickerRow}>
-          <PickerButton
-            icon="images-outline"
-            label="从相册选择"
-            disabled={!canPickPhotos}
-            testID="photo-new.pick-library.button"
-            onPress={() => void chooseLibrary()}
-          />
-          <PickerButton
-            icon="camera-outline"
-            label="拍一张"
-            disabled={!canPickPhotos}
-            testID="photo-new.take-photo.button"
-            onPress={() => void takePhoto()}
-          />
-        </View>
-        <Text style={[styles.limitHint, photoLimitReached && styles.limitHintFull]}>
-          {petsLoading
-            ? '正在确认照片归属'
-            : petLoadError
-              ? '照片归属加载失败，请先重试'
-              : !pets.length
-                ? '请先添加猫咪档案，再上传照片'
-                : photoLimitReached
-                  ? '已达到 9 张上限，移除一张后可继续添加'
-                  : `还能添加 ${slotsLeft} 张`}
-        </Text>
-        {permissionDeniedCopy ? (
-          <View testID="photo-new.permission.notice" style={styles.permissionNotice}>
-            <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
-            <View style={styles.permissionNoticeBody}>
-              <Text style={styles.permissionNoticeTitle}>{permissionDeniedCopy.title}</Text>
-              <Text style={styles.permissionNoticeText}>{permissionDeniedCopy.body}</Text>
-              <TextButton
-                label={permissionDeniedCopy.actionLabel}
-                danger
-                disabled={busy}
-                testID="photo-new.permission.settings.button"
-                onPress={() => void openPermissionSettings()}
-              />
-            </View>
-          </View>
-        ) : null}
-        {restoredQueueCount ? (
-          <View testID="photo-new.restore.notice" style={styles.restoreNotice}>
-            <Ionicons
-              name={invalidRestoredPhotoCount ? 'alert-circle-outline' : 'cloud-upload-outline'}
-              size={18}
-              color={colors.warningDark}
-            />
-            <Text style={styles.restoreNoticeText}>
-              {invalidRestoredPhotoCount
-                ? `已恢复 ${restoredQueueCount} 张上次未完成的照片，其中 ${invalidRestoredPhotoCount} 张原绑定猫咪已不可用，请先移除后重新选择。`
-                : restoreOwnershipWarning
-                  ? `已恢复 ${restoredQueueCount} 张上次未完成的照片；${restoreOwnershipWarning}重试时会沿用每张照片当前有效的猫咪归属和备注。`
-                  : `已恢复 ${restoredQueueCount} 张上次未完成的照片；重试时会沿用每张照片原本保存的猫咪归属和备注。`}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="关闭"
+            disabled={busy}
+            onPress={requestClose}
+            style={({ pressed }) => [
+              styles.navButton,
+              busy && styles.navButtonDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="close" size={23} color={colors.ink} />
+          </Pressable>
+          <View>
+            <Text testID="photo-new.title" style={styles.title}>
+              添加照片
             </Text>
+            <Text style={styles.subtitle}>最多选择 9 张，上传前会自动压缩</Text>
           </View>
-        ) : null}
-        {items.length ? (
-          <View style={styles.previews}>
-            {items.map((item) => {
-              const status = photoUploadPreviewStatus({
-                state: item.state,
-                progress: item.progress,
-                error: item.error,
-                queued: Boolean(item.queued),
-              });
-              const shouldShowStatus = item.state !== 'READY' || Boolean(item.error);
-              return (
-                <View key={item.id} testID="photo-new.preview.item" style={styles.previewCard}>
-                  <View
-                    accessible
-                    accessibilityRole="image"
-                    accessibilityLabel={status.accessibilityLabel}
-                    style={styles.preview}
-                  >
-                    <Image source={{ uri: item.uri }} style={styles.previewImage} />
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressBar, { width: `${item.progress}%` }]} />
-                    </View>
-                    {item.state === 'FAILED' ? (
-                      <View style={styles.failed}>
-                        <Ionicons name="alert-circle" size={16} color={colors.surface} />
-                      </View>
-                    ) : null}
-                    {(item.state === 'READY' || item.state === 'FAILED') && !busy ? (
-                      <Pressable
-                        testID="photo-new.preview.remove.button"
-                        accessibilityLabel="移除照片"
-                        onPress={() => void removeItem(item)}
-                        style={styles.remove}
-                      >
-                        <Ionicons name="close" size={15} color={colors.surface} />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  {shouldShowStatus ? (
-                    <Text
-                      numberOfLines={2}
-                      style={[
-                        styles.previewStatus,
-                        status.tone === 'brand' && styles.previewStatusBrand,
-                        status.tone === 'success' && styles.previewStatusSuccess,
-                        status.tone === 'danger' && styles.previewStatusDanger,
-                      ]}
-                    >
-                      {status.text}
-                    </Text>
-                  ) : null}
-                </View>
-              );
-            })}
+        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
+        >
+          <View style={styles.pickerRow}>
+            <PickerButton
+              icon="images-outline"
+              label="从相册选择"
+              disabled={!canPickPhotos}
+              testID="photo-new.pick-library.button"
+              onPress={() => void chooseLibrary()}
+            />
+            <PickerButton
+              icon="camera-outline"
+              label="拍一张"
+              disabled={!canPickPhotos}
+              testID="photo-new.take-photo.button"
+              onPress={() => void takePhoto()}
+            />
           </View>
-        ) : null}
-        <View style={styles.section}>
-          <Text style={styles.label}>照片里有谁</Text>
-          <Text style={styles.hint}>可以同时绑定多只猫咪</Text>
-          {petsLoading ? (
-            <View style={styles.inlineState}>
-              <ActivityIndicator color={colors.brand} />
-              <Text style={styles.inlineStateText}>正在确认可绑定的猫咪档案</Text>
+          <Text style={[styles.limitHint, photoLimitReached && styles.limitHintFull]}>
+            {petsLoading
+              ? '正在确认照片归属'
+              : petLoadError
+                ? '照片归属加载失败，请先重试'
+                : !pets.length
+                  ? '请先添加猫咪档案，再上传照片'
+                  : photoLimitReached
+                    ? '已达到 9 张上限，移除一张后可继续添加'
+                    : `还能添加 ${slotsLeft} 张`}
+          </Text>
+          {permissionDeniedCopy ? (
+            <View testID="photo-new.permission.notice" style={styles.permissionNotice}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.dangerDark} />
+              <View style={styles.permissionNoticeBody}>
+                <Text style={styles.permissionNoticeTitle}>{permissionDeniedCopy.title}</Text>
+                <Text style={styles.permissionNoticeText}>{permissionDeniedCopy.body}</Text>
+                <TextButton
+                  label={permissionDeniedCopy.actionLabel}
+                  danger
+                  disabled={busy}
+                  testID="photo-new.permission.settings.button"
+                  onPress={() => void openPermissionSettings()}
+                />
+              </View>
             </View>
-          ) : petLoadError ? (
-            <View style={styles.inlineState}>
-              <ErrorText>{petLoadError}</ErrorText>
-              <TextButton label="重新加载猫咪" disabled={busy} onPress={loadPhotoContext} />
-            </View>
-          ) : !pets.length ? (
-            <View style={styles.inlineState}>
-              <Text style={styles.inlineStateTitle}>还没有可绑定的猫咪档案</Text>
-              <Text style={styles.inlineStateText}>
-                照片必须至少绑定一只猫咪，添加猫咪后再上传照片。
+          ) : null}
+          {restoredQueueCount ? (
+            <View testID="photo-new.restore.notice" style={styles.restoreNotice}>
+              <Ionicons
+                name={invalidRestoredPhotoCount ? 'alert-circle-outline' : 'cloud-upload-outline'}
+                size={18}
+                color={colors.warningDark}
+              />
+              <Text style={styles.restoreNoticeText}>
+                {invalidRestoredPhotoCount
+                  ? `已恢复 ${restoredQueueCount} 张上次未完成的照片，其中 ${invalidRestoredPhotoCount} 张原绑定猫咪已不可用，请先移除后重新选择。`
+                  : restoreOwnershipWarning
+                    ? `已恢复 ${restoredQueueCount} 张上次未完成的照片；${restoreOwnershipWarning}重试时会沿用每张照片当前有效的猫咪归属和备注。`
+                    : `已恢复 ${restoredQueueCount} 张上次未完成的照片；重试时会沿用每张照片原本保存的猫咪归属和备注。`}
               </Text>
             </View>
           ) : null}
-          <View style={styles.chips}>
-            {pets.map((pet) => (
-              <Pressable
-                testID="photo-new.pet.item"
-                key={pet.id}
-                accessibilityRole="button"
-                accessibilityState={{
-                  selected: petIds.includes(pet.id),
-                  disabled: fieldsDisabled,
-                }}
-                disabled={fieldsDisabled}
-                onPress={() => togglePet(pet.id)}
-                style={[
-                  styles.chip,
-                  petIds.includes(pet.id) && styles.chipActive,
-                  fieldsDisabled && styles.chipDisabled,
-                ]}
-              >
-                <Ionicons
-                  name={petIds.includes(pet.id) ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={17}
-                  color={petIds.includes(pet.id) ? colors.surface : colors.brand}
-                />
-                <Text style={[styles.chipText, petIds.includes(pet.id) && styles.chipTextActive]}>
-                  {pet.name}
+          {items.length ? (
+            <View style={styles.previews}>
+              {items.map((item) => {
+                const status = photoUploadPreviewStatus({
+                  state: item.state,
+                  progress: item.progress,
+                  error: item.error,
+                  queued: Boolean(item.queued),
+                });
+                const shouldShowStatus = item.state !== 'READY' || Boolean(item.error);
+                return (
+                  <View key={item.id} testID="photo-new.preview.item" style={styles.previewCard}>
+                    <View
+                      accessible
+                      accessibilityRole="image"
+                      accessibilityLabel={status.accessibilityLabel}
+                      style={styles.preview}
+                    >
+                      <Image source={{ uri: item.uri }} style={styles.previewImage} />
+                      <View style={styles.progressTrack}>
+                        <View style={[styles.progressBar, { width: `${item.progress}%` }]} />
+                      </View>
+                      {item.state === 'FAILED' ? (
+                        <View style={styles.failed}>
+                          <Ionicons name="alert-circle" size={16} color={colors.surface} />
+                        </View>
+                      ) : null}
+                      {(item.state === 'READY' || item.state === 'FAILED') && !busy ? (
+                        <Pressable
+                          testID="photo-new.preview.remove.button"
+                          accessibilityLabel="移除照片"
+                          onPress={() => void removeItem(item)}
+                          style={styles.remove}
+                        >
+                          <Ionicons name="close" size={15} color={colors.surface} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    {shouldShowStatus ? (
+                      <Text
+                        numberOfLines={2}
+                        style={[
+                          styles.previewStatus,
+                          status.tone === 'brand' && styles.previewStatusBrand,
+                          status.tone === 'success' && styles.previewStatusSuccess,
+                          status.tone === 'danger' && styles.previewStatusDanger,
+                        ]}
+                      >
+                        {status.text}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          <View style={styles.section}>
+            <Text style={styles.label}>照片里有谁</Text>
+            <Text style={styles.hint}>可以同时绑定多只猫咪</Text>
+            {petsLoading ? (
+              <View style={styles.inlineState}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.inlineStateText}>正在确认可绑定的猫咪档案</Text>
+              </View>
+            ) : petLoadError ? (
+              <View style={styles.inlineState}>
+                <ErrorText>{petLoadError}</ErrorText>
+                <TextButton label="重新加载猫咪" disabled={busy} onPress={loadPhotoContext} />
+              </View>
+            ) : !pets.length ? (
+              <View style={styles.inlineState}>
+                <Text style={styles.inlineStateTitle}>还没有可绑定的猫咪档案</Text>
+                <Text style={styles.inlineStateText}>
+                  照片必须至少绑定一只猫咪，添加猫咪后再上传照片。
                 </Text>
-              </Pressable>
-            ))}
+              </View>
+            ) : null}
+            <View style={styles.chips}>
+              {pets.map((pet) => (
+                <Pressable
+                  testID="photo-new.pet.item"
+                  key={pet.id}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: petIds.includes(pet.id),
+                    disabled: fieldsDisabled,
+                  }}
+                  disabled={fieldsDisabled}
+                  onPress={() => togglePet(pet.id)}
+                  style={[
+                    styles.chip,
+                    petIds.includes(pet.id) && styles.chipActive,
+                    fieldsDisabled && styles.chipDisabled,
+                  ]}
+                >
+                  <Ionicons
+                    name={petIds.includes(pet.id) ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={17}
+                    color={petIds.includes(pet.id) ? colors.surface : colors.brand}
+                  />
+                  <Text style={[styles.chipText, petIds.includes(pet.id) && styles.chipTextActive]}>
+                    {pet.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
-        <Field
-          label="照片备注"
-          value={note}
-          onChangeText={setNote}
-          placeholder="例如：一起晒太阳的下午"
-          maxLength={500}
-          multiline
-          editable={!fieldsDisabled}
-          testID="photo-new.note.input"
-        />
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <PrimaryButton
-          label={
-            items.some((item) => item.state === 'FAILED')
-              ? '重试失败照片'
-              : `上传 ${items.length || ''} 张照片`
-          }
-          disabled={!canUpload}
-          busy={busy}
-          testID="photo-new.submit.button"
-          onPress={() => void upload()}
-        />
-        <TextButton
-          label="取消"
-          disabled={busy}
-          testID="photo-new.cancel.button"
-          onPress={requestClose}
-        />
-      </ScrollView>
+          <Field
+            label="照片备注"
+            value={note}
+            onChangeText={setNote}
+            placeholder="例如：一起晒太阳的下午"
+            maxLength={500}
+            multiline
+            editable={!fieldsDisabled}
+            testID="photo-new.note.input"
+          />
+          {error && keyboardVisible ? (
+            <ErrorText testID="photo-new.error">{error}</ErrorText>
+          ) : null}
+          {keyboardVisible ? (
+            <>
+              <PrimaryButton
+                label={submitLabel}
+                disabled={!canUpload}
+                busy={busy}
+                testID="photo-new.submit.inline-button"
+                onPress={() => void upload()}
+              />
+              <TextButton
+                label="取消"
+                disabled={busy}
+                testID="photo-new.cancel.inline-button"
+                onPress={requestClose}
+              />
+            </>
+          ) : null}
+        </ScrollView>
+        {keyboardVisible ? null : (
+          <View
+            testID="photo-new.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="photo-new.error">{error}</ErrorText> : null}
+            <PrimaryButton
+              label={submitLabel}
+              disabled={!canUpload}
+              busy={busy}
+              testID="photo-new.submit.button"
+              onPress={() => void upload()}
+            />
+            <TextButton
+              label="取消"
+              disabled={busy}
+              testID="photo-new.cancel.button"
+              onPress={requestClose}
+            />
+          </View>
+        )}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -695,12 +751,13 @@ function PickerButton({
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   navButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   navButtonDisabled: { opacity: 0.45 },
   title: { ...typography.h2, color: colors.ink },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  content: { gap: spacing.xl, paddingBottom: 110 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   pickerRow: { flexDirection: 'row', gap: spacing.md },
   limitHint: { ...typography.caption, color: colors.textSecondary, marginTop: -spacing.md },
   limitHintFull: { color: colors.warningDark },
@@ -823,5 +880,13 @@ const styles = StyleSheet.create({
   chipDisabled: { opacity: 0.55 },
   chipText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   chipTextActive: { color: colors.surface },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
