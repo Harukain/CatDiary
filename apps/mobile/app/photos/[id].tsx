@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   AuthApiError,
@@ -32,6 +36,7 @@ import {
 
 export default function PhotoDetailRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session, activeFamily } = useSession();
   const allowLeave = useRef(false);
@@ -41,6 +46,7 @@ export default function PhotoDetailRoute() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const originalPetIds = useMemo(() => photo?.pets.map((entry) => entry.petId) ?? [], [photo]);
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
@@ -65,6 +71,7 @@ export default function PhotoDetailRoute() {
       petIds,
       originalPetIds,
     });
+  const canSave = changed && !!petIds.length && !busy;
   const requestBack = useCallback(() => {
     if (busy) {
       Alert.alert('照片正在处理', '请等待当前操作完成，避免照片归属或备注状态不一致。', [
@@ -96,6 +103,18 @@ export default function PhotoDetailRoute() {
     });
     return () => subscription.remove();
   }, [busy, changed, requestBack]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   function togglePet(petId: string) {
     if (busy) return;
     setPetIds((current) =>
@@ -107,7 +126,7 @@ export default function PhotoDetailRoute() {
     );
   }
   async function save() {
-    if (!session || !activeFamily || !photo || !petIds.length) return;
+    if (!session || !activeFamily || !photo || !canSave) return;
     setBusy(true);
     setError('');
     try {
@@ -138,13 +157,14 @@ export default function PhotoDetailRoute() {
     }
   }
   function confirmDelete() {
+    if (busy) return;
     Alert.alert('删除照片', '照片会先进入软删除状态，不会立即从存储中永久清除。', [
       { text: '取消', style: 'cancel' },
       { text: '删除', style: 'destructive', onPress: () => void remove() },
     ]);
   }
   async function remove() {
-    if (!session || !activeFamily || !photo) return;
+    if (!session || !activeFamily || !photo || busy) return;
     setBusy(true);
     try {
       await authApi.deletePhoto(session.accessToken, activeFamily.id, photo.id, photo.version);
@@ -157,107 +177,161 @@ export default function PhotoDetailRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="返回"
-          accessibilityHint={busy ? '照片操作进行中，点击会提示继续等待' : '返回上一页'}
-          onPress={requestBack}
-          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            accessibilityHint={busy ? '照片操作进行中，点击会提示继续等待' : '返回上一页'}
+            onPress={requestBack}
+            style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text testID="photo-detail.title" style={styles.title}>
+            照片详情
+          </Text>
+          <View style={styles.navButton} />
+        </View>
+        <ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="photo-detail.title" style={styles.title}>
-          照片详情
-        </Text>
-        <View style={styles.navButton} />
-      </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {!photo && !error ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : photo && session && activeFamily ? (
-          <>
-            <AuthenticatedImage
-              testID="photo-detail.image"
-              source={photoSource(photo, session.accessToken, activeFamily.id)}
-              style={styles.hero}
-              resizeMode="cover"
-            />
-            <View style={styles.panel}>
-              <Text style={styles.label}>照片里有谁</Text>
-              <View style={styles.chips}>
-                {pets.map((pet) => (
-                  <Pressable
-                    key={pet.id}
-                    testID="photo-detail.pet.item"
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: petIds.includes(pet.id), disabled: busy }}
-                    disabled={busy}
-                    onPress={() => togglePet(pet.id)}
-                    style={[
-                      styles.chip,
-                      petIds.includes(pet.id) && styles.chipActive,
-                      busy && styles.disabled,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.chipText, petIds.includes(pet.id) && styles.chipTextActive]}
-                    >
-                      {pet.name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Field
-                label="照片备注"
-                value={note}
-                onChangeText={setNote}
-                maxLength={500}
-                multiline
-                editable={!busy}
-                placeholder="写下这一刻"
-                testID="photo-detail.note.input"
+          {!photo && !error ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : photo && session && activeFamily ? (
+            <>
+              <AuthenticatedImage
+                testID="photo-detail.image"
+                source={photoSource(photo, session.accessToken, activeFamily.id)}
+                style={styles.hero}
+                resizeMode="cover"
               />
-              {error ? <ErrorText>{error}</ErrorText> : null}
-              <PrimaryButton
-                label="保存修改"
-                disabled={!changed || !petIds.length}
-                busy={busy}
-                testID="photo-detail.save.button"
-                onPress={() => void save()}
-              />
-              {canManageAvatar ? (
-                <View style={styles.avatarArea}>
-                  <Text style={styles.label}>设置档案头像</Text>
-                  <Text style={styles.hint}>照片绑定的猫咪可以使用它作为头像</Text>
-                  {petIds.map((petId) => (
-                    <TextButton
-                      key={petId}
-                      label={`设为 ${pets.find((pet) => pet.id === petId)?.name ?? '猫咪'} 的头像`}
+              <View style={styles.panel}>
+                <Text style={styles.label}>照片里有谁</Text>
+                <View style={styles.chips}>
+                  {pets.map((pet) => (
+                    <Pressable
+                      key={pet.id}
+                      testID="photo-detail.pet.item"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: petIds.includes(pet.id), disabled: busy }}
                       disabled={busy}
-                      testID="photo-detail.set-avatar.button"
-                      onPress={() => void setAvatar(petId)}
-                    />
+                      onPress={() => togglePet(pet.id)}
+                      style={[
+                        styles.chip,
+                        petIds.includes(pet.id) && styles.chipActive,
+                        busy && styles.disabled,
+                      ]}
+                    >
+                      <Text
+                        style={[styles.chipText, petIds.includes(pet.id) && styles.chipTextActive]}
+                      >
+                        {pet.name}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
-              ) : null}
-              <TextButton
-                label="删除照片"
-                danger
-                disabled={busy}
-                testID="photo-detail.delete.button"
-                onPress={confirmDelete}
-              />
-            </View>
-          </>
-        ) : error ? (
-          <ErrorText>{error}</ErrorText>
+                <Field
+                  label="照片备注"
+                  value={note}
+                  onChangeText={setNote}
+                  maxLength={500}
+                  multiline
+                  editable={!busy}
+                  placeholder="写下这一刻"
+                  testID="photo-detail.note.input"
+                />
+                {error && keyboardVisible ? (
+                  <ErrorText testID="photo-detail.error">{error}</ErrorText>
+                ) : null}
+                {keyboardVisible ? (
+                  <>
+                    <PrimaryButton
+                      label="保存修改"
+                      disabled={!canSave}
+                      busy={busy}
+                      testID="photo-detail.save.inline-button"
+                      onPress={() => void save()}
+                    />
+                    <TextButton
+                      label="删除照片"
+                      danger
+                      disabled={busy}
+                      testID="photo-detail.delete.inline-button"
+                      onPress={confirmDelete}
+                    />
+                    <TextButton
+                      label="返回相册"
+                      disabled={busy}
+                      testID="photo-detail.return.inline-button"
+                      onPress={requestBack}
+                    />
+                  </>
+                ) : null}
+                {canManageAvatar ? (
+                  <View style={styles.avatarArea}>
+                    <Text style={styles.label}>设置档案头像</Text>
+                    <Text style={styles.hint}>照片绑定的猫咪可以使用它作为头像</Text>
+                    {petIds.map((petId) => (
+                      <TextButton
+                        key={petId}
+                        label={`设为 ${pets.find((pet) => pet.id === petId)?.name ?? '猫咪'} 的头像`}
+                        disabled={busy}
+                        testID="photo-detail.set-avatar.button"
+                        onPress={() => void setAvatar(petId)}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            </>
+          ) : error ? (
+            <ErrorText>{error}</ErrorText>
+          ) : null}
+        </ScrollView>
+        {photo && !keyboardVisible ? (
+          <View
+            testID="photo-detail.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="photo-detail.error">{error}</ErrorText> : null}
+            <PrimaryButton
+              label="保存修改"
+              disabled={!canSave}
+              busy={busy}
+              testID="photo-detail.save.button"
+              onPress={() => void save()}
+            />
+            <TextButton
+              label="删除照片"
+              danger
+              disabled={busy}
+              testID="photo-detail.delete.button"
+              onPress={confirmDelete}
+            />
+            <TextButton
+              label="返回相册"
+              disabled={busy}
+              testID="photo-detail.return.button"
+              onPress={requestBack}
+            />
+          </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: {
     minHeight: 50,
     flexDirection: 'row',
@@ -266,7 +340,8 @@ const styles = StyleSheet.create({
   },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.h2, color: colors.ink },
-  content: { gap: spacing.lg, paddingBottom: 110 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.lg, paddingBottom: spacing.xl },
   hero: {
     width: '100%',
     aspectRatio: 0.92,
@@ -300,6 +375,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.divider,
     paddingTop: spacing.lg,
+    gap: spacing.xs,
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     gap: spacing.xs,
   },
 });
