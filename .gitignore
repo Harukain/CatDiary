@@ -5,6 +5,7 @@ dist/
 coverage/
 output/
 tmp/
+artifacts/
 .env
 .env.*
 !.env.example

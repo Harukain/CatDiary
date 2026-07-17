@@ -107,10 +107,16 @@ export default function RecordsTab() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filters}
         >
-          <Filter active={!petId} label="全部猫咪" onPress={() => setPetId(undefined)} />
+          <Filter
+            testID="records.filter.all"
+            active={!petId}
+            label="全部猫咪"
+            onPress={() => setPetId(undefined)}
+          />
           {pets.map((pet) => (
             <Filter
               key={pet.id}
+              testID={`records.filter.pet.${pet.id}`}
               active={petId === pet.id}
               label={pet.name}
               onPress={() => setPetId(pet.id)}
@@ -231,9 +237,30 @@ function syncStatusTestId(note: string) {
   return 'records.sync.pending';
 }
 
-function Filter({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+function Filter({
+  active,
+  label,
+  onPress,
+  testID,
+}: {
+  active: boolean;
+  label: string;
+  onPress(): void;
+  testID?: string;
+}) {
   return (
-    <Pressable onPress={onPress} style={[styles.filter, active && styles.filterActive]}>
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`筛选${label}记录`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.filter,
+        active && styles.filterActive,
+        pressed && styles.pressed,
+      ]}
+    >
       <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
     </Pressable>
   );
