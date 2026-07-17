@@ -8,7 +8,6 @@ import {
   Body,
   Card,
   PrimaryButton,
-  Row,
   Screen,
   TextButton,
   Title,
@@ -79,92 +78,54 @@ export default function MeTab() {
           </View>
         </Card>
         <Card>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.pets.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/pets')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>猫咪档案</Text>
-              <Text style={styles.rowBody}>查看、添加和编辑猫咪</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/settings/legal')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>协议与隐私</Text>
-              <Text style={styles.rowBody}>查看用户协议、隐私政策和数据说明</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.export.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/settings/export')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>数据导出</Text>
-              <Text style={styles.rowBody}>导出 JSON 或 CSV 文件</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/photos')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>猫咪相册</Text>
-              <Text style={styles.rowBody}>照片、备注与多猫归档</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.family-members.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/family/members')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>家庭成员</Text>
-              <Text style={styles.rowBody}>查看成员、角色和邀请</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.notifications.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/settings/notifications')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>通知偏好</Text>
-              <Text style={styles.rowBody}>照顾提醒、手机推送和飞书通知</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.notification-logs.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/notification-logs')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>提醒发送记录</Text>
-              <Text style={styles.rowBody}>查看提醒状态与失败原因</Text>
-            </Pressable>
-          </Row>
-          <Row end={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}>
-            <Pressable
-              testID="me.account.button"
-              accessibilityRole="button"
-              onPress={() => router.push('/settings/account')}
-              style={styles.rowPress}
-            >
-              <Text style={styles.rowTitle}>账号与注销</Text>
-              <Text style={styles.rowBody}>查看账号状态或申请注销</Text>
-            </Pressable>
-          </Row>
+          <SettingsRow
+            testID="me.pets.button"
+            title="猫咪档案"
+            body="查看、添加和编辑猫咪"
+            onPress={() => router.push('/pets')}
+          />
+          <SettingsRow
+            testID="me.legal.button"
+            title="协议与隐私"
+            body="查看用户协议、隐私政策和数据说明"
+            onPress={() => router.push('/settings/legal')}
+          />
+          <SettingsRow
+            testID="me.export.button"
+            title="数据导出"
+            body="导出 JSON 或 CSV 文件"
+            onPress={() => router.push('/settings/export')}
+          />
+          <SettingsRow
+            testID="me.photos.button"
+            title="猫咪相册"
+            body="照片、备注与多猫归档"
+            onPress={() => router.push('/photos')}
+          />
+          <SettingsRow
+            testID="me.family-members.button"
+            title="家庭成员"
+            body="查看成员、角色和邀请"
+            onPress={() => router.push('/family/members')}
+          />
+          <SettingsRow
+            testID="me.notifications.button"
+            title="通知偏好"
+            body="照顾提醒、手机推送和飞书通知"
+            onPress={() => router.push('/settings/notifications')}
+          />
+          <SettingsRow
+            testID="me.notification-logs.button"
+            title="提醒发送记录"
+            body="查看提醒状态与失败原因"
+            onPress={() => router.push('/notification-logs')}
+          />
+          <SettingsRow
+            testID="me.account.button"
+            title="账号与注销"
+            body="查看账号状态或申请注销"
+            onPress={() => router.push('/settings/account')}
+          />
         </Card>
         <Card>
           <Title>设备通知</Title>
@@ -177,6 +138,34 @@ export default function MeTab() {
         <TextButton testID="me.sign-out.button" label="退出登录" onPress={() => confirmSignOut()} />
       </ScrollView>
     </Screen>
+  );
+}
+
+function SettingsRow({
+  title,
+  body,
+  testID,
+  onPress,
+}: {
+  title: string;
+  body: string;
+  testID: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}，${body}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}
+    >
+      <View style={styles.settingsRowCopy}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        <Text style={styles.rowBody}>{body}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+    </Pressable>
   );
 }
 
@@ -203,7 +192,16 @@ const styles = StyleSheet.create({
   familyNameActive: { color: colors.surface },
   role: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   roleActive: { color: colors.navInactive },
-  rowPress: { flex: 1, minHeight: 56, justifyContent: 'center' },
+  settingsRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  settingsRowCopy: { flex: 1, gap: spacing.xs },
   rowTitle: { ...typography.h3, color: colors.ink },
   rowBody: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
 });
