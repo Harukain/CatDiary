@@ -19,6 +19,8 @@ describe('quick add action rules', () => {
       '/onboarding/pet?returnTo=pets',
     ]);
     expect(isQuickAddRoute('/(tabs)/add')).toBe(false);
+    expect(isQuickAddRoute('/records/new?type=FOOD&petId=cat-1')).toBe(true);
+    expect(isQuickAddRoute('/photos/new?petId=cat-1')).toBe(true);
   });
 
   it('puts high-frequency record actions into tappable sheet cards', () => {

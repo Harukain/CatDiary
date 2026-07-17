@@ -108,5 +108,10 @@ export function hasHiddenManagementQuickAddActions(canManage: boolean) {
 }
 
 export function isQuickAddRoute(path: string) {
-  return quickAddActions.some((action) => action.path === path);
+  return quickAddActions.some((action) => {
+    if (action.path === path) return true;
+    return action.path.includes('?')
+      ? path.startsWith(`${action.path}&`)
+      : path.startsWith(`${action.path}?`);
+  });
 }
