@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { TaskSummary } from '../auth/auth-api';
+import type { TaskMutationResult, TaskSummary } from '../auth/auth-api';
 import {
   optimisticCompletedTask,
   optimisticPendingTask,
+  recordIdFromTaskMutationResult,
   taskFromMutationResult,
 } from './task-mutation';
 
@@ -31,16 +32,25 @@ describe('task mutation feedback', () => {
   });
 
   it('extracts a completed task from the complete response envelope', () => {
-    const next = taskFromMutationResult(
-      {
-        task: { ...task, status: 'COMPLETED', version: 4 },
-        record: { id: 'record-1' },
-      },
-      task,
-    );
+    const result: TaskMutationResult = {
+      task: { ...task, status: 'COMPLETED', version: 4 },
+      record: { id: 'record-1' },
+    };
+    const next = taskFromMutationResult(result, task);
 
     expect(next.status).toBe('COMPLETED');
     expect(next.version).toBe(4);
+    expect(recordIdFromTaskMutationResult(result)).toBe('record-1');
+  });
+
+  it('ignores complete responses without a safe generated record id', () => {
+    expect(recordIdFromTaskMutationResult(task)).toBeNull();
+    expect(
+      recordIdFromTaskMutationResult({
+        task: { ...task, status: 'COMPLETED', version: 4 },
+        record: { id: 123 },
+      }),
+    ).toBeNull();
   });
 
   it('advances versions for an offline complete followed by undo', () => {

@@ -1,5 +1,7 @@
 import type { TaskMutationResult, TaskSummary } from '../auth/auth-api';
 
+type MutationRecord = { id?: unknown };
+
 export function taskFromMutationResult(
   result: TaskMutationResult,
   fallback: TaskSummary,
@@ -11,6 +13,12 @@ export function taskFromMutationResult(
     pet: task.pet ?? fallback.pet,
     assignee: task.assignee ?? fallback.assignee,
   };
+}
+
+export function recordIdFromTaskMutationResult(result: TaskMutationResult): string | null {
+  if (!('record' in result)) return null;
+  const record = result.record as MutationRecord | null;
+  return typeof record?.id === 'string' && record.id ? record.id : null;
 }
 
 export function optimisticCompletedTask(

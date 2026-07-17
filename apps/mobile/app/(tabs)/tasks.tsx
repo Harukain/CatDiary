@@ -31,6 +31,7 @@ import {
 import {
   optimisticCompletedTask,
   optimisticPendingTask,
+  recordIdFromTaskMutationResult,
   taskFromMutationResult,
 } from '../../src/features/tasks/task-mutation';
 import { TaskUndoBanner } from '../../src/features/tasks/task-undo-banner';
@@ -45,6 +46,11 @@ const scopes = [
   { value: 'completed', label: '完成' },
 ] as const;
 type Scope = (typeof scopes)[number]['value'];
+type CompletionFeedback = {
+  task: TaskSummary;
+  recordId: string | null;
+  canUndo: boolean;
+};
 
 export default function TasksTab() {
   const router = useRouter();
@@ -56,10 +62,10 @@ export default function TasksTab() {
   const [actionId, setActionId] = useState('');
   const [error, setError] = useState('');
   const [offlineNotice, setOfflineNotice] = useState('');
-  const [undoableTask, setUndoableTask] = useState<TaskSummary>();
+  const [completionFeedback, setCompletionFeedback] = useState<CompletionFeedback>();
   const [completingTask, setCompletingTask] = useState<TaskSummary>();
   const [completionError, setCompletionError] = useState('');
-  const dismissUndo = useCallback(() => setUndoableTask(undefined), []);
+  const dismissCompletionFeedback = useCallback(() => setCompletionFeedback(undefined), []);
 
   const load = useCallback(async () => {
     if (!session || !activeFamily) return;
@@ -103,7 +109,11 @@ export default function TasksTab() {
       const result = await authApi.sendTaskOperation(session.accessToken, operation);
       const completedTask = taskFromMutationResult(result, task);
       setCompletingTask(undefined);
-      if (canQuickUndoTaskCompletion(task)) setUndoableTask(completedTask);
+      setCompletionFeedback({
+        task: completedTask,
+        recordId: recordIdFromTaskMutationResult(result),
+        canUndo: canQuickUndoTaskCompletion(task),
+      });
       await load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
@@ -113,7 +123,11 @@ export default function TasksTab() {
           setTasks((current) => current.filter((item) => item.id !== task.id));
           setOfflineNotice('网络不可用，完成操作已保存并将在恢复后同步');
           if (canQuickUndoTaskCompletion(task))
-            setUndoableTask(optimisticCompletedTask(task, input.actualAt));
+            setCompletionFeedback({
+              task: optimisticCompletedTask(task, input.actualAt),
+              recordId: null,
+              canUndo: true,
+            });
           setCompletingTask(undefined);
         } catch {
           setCompletionError('离线操作保存失败，请稍后重试');
@@ -155,7 +169,7 @@ export default function TasksTab() {
     const operation = authApi.createUndoOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
-      if (quickUndo) dismissUndo();
+      if (quickUndo) dismissCompletionFeedback();
       await load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
@@ -164,11 +178,11 @@ export default function TasksTab() {
         if (quickUndo) {
           const pendingTask = optimisticPendingTask(task);
           setTasks((current) => [pendingTask, ...current.filter((item) => item.id !== task.id)]);
-          dismissUndo();
+          dismissCompletionFeedback();
         } else setTasks((current) => current.filter((item) => item.id !== task.id));
         setOfflineNotice('网络不可用，撤销操作已保存并将在恢复后同步');
       } else {
-        if (quickUndo) dismissUndo();
+        if (quickUndo) dismissCompletionFeedback();
         setError(cause instanceof AuthApiError ? cause.message : '撤销失败');
       }
     } finally {
@@ -247,12 +261,20 @@ export default function TasksTab() {
             </Text>
           </Pressable>
         ) : null}
-        {undoableTask ? (
+        {completionFeedback ? (
           <TaskUndoBanner
-            task={undoableTask}
-            busy={actionId === undoableTask.id}
-            onUndo={() => void undo(undoableTask, true)}
-            onDismiss={dismissUndo}
+            task={completionFeedback.task}
+            busy={actionId === completionFeedback.task.id}
+            recordId={completionFeedback.recordId}
+            onUndo={
+              completionFeedback.canUndo
+                ? () => void undo(completionFeedback.task, true)
+                : undefined
+            }
+            onDismiss={dismissCompletionFeedback}
+            onViewRecord={(recordId) =>
+              router.push({ pathname: '/records/[id]', params: { id: recordId } })
+            }
           />
         ) : null}
         {error ? <ErrorText>{error}</ErrorText> : null}

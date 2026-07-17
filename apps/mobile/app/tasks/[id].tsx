@@ -30,6 +30,10 @@ import {
   formatTaskCompletionResult,
   isMedicalTask,
 } from '../../src/features/tasks/task-completion';
+import {
+  recordIdFromTaskMutationResult,
+  taskFromMutationResult,
+} from '../../src/features/tasks/task-mutation';
 import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 
 export default function TaskDetailScreen() {
@@ -42,6 +46,7 @@ export default function TaskDetailScreen() {
   const [actionBusy, setActionBusy] = useState(false);
   const [completionVisible, setCompletionVisible] = useState(false);
   const [completionError, setCompletionError] = useState('');
+  const [generatedRecordId, setGeneratedRecordId] = useState('');
 
   const load = useCallback(() => {
     if (!id || !session || !activeFamily) return;
@@ -98,7 +103,15 @@ export default function TaskDetailScreen() {
     setNotice('');
     const operation = authApi.createCompleteOperation(activeFamily.id, task, input);
     try {
-      await authApi.sendTaskOperation(session.accessToken, operation);
+      const result = await authApi.sendTaskOperation(session.accessToken, operation);
+      const recordId = recordIdFromTaskMutationResult(result);
+      const completedTask = taskFromMutationResult(result, task);
+      setTask({
+        ...completedTask,
+        record: recordId ? { id: recordId } : completedTask.record,
+      });
+      setGeneratedRecordId(recordId ?? '');
+      setNotice(recordId ? '完成结果已保存，已生成对应记录。' : '完成结果已保存。');
       setCompletionVisible(false);
       load();
     } catch (cause) {
@@ -138,6 +151,7 @@ export default function TaskDetailScreen() {
     setActionBusy(true);
     setError('');
     setNotice('');
+    setGeneratedRecordId('');
     const operation = authApi.createSkipOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
@@ -159,6 +173,7 @@ export default function TaskDetailScreen() {
     setActionBusy(true);
     setError('');
     setNotice('');
+    setGeneratedRecordId('');
     const operation = authApi.createUndoOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
@@ -188,6 +203,10 @@ export default function TaskDetailScreen() {
         <TextButton label="返回任务列表" onPress={() => router.replace('/(tabs)/tasks')} />
       </Screen>
     );
+
+  const linkedRecordId =
+    generatedRecordId ||
+    (task.status === 'COMPLETED' && typeof task.record?.id === 'string' ? task.record.id : '');
 
   return (
     <Screen>
@@ -246,6 +265,23 @@ export default function TaskDetailScreen() {
           </Body>
           {error ? <ErrorText>{error}</ErrorText> : null}
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+          {linkedRecordId ? (
+            <Pressable
+              testID="task-detail.view-record.button"
+              accessibilityRole="button"
+              accessibilityLabel={`查看${task.title}生成的记录`}
+              onPress={() =>
+                router.push({ pathname: '/records/[id]', params: { id: linkedRecordId } })
+              }
+              style={({ pressed }) => [styles.recordLink, pressed && styles.pressed]}
+            >
+              <View style={styles.recordLinkCopy}>
+                <Text style={styles.recordLinkTitle}>查看对应记录</Text>
+                <Text style={styles.recordLinkBody}>这里保存了实际完成时间、执行结果和备注。</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.successDark} />
+            </Pressable>
+          ) : null}
           {actionBusy ? (
             <ActivityIndicator color={colors.brand} />
           ) : task.status === 'PENDING' ? (
@@ -368,6 +404,19 @@ const styles = StyleSheet.create({
   },
   secondaryText: { color: colors.ink, fontWeight: '600' },
   notice: { ...typography.caption, color: colors.warningDark },
+  recordLink: {
+    minHeight: 64,
+    borderRadius: radii.input,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  recordLinkCopy: { flex: 1, gap: spacing.xs },
+  recordLinkTitle: { ...typography.h3, color: colors.successDark },
+  recordLinkBody: { ...typography.caption, color: colors.successDark },
   inactiveHint: { ...typography.caption, color: colors.textTertiary },
   pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
 });

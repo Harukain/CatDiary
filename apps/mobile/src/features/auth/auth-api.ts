@@ -120,6 +120,7 @@ export interface TaskSummary {
   version: number;
   pet?: { id: string; name: string } | null;
   assignee?: { id: string; displayName: string | null } | null;
+  record?: { id: string; status?: string } | null;
 }
 export interface CompleteTaskInput {
   actualAt: string;
