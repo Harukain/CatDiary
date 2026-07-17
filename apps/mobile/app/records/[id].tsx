@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -58,6 +62,7 @@ const manualTypes = new Set<string>([
 export default function RecordDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [record, setRecord] = useState<RecordSummary>();
   const [form, setForm] = useState<RecordFormValue>({ first: '', second: '', blood: false });
@@ -67,6 +72,7 @@ export default function RecordDetailScreen() {
   const [abnormal, setAbnormal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
     void authApi
@@ -155,6 +161,18 @@ export default function RecordDetailScreen() {
     });
     return () => subscription.remove();
   }, [busy, detailDirty, requestReturn]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   async function save() {
     if (!record || !session || !activeFamily || !type) return;
     if (!permissions?.edit.allowed) {
@@ -246,193 +264,247 @@ export default function RecordDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View>
-          <Text style={styles.eyebrow}>
-            {recordTypeLabel(record.type)} · {recordOwnerLabel(record)}
-          </Text>
-          <Text testID="record-detail.title" style={styles.title}>
-            {record.title}
-          </Text>
-          <Text style={styles.time}>
-            {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
-          </Text>
-        </View>
-        {record.abnormal && record.petId ? (
-          <View style={styles.healthAction}>
-            <Text style={styles.healthActionTitle}>持续观察这个异常</Text>
-            <Text style={styles.healthActionBody}>
-              建立健康事件后，可以继续关联症状、治疗和恢复状态。
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.content, editable && styles.contentWithFooter]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <Text style={styles.eyebrow}>
+              {recordTypeLabel(record.type)} · {recordOwnerLabel(record)}
             </Text>
-            <PrimaryButton
-              label="建立健康事件"
-              testID="record-detail.create-health-event.button"
-              onPress={() =>
-                requestNavigate(() =>
-                  router.push({
-                    pathname: '/health-events/new',
-                    params: { recordId: record.id, petId: record.petId ?? '', title: record.title },
-                  }),
-                )
-              }
-            />
-          </View>
-        ) : record.abnormal ? (
-          <View style={styles.healthAction}>
-            <Text style={styles.healthActionTitle}>公共猫砂盆异常观察</Text>
-            <Text style={styles.healthActionBody}>
-              这条记录暂未确认具体猫咪，不能直接建立单猫健康事件。确认归属后请新增对应症状记录。
+            <Text testID="record-detail.title" style={styles.title}>
+              {record.title}
+            </Text>
+            <Text style={styles.time}>
+              {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
             </Text>
           </View>
-        ) : null}
-        <Card>
-          {editable && fields ? (
-            <>
-              <View style={styles.dateRow}>
-                <View style={styles.dateField}>
-                  <Field
-                    label="发生日期"
-                    value={occurredDate}
-                    onChangeText={setOccurredDate}
-                    maxLength={10}
-                    editable={!busy}
-                    placeholder="YYYY-MM-DD"
-                  />
-                </View>
-                <View style={styles.timeField}>
-                  <Field
-                    label="时间"
-                    value={occurredTime}
-                    onChangeText={setOccurredTime}
-                    maxLength={5}
-                    editable={!busy}
-                    placeholder="HH:mm"
-                  />
-                </View>
-              </View>
-              <Field
-                label={fields.firstLabel}
-                value={form.first}
-                onChangeText={(first) => setForm((current) => ({ ...current, first }))}
-                keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
-                editable={!busy}
+          {record.abnormal && record.petId ? (
+            <View style={styles.healthAction}>
+              <Text style={styles.healthActionTitle}>持续观察这个异常</Text>
+              <Text style={styles.healthActionBody}>
+                建立健康事件后，可以继续关联症状、治疗和恢复状态。
+              </Text>
+              <PrimaryButton
+                label="建立健康事件"
+                testID="record-detail.create-health-event.button"
+                onPress={() =>
+                  requestNavigate(() =>
+                    router.push({
+                      pathname: '/health-events/new',
+                      params: {
+                        recordId: record.id,
+                        petId: record.petId ?? '',
+                        title: record.title,
+                      },
+                    }),
+                  )
+                }
               />
-              {choices ? (
-                <View style={styles.optionBlock}>
-                  <Text style={styles.fieldLabel}>{fields.secondLabel}</Text>
-                  <View style={styles.chips}>
-                    {choices.map((item) => (
-                      <Chip
-                        key={item.value}
-                        label={item.label}
-                        active={form.second === item.value}
-                        disabled={busy}
-                        onPress={() => setForm((current) => ({ ...current, second: item.value }))}
-                      />
-                    ))}
+            </View>
+          ) : record.abnormal ? (
+            <View style={styles.healthAction}>
+              <Text style={styles.healthActionTitle}>公共猫砂盆异常观察</Text>
+              <Text style={styles.healthActionBody}>
+                这条记录暂未确认具体猫咪，不能直接建立单猫健康事件。确认归属后请新增对应症状记录。
+              </Text>
+            </View>
+          ) : null}
+          <Card>
+            {editable && fields ? (
+              <>
+                <View style={styles.dateRow}>
+                  <View style={styles.dateField}>
+                    <Field
+                      label="发生日期"
+                      value={occurredDate}
+                      onChangeText={setOccurredDate}
+                      maxLength={10}
+                      editable={!busy}
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </View>
+                  <View style={styles.timeField}>
+                    <Field
+                      label="时间"
+                      value={occurredTime}
+                      onChangeText={setOccurredTime}
+                      maxLength={5}
+                      editable={!busy}
+                      placeholder="HH:mm"
+                    />
                   </View>
                 </View>
-              ) : fields.secondLabel ? (
                 <Field
-                  label={fields.secondLabel}
-                  value={form.second}
-                  onChangeText={(second) => setForm((current) => ({ ...current, second }))}
-                  keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
+                  label={fields.firstLabel}
+                  value={form.first}
+                  onChangeText={(first) => setForm((current) => ({ ...current, first }))}
+                  keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
                   editable={!busy}
                 />
-              ) : null}
-              {type === 'STOOL' || type === 'VOMIT' ? (
+                {choices ? (
+                  <View style={styles.optionBlock}>
+                    <Text style={styles.fieldLabel}>{fields.secondLabel}</Text>
+                    <View style={styles.chips}>
+                      {choices.map((item) => (
+                        <Chip
+                          key={item.value}
+                          label={item.label}
+                          active={form.second === item.value}
+                          disabled={busy}
+                          onPress={() => setForm((current) => ({ ...current, second: item.value }))}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : fields.secondLabel ? (
+                  <Field
+                    label={fields.secondLabel}
+                    value={form.second}
+                    onChangeText={(second) => setForm((current) => ({ ...current, second }))}
+                    keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
+                    editable={!busy}
+                  />
+                ) : null}
+                {type === 'STOOL' || type === 'VOMIT' ? (
+                  <SwitchRow
+                    title="发现血迹"
+                    body="带血情况会自动标记为异常"
+                    value={form.blood}
+                    onChange={(blood) => {
+                      setForm((current) => ({ ...current, blood }));
+                      if (blood) setAbnormal(true);
+                    }}
+                    disabled={busy}
+                    danger
+                  />
+                ) : null}
                 <SwitchRow
-                  title="发现血迹"
-                  body="带血情况会自动标记为异常"
-                  value={form.blood}
-                  onChange={(blood) => {
-                    setForm((current) => ({ ...current, blood }));
-                    if (blood) setAbnormal(true);
-                  }}
+                  title="异常标记"
+                  body="会进入健康摘要并在时间线突出显示"
+                  value={abnormal}
+                  onChange={setAbnormal}
                   disabled={busy}
+                />
+                <Field
+                  label="备注"
+                  value={note}
+                  onChangeText={setNote}
+                  maxLength={500}
+                  multiline
+                  editable={!busy}
+                  placeholder="补充观察或反应"
+                />
+                {error && keyboardVisible ? <ErrorText>{error}</ErrorText> : null}
+                {keyboardVisible ? (
+                  <PrimaryButton
+                    label="保存修改"
+                    busy={busy}
+                    disabled={!canSave || !detailDirty}
+                    testID="record-detail.save.inline-button"
+                    onPress={save}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Text style={styles.sectionTitle}>记录内容</Text>
+                {record.type === 'PHOTO' && record.photos?.length ? (
+                  <View style={styles.photoGrid}>
+                    {record.photos.map((photo) => (
+                      <Pressable
+                        key={photo.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={photo.note ? `查看照片：${photo.note}` : '查看照片详情'}
+                        onPress={() =>
+                          requestNavigate(() =>
+                            router.push({ pathname: '/photos/[id]', params: { id: photo.id } }),
+                          )
+                        }
+                        style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
+                      >
+                        <AuthenticatedImage
+                          accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片缩略图'}
+                          resizeMode="cover"
+                          source={photoThumbnailSource(
+                            photo,
+                            session?.accessToken ?? '',
+                            activeFamily?.id ?? '',
+                          )}
+                          style={styles.photoImage}
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {recordDataRows(record).map((row) => (
+                  <View key={row.label} style={styles.dataRow}>
+                    <Text style={styles.dataLabel}>{row.label}</Text>
+                    <Text style={styles.dataValue}>{row.value}</Text>
+                  </View>
+                ))}
+                {record.note ? (
+                  <View style={styles.noteBlock}>
+                    <Text style={styles.dataLabel}>备注</Text>
+                    <Text style={styles.noteText}>{record.note}</Text>
+                  </View>
+                ) : null}
+                <PermissionNotice title="只读记录" body={readOnlyReason} />
+              </>
+            )}
+          </Card>
+          {!editable && error ? <ErrorText>{error}</ErrorText> : null}
+          {(!editable || keyboardVisible) && permissions?.delete.allowed ? (
+            <TextButton label="删除这条记录" danger disabled={busy} onPress={remove} />
+          ) : null}
+          {showSeparateDeleteReason && permissions?.delete.reason ? (
+            <PermissionNotice title="删除权限" body={permissions.delete.reason} />
+          ) : null}
+          {(!editable || keyboardVisible) && (
+            <TextButton label="返回时间线" disabled={busy} onPress={requestReturn} />
+          )}
+        </ScrollView>
+        {editable && !keyboardVisible ? (
+          <View
+            testID="record-detail.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="record-detail.error">{error}</ErrorText> : null}
+            <PrimaryButton
+              label="保存修改"
+              busy={busy}
+              disabled={!canSave || !detailDirty}
+              testID="record-detail.save.button"
+              onPress={save}
+            />
+            <View style={styles.footerActions}>
+              {permissions?.delete.allowed ? (
+                <TextButton
+                  label="删除这条记录"
                   danger
+                  disabled={busy}
+                  testID="record-detail.delete.button"
+                  onPress={remove}
                 />
               ) : null}
-              <SwitchRow
-                title="异常标记"
-                body="会进入健康摘要并在时间线突出显示"
-                value={abnormal}
-                onChange={setAbnormal}
+              <TextButton
+                label="返回时间线"
                 disabled={busy}
+                testID="record-detail.back-timeline.button"
+                onPress={requestReturn}
               />
-              <Field
-                label="备注"
-                value={note}
-                onChangeText={setNote}
-                maxLength={500}
-                multiline
-                editable={!busy}
-                placeholder="补充观察或反应"
-              />
-              {error ? <ErrorText>{error}</ErrorText> : null}
-              <PrimaryButton
-                label="保存修改"
-                busy={busy}
-                disabled={!canSave || !detailDirty}
-                onPress={save}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.sectionTitle}>记录内容</Text>
-              {record.type === 'PHOTO' && record.photos?.length ? (
-                <View style={styles.photoGrid}>
-                  {record.photos.map((photo) => (
-                    <Pressable
-                      key={photo.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={photo.note ? `查看照片：${photo.note}` : '查看照片详情'}
-                      onPress={() =>
-                        requestNavigate(() =>
-                          router.push({ pathname: '/photos/[id]', params: { id: photo.id } }),
-                        )
-                      }
-                      style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
-                    >
-                      <AuthenticatedImage
-                        accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片缩略图'}
-                        resizeMode="cover"
-                        source={photoThumbnailSource(
-                          photo,
-                          session?.accessToken ?? '',
-                          activeFamily?.id ?? '',
-                        )}
-                        style={styles.photoImage}
-                      />
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-              {recordDataRows(record).map((row) => (
-                <View key={row.label} style={styles.dataRow}>
-                  <Text style={styles.dataLabel}>{row.label}</Text>
-                  <Text style={styles.dataValue}>{row.value}</Text>
-                </View>
-              ))}
-              {record.note ? (
-                <View style={styles.noteBlock}>
-                  <Text style={styles.dataLabel}>备注</Text>
-                  <Text style={styles.noteText}>{record.note}</Text>
-                </View>
-              ) : null}
-              <PermissionNotice title="只读记录" body={readOnlyReason} />
-            </>
-          )}
-        </Card>
-        {permissions?.delete.allowed ? (
-          <TextButton label="删除这条记录" danger disabled={busy} onPress={remove} />
+            </View>
+          </View>
         ) : null}
-        {showSeparateDeleteReason && permissions?.delete.reason ? (
-          <PermissionNotice title="删除权限" body={permissions.delete.reason} />
-        ) : null}
-        <TextButton label="返回时间线" disabled={busy} onPress={requestReturn} />
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -500,7 +572,9 @@ function SwitchRow({
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: { gap: spacing.xl, paddingBottom: 72 },
+  contentWithFooter: { paddingBottom: 164 },
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   time: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.sm },
@@ -579,4 +653,18 @@ const styles = StyleSheet.create({
   },
   lockedTitle: { ...typography.h3, color: colors.ink, marginBottom: spacing.xs },
   lockedText: { ...typography.caption, color: colors.warningDark },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    gap: spacing.sm,
+  },
 });
