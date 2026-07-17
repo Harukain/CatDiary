@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   AuthApiError,
@@ -35,6 +39,7 @@ import {
 
 export default function AccountSettingsRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, signOut, signOutAll } = useSession();
   const [status, setStatus] = useState<AccountDeletionStatus>();
   const [code, setCode] = useState('');
@@ -42,6 +47,8 @@ export default function AccountSettingsRoute() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const deletionCodeReady = sanitizeDeletionCode(code).length === 6;
   const draftDirty = useMemo(
     () => isAccountDeletionDraftDirty({ code, maskedPhone }),
     [code, maskedPhone],
@@ -61,7 +68,12 @@ export default function AccountSettingsRoute() {
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
   const requestReturn = useCallback(() => {
-    if (busy) return;
+    if (busy) {
+      Alert.alert('账号操作正在处理', '请等待当前操作完成，避免本机登录状态与服务器不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
     if (!draftDirty) {
       router.back();
       return;
@@ -77,13 +89,28 @@ export default function AccountSettingsRoute() {
   }, [busy, draftDirty, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (busy) return true;
+      if (busy) {
+        requestReturn();
+        return true;
+      }
       if (!draftDirty) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
   }, [busy, draftDirty, requestReturn]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   async function sendCode() {
     if (!session || busy || cooldownSeconds > 0) return;
     setBusy(true);
@@ -175,141 +202,194 @@ export default function AccountSettingsRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityLabel="返回"
-          disabled={busy}
-          onPress={requestReturn}
-          style={({ pressed }) => [
-            styles.back,
-            busy && styles.backDisabled,
-            pressed && styles.pressed,
-          ]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.nav}>
+          <Pressable
+            testID="account.back.button"
+            accessibilityLabel="返回"
+            accessibilityHint={busy ? '账号操作处理中，点击会提示继续等待' : '返回上一页'}
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text testID="account.title" style={styles.navTitle}>
+            账号与注销
+          </Text>
+          <View style={styles.back} />
+        </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="account.title" style={styles.navTitle}>
-          账号与注销
-        </Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        {!status && !error ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : status?.status === 'PENDING_DELETION' ? (
-          <>
-            <View style={styles.pendingHero}>
-              <View style={styles.pendingIcon}>
-                <Ionicons name="time-outline" size={28} color={colors.warningDark} />
-              </View>
-              <Text style={styles.title}>账号处于注销冷静期</Text>
-              <Body>
-                计划注销时间：
-                {status.coolingEndsAt
-                  ? new Date(status.coolingEndsAt).toLocaleString('zh-CN')
-                  : '处理中'}
-              </Body>
-            </View>
-            <Card>
-              <Title>还想继续使用猫伴日记？</Title>
-              <Body>在冷静期结束前取消，猫咪档案、记录和家庭关系都会保留。</Body>
-              <PrimaryButton
-                label="取消账号注销"
-                busy={busy}
-                disabled={!status.canCancel}
-                onPress={() => void cancelDeletion()}
-              />
-            </Card>
-          </>
-        ) : status ? (
-          <>
-            <View>
-              <Text style={styles.title}>账号安全与数据权利</Text>
-              <Text style={styles.subtitle}>
-                你可以申请注销；我们会保留 7 天冷静期，避免误操作。
-              </Text>
-            </View>
-            <Card>
-              <Title>申请注销账号</Title>
-              <Body>
-                注销前需要验证码。若你是家庭最后一位管理员，需要先添加或指定另一位管理员。
-              </Body>
-              <View style={styles.codeRow}>
-                <View style={styles.codeField}>
-                  <Field
-                    label="短信验证码"
-                    value={code}
-                    onChangeText={(value) => {
-                      setCode(sanitizeDeletionCode(value));
-                      setError('');
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    placeholder="6 位验证码"
-                  />
+          {!status && !error ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : status?.status === 'PENDING_DELETION' ? (
+            <>
+              <View style={styles.pendingHero}>
+                <View style={styles.pendingIcon}>
+                  <Ionicons name="time-outline" size={28} color={colors.warningDark} />
                 </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy || cooldownSeconds > 0 }}
-                  disabled={busy || cooldownSeconds > 0}
-                  onPress={() => void sendCode()}
-                  style={({ pressed }) => [
-                    styles.codeButton,
-                    (busy || cooldownSeconds > 0) && styles.codeButtonDisabled,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.codeButtonText}>
-                    {cooldownSeconds > 0 ? `${cooldownSeconds}s 后重发` : '获取验证码'}
-                  </Text>
-                </Pressable>
+                <Text style={styles.title}>账号处于注销冷静期</Text>
+                <Body>
+                  计划注销时间：
+                  {status.coolingEndsAt
+                    ? new Date(status.coolingEndsAt).toLocaleString('zh-CN')
+                    : '处理中'}
+                </Body>
               </View>
-              {maskedPhone ? <Text style={styles.hint}>已发送至 {maskedPhone}</Text> : null}
-              <TextButton
-                label="申请注销账号"
-                danger
-                disabled={busy || code.length !== 6}
-                onPress={confirmRequest}
-              />
-            </Card>
-            <Card>
-              <Title>登录设备</Title>
-              <Body>
-                如果手机遗失、借用设备未退出，或你想重新建立所有设备登录状态，可以一次性退出全部设备。
-              </Body>
-              <Pressable
-                testID="account.logout-all.button"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                disabled={busy}
-                onPress={confirmLogoutAll}
-                style={({ pressed }) => [
-                  styles.logoutAllButton,
-                  busy && styles.logoutAllButtonDisabled,
-                  pressed && styles.pressed,
-                ]}
-              >
-                {busy ? <ActivityIndicator size="small" color={colors.dangerDark} /> : null}
-                <Text style={styles.logoutAllButtonText}>退出全部设备</Text>
-              </Pressable>
-            </Card>
-            <View style={styles.notice}>
-              <Ionicons name="shield-checkmark-outline" size={20} color={colors.brand} />
-              <Body>注销到期后手机号会被不可逆匿名化；历史照顾记录仅保留匿名署名。</Body>
-            </View>
-          </>
+              <Card>
+                <Title>还想继续使用猫伴日记？</Title>
+                <Body>在冷静期结束前取消，猫咪档案、记录和家庭关系都会保留。</Body>
+              </Card>
+            </>
+          ) : status ? (
+            <>
+              <View>
+                <Text style={styles.title}>账号安全与数据权利</Text>
+                <Text style={styles.subtitle}>
+                  你可以申请注销；我们会保留 7 天冷静期，避免误操作。
+                </Text>
+              </View>
+              <Card>
+                <Title>申请注销账号</Title>
+                <Body>
+                  注销前需要验证码。若你是家庭最后一位管理员，需要先添加或指定另一位管理员。
+                </Body>
+                <View style={styles.codeRow}>
+                  <View style={styles.codeField}>
+                    <Field
+                      label="短信验证码"
+                      value={code}
+                      onChangeText={(value) => {
+                        setCode(sanitizeDeletionCode(value));
+                        setError('');
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      placeholder="6 位验证码"
+                      editable={!busy}
+                      testID="account.deletion-code.input"
+                    />
+                  </View>
+                  <Pressable
+                    testID="account.send-code.button"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy || cooldownSeconds > 0 }}
+                    disabled={busy || cooldownSeconds > 0}
+                    onPress={() => void sendCode()}
+                    style={({ pressed }) => [
+                      styles.codeButton,
+                      (busy || cooldownSeconds > 0) && styles.codeButtonDisabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.codeButtonText}>
+                      {cooldownSeconds > 0 ? `${cooldownSeconds}s 后重发` : '获取验证码'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {maskedPhone ? <Text style={styles.hint}>已发送至 {maskedPhone}</Text> : null}
+                {keyboardVisible ? (
+                  <>
+                    <TextButton
+                      testID="account.request-delete.inline-button"
+                      label={busy ? '处理中，请等待' : '申请注销账号'}
+                      danger
+                      disabled={busy || !deletionCodeReady}
+                      onPress={confirmRequest}
+                    />
+                    <TextButton
+                      testID="account.return.inline-button"
+                      label={busy ? '处理中，请等待' : '返回上一页'}
+                      disabled={busy}
+                      onPress={requestReturn}
+                    />
+                  </>
+                ) : null}
+              </Card>
+              <Card>
+                <Title>登录设备</Title>
+                <Body>
+                  如果手机遗失、借用设备未退出，或你想重新建立所有设备登录状态，可以一次性退出全部设备。
+                </Body>
+              </Card>
+              <View style={styles.notice}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={colors.brand} />
+                <Body>注销到期后手机号会被不可逆匿名化；历史照顾记录仅保留匿名署名。</Body>
+              </View>
+            </>
+          ) : null}
+          {error ? <ErrorText>{error}</ErrorText> : null}
+        </ScrollView>
+        {status?.status === 'PENDING_DELETION' && !keyboardVisible ? (
+          <View
+            testID="account.pending-footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            <PrimaryButton
+              testID="account.cancel-deletion.button"
+              label="取消账号注销"
+              busy={busy}
+              disabled={!status.canCancel}
+              onPress={() => void cancelDeletion()}
+            />
+            <TextButton
+              testID="account.return.button"
+              label={busy ? '处理中，请等待' : '返回上一页'}
+              disabled={busy}
+              onPress={requestReturn}
+            />
+          </View>
+        ) : status && !keyboardVisible ? (
+          <View
+            testID="account.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            <TextButton
+              testID="account.request-delete.button"
+              label={busy ? '处理中，请等待' : '申请注销账号'}
+              danger
+              disabled={busy || !deletionCodeReady}
+              onPress={confirmRequest}
+            />
+            <TextButton
+              testID="account.logout-all.button"
+              label="退出全部设备"
+              danger
+              disabled={busy}
+              onPress={confirmLogoutAll}
+            />
+            <TextButton
+              testID="account.return.button"
+              label={busy ? '处理中，请等待' : '返回上一页'}
+              disabled={busy}
+              onPress={requestReturn}
+            />
+          </View>
         ) : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backDisabled: { opacity: 0.45 },
   navTitle: { ...typography.h3, color: colors.ink },
-  content: { gap: spacing.xl, paddingBottom: 104 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   codeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
@@ -325,20 +405,6 @@ const styles = StyleSheet.create({
   },
   codeButtonDisabled: { opacity: 0.5 },
   codeButtonText: { ...typography.caption, color: colors.brand, fontWeight: '700' },
-  logoutAllButton: {
-    minHeight: 48,
-    borderRadius: radii.pill,
-    backgroundColor: colors.dangerSoft,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  logoutAllButtonDisabled: { opacity: 0.62 },
-  logoutAllButtonText: { ...typography.body, color: colors.dangerDark, fontWeight: '700' },
   hint: { ...typography.caption, color: colors.textSecondary },
   notice: {
     flexDirection: 'row',
@@ -356,6 +422,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningSoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
