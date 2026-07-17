@@ -69,6 +69,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       ...(config.plugins ?? []),
       [
+        'expo-dev-client',
+        {
+          launchMode: 'most-recent',
+          toolsButton: false,
+          showMenuAtLaunch: false,
+          android: { toolsButton: false, showMenuAtLaunch: false },
+          ios: { toolsButton: false, showMenuAtLaunch: false },
+        },
+      ],
+      [
         'expo-build-properties',
         { android: { usesCleartextTraffic: environment === 'development' } },
       ],

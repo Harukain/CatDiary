@@ -102,6 +102,10 @@ const production = expoConfig({
 });
 if (production.status !== 0) throw new Error(production.stderr);
 const config = production.config;
+const pluginConfig = config.plugins ?? [];
+const devClientPlugin = pluginConfig.find((entry) =>
+  Array.isArray(entry) ? entry[0] === 'expo-dev-client' : entry === 'expo-dev-client',
+);
 const productionPrebuild = expoConfig(
   {
     APP_ENV: 'production',
@@ -159,6 +163,15 @@ const checks = {
   deepLinkScheme: config.scheme === 'catdiary',
   iosBundle: config.ios.bundleIdentifier === 'com.haruka.catdiary',
   androidPackage: config.android.package === 'com.haruka.catdiary',
+  devClientToolsOverlayDisabled:
+    Array.isArray(devClientPlugin) &&
+    devClientPlugin[1]?.launchMode === 'most-recent' &&
+    devClientPlugin[1]?.toolsButton === false &&
+    devClientPlugin[1]?.showMenuAtLaunch === false &&
+    devClientPlugin[1]?.android?.toolsButton === false &&
+    devClientPlugin[1]?.android?.showMenuAtLaunch === false &&
+    devClientPlugin[1]?.ios?.toolsButton === false &&
+    devClientPlugin[1]?.ios?.showMenuAtLaunch === false,
   encryptionDeclaration: productionPrebuild.config.ios.config.usesNonExemptEncryption === false,
   microphoneDisabled: JSON.stringify(config.plugins).includes('"microphonePermission":false'),
   iosHttpsOnly:
