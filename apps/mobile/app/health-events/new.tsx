@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -19,6 +31,7 @@ import {
 export default function NewHealthEventScreen() {
   const params = useLocalSearchParams<{ recordId?: string; petId?: string; title?: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const initialTitle = useRef(params.title ? `持续观察：${params.title}` : '').current;
   const allowLeave = useRef(false);
@@ -26,6 +39,7 @@ export default function NewHealthEventScreen() {
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const isDirty = useMemo(
     () =>
       isHealthEventDraftDirty(
@@ -37,6 +51,7 @@ export default function NewHealthEventScreen() {
       ),
     [initialTitle, summary, title],
   );
+  const canSubmit = !busy && Boolean(title.trim());
   const requestClose = useCallback(() => {
     const decision = resolveDraftExitDecision({
       busy,
@@ -79,6 +94,18 @@ export default function NewHealthEventScreen() {
     });
     return () => subscription.remove();
   }, [busy, isDirty, requestClose]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   async function submit() {
     if (!session || !activeFamily || !params.petId)
       return setError('缺少猫咪信息，请从异常记录进入');
@@ -105,68 +132,105 @@ export default function NewHealthEventScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.nav}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="关闭健康事件表单"
-            disabled={busy}
-            onPress={requestClose}
-            style={({ pressed }) => [
-              styles.navButton,
-              busy && styles.navButtonDisabled,
-              pressed && styles.pressed,
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.nav}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭健康事件表单"
+              disabled={busy}
+              onPress={requestClose}
+              style={({ pressed }) => [
+                styles.navButton,
+                busy && styles.navButtonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="close" size={23} color={colors.ink} />
+            </Pressable>
+            <View style={styles.navCopy}>
+              <Text style={styles.eyebrow}>异常追踪</Text>
+              <Text testID="health-event-new.title" style={styles.title}>
+                建立健康事件
+              </Text>
+              <Text style={styles.subtitle}>健康事件用于整理事实，不提供诊断或医疗建议。</Text>
+            </View>
+          </View>
+          <Card>
+            <Field
+              label="事件标题"
+              value={title}
+              editable={!busy}
+              onChangeText={setTitle}
+              maxLength={100}
+              placeholder="例如：连续呕吐观察"
+              testID="health-event-new.title.input"
+            />
+            <Field
+              label="目前情况（选填）"
+              value={summary}
+              editable={!busy}
+              onChangeText={setSummary}
+              maxLength={1000}
+              multiline
+              placeholder="描述频率、精神状态和已采取的处理"
+              testID="health-event-new.summary.input"
+            />
+            {params.recordId ? (
+              <Text testID="health-event-new.linked-record" style={styles.linked}>
+                已关联当前异常记录
+              </Text>
+            ) : null}
+          </Card>
+          {error && keyboardVisible ? (
+            <ErrorText testID="health-event-new.error">{error}</ErrorText>
+          ) : null}
+          {keyboardVisible ? (
+            <>
+              <PrimaryButton
+                label="开始追踪"
+                busy={busy}
+                disabled={!canSubmit}
+                testID="health-event-new.submit.inline-button"
+                onPress={submit}
+              />
+              <TextButton
+                label="取消"
+                disabled={busy}
+                testID="health-event-new.cancel.inline-button"
+                onPress={requestClose}
+              />
+            </>
+          ) : null}
+        </ScrollView>
+        {keyboardVisible ? null : (
+          <View
+            testID="health-event-new.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
             ]}
           >
-            <Ionicons name="close" size={23} color={colors.ink} />
-          </Pressable>
-          <View style={styles.navCopy}>
-            <Text style={styles.eyebrow}>异常追踪</Text>
-            <Text testID="health-event-new.title" style={styles.title}>
-              建立健康事件
-            </Text>
-            <Text style={styles.subtitle}>健康事件用于整理事实，不提供诊断或医疗建议。</Text>
+            {error ? <ErrorText testID="health-event-new.error">{error}</ErrorText> : null}
+            <PrimaryButton
+              label="开始追踪"
+              busy={busy}
+              disabled={!canSubmit}
+              testID="health-event-new.submit.button"
+              onPress={submit}
+            />
+            <TextButton
+              label="取消"
+              disabled={busy}
+              testID="health-event-new.cancel.button"
+              onPress={requestClose}
+            />
           </View>
-        </View>
-        <Card>
-          <Field
-            label="事件标题"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={100}
-            placeholder="例如：连续呕吐观察"
-            testID="health-event-new.title.input"
-          />
-          <Field
-            label="目前情况（选填）"
-            value={summary}
-            onChangeText={setSummary}
-            maxLength={1000}
-            multiline
-            placeholder="描述频率、精神状态和已采取的处理"
-            testID="health-event-new.summary.input"
-          />
-          {params.recordId ? (
-            <Text testID="health-event-new.linked-record" style={styles.linked}>
-              已关联当前异常记录
-            </Text>
-          ) : null}
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <PrimaryButton
-            label="开始追踪"
-            busy={busy}
-            disabled={!title.trim()}
-            testID="health-event-new.submit.button"
-            onPress={submit}
-          />
-        </Card>
-        <TextButton
-          label="取消"
-          disabled={busy}
-          testID="health-event-new.cancel.button"
-          onPress={requestClose}
-        />
-      </ScrollView>
+        )}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -177,7 +241,8 @@ function uuid() {
   });
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.xl, paddingBottom: 70 },
+  flex: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navButtonDisabled: { opacity: 0.45 },
@@ -186,5 +251,13 @@ const styles = StyleSheet.create({
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.sm },
   linked: { ...typography.caption, color: colors.warningDark, marginTop: spacing.sm },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });

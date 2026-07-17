@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type HealthEventSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -33,6 +37,7 @@ import {
 export default function HealthEventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const [event, setEvent] = useState<HealthEventSummary>();
   const [title, setTitle] = useState('');
@@ -40,6 +45,7 @@ export default function HealthEventDetailScreen() {
   const [initialDraft, setInitialDraft] = useState<HealthEventDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const load = useCallback(async () => {
     if (!session || !activeFamily || !id) return;
     setError('');
@@ -75,6 +81,8 @@ export default function HealthEventDetailScreen() {
       ),
     [initialDraft, summary, title],
   );
+  const canSave = canEdit && !busy && isDirty && Boolean(title.trim());
+  const canRecover = canEdit && !busy && event?.status === 'ACTIVE';
   const requestGuardedNavigation = useCallback(
     (target: HealthEventDetailNavigationTarget, action: () => void) => {
       const decision = resolveHealthEventDetailNavigationDecision({ busy, isDirty });
@@ -107,6 +115,18 @@ export default function HealthEventDetailScreen() {
     });
     return () => subscription.remove();
   }, [busy, isDirty, requestReturn]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   const requestLinkRecord = useCallback(() => {
     if (!event) return;
     requestGuardedNavigation('linkRecord', () =>
@@ -125,7 +145,7 @@ export default function HealthEventDetailScreen() {
     [requestGuardedNavigation, router],
   );
   async function save() {
-    if (!event || !session || !activeFamily) return;
+    if (!event || !session || !activeFamily || !canEdit || busy || !isDirty) return;
     setBusy(true);
     setError('');
     try {
@@ -146,7 +166,7 @@ export default function HealthEventDetailScreen() {
     }
   }
   async function recover() {
-    if (!event || !session || !activeFamily) return;
+    if (!event || !session || !activeFamily || !canEdit || busy) return;
     setBusy(true);
     try {
       const next = await authApi.recoverHealthEvent(
@@ -164,7 +184,7 @@ export default function HealthEventDetailScreen() {
     }
   }
   function unlink(recordId: string, recordTitle: string) {
-    if (!event || !session || !activeFamily) return;
+    if (!event || !session || !activeFamily || busy) return;
     Alert.alert('解除记录关联？', `“${recordTitle}”不会被删除，只会从当前健康事件中移除。`, [
       { text: '取消', style: 'cancel' },
       {
@@ -205,135 +225,187 @@ export default function HealthEventDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.nav}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="返回健康事件列表"
-            disabled={busy}
-            onPress={requestReturn}
-            style={({ pressed }) => [
-              styles.navButton,
-              busy && styles.navButtonDisabled,
-              pressed && styles.pressed,
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.nav}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="返回健康事件列表"
+              disabled={busy}
+              onPress={requestReturn}
+              style={({ pressed }) => [
+                styles.navButton,
+                busy && styles.navButtonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="chevron-back" size={22} color={colors.ink} />
+            </Pressable>
+            <View style={styles.navCopy}>
+              <Text style={[styles.status, event.status === 'RECOVERED' && styles.recovered]}>
+                {event.status === 'ACTIVE' ? '观察中' : '已恢复'}
+              </Text>
+              <Text testID="health-event-detail.title" style={styles.title}>
+                {event.title}
+              </Text>
+              <Text style={styles.meta}>
+                {event.pet.name} ·{' '}
+                {new Date(event.startedAt).toLocaleString('zh-CN', { hour12: false })} 开始
+              </Text>
+            </View>
+          </View>
+          <Card>
+            <Field
+              label="事件标题"
+              editable={canEdit && !busy}
+              value={title}
+              onChangeText={setTitle}
+              maxLength={100}
+            />
+            <Field
+              label="情况摘要"
+              editable={canEdit && !busy}
+              value={summary}
+              onChangeText={setSummary}
+              maxLength={1000}
+              multiline
+              placeholder="记录症状变化、就诊和处理结果"
+            />
+            {canEdit ? null : (
+              <Text style={styles.readonly}>只有事件创建人或家庭管理员可以修改。</Text>
+            )}
+          </Card>
+          {error && keyboardVisible ? (
+            <ErrorText testID="health-event-detail.error">{error}</ErrorText>
+          ) : null}
+          {canEdit && keyboardVisible ? (
+            <>
+              <PrimaryButton
+                label="保存事件信息"
+                busy={busy}
+                disabled={!canSave}
+                testID="health-event-detail.save.inline-button"
+                onPress={save}
+              />
+              <TextButton
+                label="返回健康事件"
+                disabled={busy}
+                testID="health-event-detail.return.inline-button"
+                onPress={requestReturn}
+              />
+            </>
+          ) : null}
+          <View>
+            <View style={styles.sectionHeading}>
+              <Text style={styles.section}>关联记录</Text>
+              {canEdit ? (
+                <Pressable
+                  testID="health-event-detail.link-record.button"
+                  onPress={requestLinkRecord}
+                  disabled={busy}
+                  style={styles.linkButton}
+                >
+                  <Ionicons name="add" size={17} color={colors.brand} />
+                  <Text style={styles.linkButtonText}>继续关联</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.timeline}>
+              {event.records.length ? (
+                event.records.map(({ record, relationType }) => (
+                  <View key={record.id} style={styles.record}>
+                    <Pressable
+                      testID="health-event-detail.record.item"
+                      accessibilityRole="button"
+                      accessibilityLabel={`查看关联记录：${record.title}`}
+                      style={styles.recordMain}
+                      onPress={() => requestViewRecord(record.id)}
+                    >
+                      <Text style={styles.relation}>{relationLabel(relationType)}</Text>
+                      <Text style={styles.recordTitle}>{record.title}</Text>
+                      <Text style={styles.recordTime}>
+                        {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
+                      </Text>
+                    </Pressable>
+                    {canEdit ? (
+                      <Pressable
+                        accessibilityLabel="解除关联"
+                        onPress={() => unlink(record.id, record.title)}
+                        style={styles.unlink}
+                      >
+                        <Ionicons name="close" size={17} color={colors.dangerDark} />
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.arrow}>›</Text>
+                    )}
+                  </View>
+                ))
+              ) : (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>还没有关联记录</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          {event.status === 'RECOVERED' ? (
+            <View style={styles.done}>
+              <Text style={styles.doneText}>
+                恢复于{' '}
+                {event.recoveredAt
+                  ? new Date(event.recoveredAt).toLocaleString('zh-CN', { hour12: false })
+                  : '—'}
+              </Text>
+            </View>
+          ) : null}
+          {!canEdit ? (
+            <TextButton
+              label="返回健康事件"
+              disabled={busy}
+              testID="health-event-detail.return.button"
+              onPress={requestReturn}
+            />
+          ) : null}
+        </ScrollView>
+        {canEdit && !keyboardVisible ? (
+          <View
+            testID="health-event-detail.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
             ]}
           >
-            <Ionicons name="chevron-back" size={22} color={colors.ink} />
-          </Pressable>
-          <View style={styles.navCopy}>
-            <Text style={[styles.status, event.status === 'RECOVERED' && styles.recovered]}>
-              {event.status === 'ACTIVE' ? '观察中' : '已恢复'}
-            </Text>
-            <Text testID="health-event-detail.title" style={styles.title}>
-              {event.title}
-            </Text>
-            <Text style={styles.meta}>
-              {event.pet.name} ·{' '}
-              {new Date(event.startedAt).toLocaleString('zh-CN', { hour12: false })} 开始
-            </Text>
-          </View>
-        </View>
-        <Card>
-          <Field
-            label="事件标题"
-            editable={canEdit}
-            value={title}
-            onChangeText={setTitle}
-            maxLength={100}
-          />
-          <Field
-            label="情况摘要"
-            editable={canEdit}
-            value={summary}
-            onChangeText={setSummary}
-            maxLength={1000}
-            multiline
-            placeholder="记录症状变化、就诊和处理结果"
-          />
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          {canEdit ? (
+            {error ? <ErrorText testID="health-event-detail.error">{error}</ErrorText> : null}
             <PrimaryButton
               label="保存事件信息"
               busy={busy}
-              disabled={!title.trim() || !isDirty}
+              disabled={!canSave}
               testID="health-event-detail.save.button"
               onPress={save}
             />
-          ) : (
-            <Text style={styles.readonly}>只有事件创建人或家庭管理员可以修改。</Text>
-          )}
-        </Card>
-        <View>
-          <View style={styles.sectionHeading}>
-            <Text style={styles.section}>关联记录</Text>
-            {canEdit ? (
-              <Pressable
-                testID="health-event-detail.link-record.button"
-                onPress={requestLinkRecord}
-                disabled={busy}
-                style={styles.linkButton}
-              >
-                <Ionicons name="add" size={17} color={colors.brand} />
-                <Text style={styles.linkButtonText}>继续关联</Text>
-              </Pressable>
+            {event.status === 'ACTIVE' ? (
+              <TextButton
+                label="标记为已恢复"
+                disabled={!canRecover}
+                testID="health-event-detail.recover.button"
+                onPress={recover}
+              />
             ) : null}
-          </View>
-          <View style={styles.timeline}>
-            {event.records.length ? (
-              event.records.map(({ record, relationType }) => (
-                <View key={record.id} style={styles.record}>
-                  <Pressable
-                    testID="health-event-detail.record.item"
-                    accessibilityRole="button"
-                    accessibilityLabel={`查看关联记录：${record.title}`}
-                    style={styles.recordMain}
-                    onPress={() => requestViewRecord(record.id)}
-                  >
-                    <Text style={styles.relation}>{relationLabel(relationType)}</Text>
-                    <Text style={styles.recordTitle}>{record.title}</Text>
-                    <Text style={styles.recordTime}>
-                      {new Date(record.occurredAt).toLocaleString('zh-CN', { hour12: false })}
-                    </Text>
-                  </Pressable>
-                  {canEdit ? (
-                    <Pressable
-                      accessibilityLabel="解除关联"
-                      onPress={() => unlink(record.id, record.title)}
-                      style={styles.unlink}
-                    >
-                      <Ionicons name="close" size={17} color={colors.dangerDark} />
-                    </Pressable>
-                  ) : (
-                    <Text style={styles.arrow}>›</Text>
-                  )}
-                </View>
-              ))
-            ) : (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>还没有关联记录</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        {event.status === 'ACTIVE' && canEdit ? (
-          <PrimaryButton
-            label="标记为已恢复"
-            busy={busy}
-            testID="health-event-detail.recover.button"
-            onPress={recover}
-          />
-        ) : event.status === 'RECOVERED' ? (
-          <View style={styles.done}>
-            <Text style={styles.doneText}>
-              恢复于{' '}
-              {event.recoveredAt
-                ? new Date(event.recoveredAt).toLocaleString('zh-CN', { hour12: false })
-                : '—'}
-            </Text>
+            <TextButton
+              label="返回健康事件"
+              disabled={busy}
+              testID="health-event-detail.return.button"
+              onPress={requestReturn}
+            />
           </View>
         ) : null}
-        <TextButton label="返回健康事件" disabled={busy} onPress={requestReturn} />
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -341,7 +413,8 @@ function relationLabel(relation: string) {
   return relation === 'SYMPTOM' ? '症状' : relation === 'TREATMENT' ? '治疗' : '观察';
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.xl, paddingBottom: 70 },
+  flex: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navButtonDisabled: { opacity: 0.45 },
@@ -407,5 +480,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   doneText: { ...typography.secondary, color: colors.warningDark },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
