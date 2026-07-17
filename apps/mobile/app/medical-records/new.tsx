@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type MedicalRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -22,6 +34,7 @@ const types: Array<{ value: MedicalRecordType; label: string }> = [
 ];
 export default function NewMedicalRecordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const initialOccurredDate = useRef(today()).current;
   const allowLeave = useRef(false);
@@ -40,6 +53,7 @@ export default function NewMedicalRecordScreen() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   useEffect(() => {
     if (!session || !activeFamily) return;
     void authApi.listPets(session.accessToken, activeFamily.id).then((items) => {
@@ -83,6 +97,7 @@ export default function NewMedicalRecordScreen() {
       type,
     ],
   );
+  const canSubmit = Boolean(petId && title.trim()) && !busy;
   const requestClose = useCallback(() => {
     const decision = resolveDraftExitDecision({
       busy,
@@ -121,6 +136,18 @@ export default function NewMedicalRecordScreen() {
     });
     return () => subscription.remove();
   }, [busy, isDirty, requestClose]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   async function submit() {
     if (!session || !activeFamily || !petId) return setError('请选择猫咪');
     let occurredAt: string;
@@ -161,158 +188,213 @@ export default function NewMedicalRecordScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.nav}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="关闭新增医疗档案"
-            disabled={busy}
-            onPress={requestClose}
-            style={({ pressed }) => [
-              styles.navButton,
-              busy && styles.navButtonDisabled,
-              pressed && styles.pressed,
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.nav}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭新增医疗档案"
+              disabled={busy}
+              onPress={requestClose}
+              style={({ pressed }) => [
+                styles.navButton,
+                busy && styles.navButtonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="close" size={23} color={colors.ink} />
+            </Pressable>
+            <View style={styles.navCopy}>
+              <Text style={styles.eyebrow}>管理员维护</Text>
+              <Text testID="medical-new.title" style={styles.title}>
+                新增医疗档案
+              </Text>
+            </View>
+          </View>
+          <Card>
+            <Text style={styles.section}>猫咪</Text>
+            <View style={styles.chips}>
+              {pets.map((pet) => (
+                <Chip
+                  key={pet.id}
+                  active={pet.id === petId}
+                  disabled={busy}
+                  label={pet.name}
+                  onPress={() => setPetId(pet.id)}
+                  testID="medical-new.pet.item"
+                />
+              ))}
+            </View>
+            <Text style={styles.section}>类型</Text>
+            <View style={styles.chips}>
+              {types.map((item) => (
+                <Chip
+                  key={item.value}
+                  active={item.value === type}
+                  disabled={busy}
+                  label={item.label}
+                  onPress={() => setType(item.value)}
+                  testID={`medical-new.type.${item.value}`}
+                />
+              ))}
+            </View>
+            <Field
+              label="项目名称"
+              value={title}
+              editable={!busy}
+              onChangeText={setTitle}
+              testID="medical-new.title.input"
+              placeholder={
+                type === 'VACCINE'
+                  ? '例如：猫三联加强针'
+                  : type === 'DEWORMING'
+                    ? '例如：体内驱虫'
+                    : '例如：抗生素疗程'
+              }
+            />
+            <Field
+              label="发生日期"
+              value={occurredDate}
+              editable={!busy}
+              onChangeText={setOccurredDate}
+              testID="medical-new.occurred-date.input"
+              keyboardType="numbers-and-punctuation"
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+            <Field
+              label="下次日期（选填）"
+              value={nextDate}
+              editable={!busy}
+              onChangeText={setNextDate}
+              testID="medical-new.next-date.input"
+              keyboardType="numbers-and-punctuation"
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+            <Field
+              label="品牌/药品"
+              value={brand}
+              editable={!busy}
+              onChangeText={setBrand}
+              placeholder="选填"
+              testID="medical-new.brand.input"
+            />
+            <Field
+              label="批次号"
+              value={batch}
+              editable={!busy}
+              onChangeText={setBatch}
+              placeholder="疫苗建议填写"
+              testID="medical-new.batch.input"
+            />
+            <Field
+              label="剂量"
+              value={dose}
+              editable={!busy}
+              onChangeText={setDose}
+              placeholder="例如：0.5 ml / 1 片"
+              testID="medical-new.dose.input"
+            />
+            <Field
+              label="医院或服务机构"
+              value={provider}
+              editable={!busy}
+              onChangeText={setProvider}
+              placeholder="选填"
+              testID="medical-new.provider.input"
+            />
+            <Field
+              label="反应"
+              value={reaction}
+              editable={!busy}
+              onChangeText={setReaction}
+              placeholder="例如：接种后轻微嗜睡"
+              testID="medical-new.reaction.input"
+            />
+            <Field
+              label="备注"
+              value={note}
+              editable={!busy}
+              onChangeText={setNote}
+              placeholder="选填"
+              testID="medical-new.note.input"
+            />
+          </Card>
+          {error && keyboardVisible ? (
+            <ErrorText testID="medical-new.error">{error}</ErrorText>
+          ) : null}
+          {keyboardVisible ? (
+            <>
+              <PrimaryButton
+                label="保存医疗档案"
+                busy={busy}
+                disabled={!canSubmit}
+                onPress={submit}
+                testID="medical-new.submit.inline-button"
+              />
+              <TextButton
+                label="取消"
+                disabled={busy}
+                onPress={requestClose}
+                testID="medical-new.cancel.inline-button"
+              />
+            </>
+          ) : null}
+        </ScrollView>
+        {keyboardVisible ? null : (
+          <View
+            testID="medical-new.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
             ]}
           >
-            <Ionicons name="close" size={23} color={colors.ink} />
-          </Pressable>
-          <View style={styles.navCopy}>
-            <Text style={styles.eyebrow}>管理员维护</Text>
-            <Text testID="medical-new.title" style={styles.title}>
-              新增医疗档案
-            </Text>
+            {error ? <ErrorText testID="medical-new.error">{error}</ErrorText> : null}
+            <PrimaryButton
+              label="保存医疗档案"
+              busy={busy}
+              disabled={!canSubmit}
+              onPress={submit}
+              testID="medical-new.submit.button"
+            />
+            <TextButton
+              label="取消"
+              disabled={busy}
+              onPress={requestClose}
+              testID="medical-new.cancel.button"
+            />
           </View>
-        </View>
-        <Card>
-          <Text style={styles.section}>猫咪</Text>
-          <View style={styles.chips}>
-            {pets.map((pet) => (
-              <Chip
-                key={pet.id}
-                active={pet.id === petId}
-                label={pet.name}
-                onPress={() => setPetId(pet.id)}
-                testID="medical-new.pet.item"
-              />
-            ))}
-          </View>
-          <Text style={styles.section}>类型</Text>
-          <View style={styles.chips}>
-            {types.map((item) => (
-              <Chip
-                key={item.value}
-                active={item.value === type}
-                label={item.label}
-                onPress={() => setType(item.value)}
-                testID={`medical-new.type.${item.value}`}
-              />
-            ))}
-          </View>
-          <Field
-            label="项目名称"
-            value={title}
-            onChangeText={setTitle}
-            testID="medical-new.title.input"
-            placeholder={
-              type === 'VACCINE'
-                ? '例如：猫三联加强针'
-                : type === 'DEWORMING'
-                  ? '例如：体内驱虫'
-                  : '例如：抗生素疗程'
-            }
-          />
-          <Field
-            label="发生日期"
-            value={occurredDate}
-            onChangeText={setOccurredDate}
-            testID="medical-new.occurred-date.input"
-            keyboardType="numbers-and-punctuation"
-            placeholder="YYYY-MM-DD"
-            maxLength={10}
-          />
-          <Field
-            label="下次日期（选填）"
-            value={nextDate}
-            onChangeText={setNextDate}
-            testID="medical-new.next-date.input"
-            keyboardType="numbers-and-punctuation"
-            placeholder="YYYY-MM-DD"
-            maxLength={10}
-          />
-          <Field
-            label="品牌/药品"
-            value={brand}
-            onChangeText={setBrand}
-            placeholder="选填"
-            testID="medical-new.brand.input"
-          />
-          <Field
-            label="批次号"
-            value={batch}
-            onChangeText={setBatch}
-            placeholder="疫苗建议填写"
-            testID="medical-new.batch.input"
-          />
-          <Field
-            label="剂量"
-            value={dose}
-            onChangeText={setDose}
-            placeholder="例如：0.5 ml / 1 片"
-            testID="medical-new.dose.input"
-          />
-          <Field
-            label="医院或服务机构"
-            value={provider}
-            onChangeText={setProvider}
-            placeholder="选填"
-            testID="medical-new.provider.input"
-          />
-          <Field
-            label="反应"
-            value={reaction}
-            onChangeText={setReaction}
-            placeholder="例如：接种后轻微嗜睡"
-            testID="medical-new.reaction.input"
-          />
-          <Field
-            label="备注"
-            value={note}
-            onChangeText={setNote}
-            placeholder="选填"
-            testID="medical-new.note.input"
-          />
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <PrimaryButton
-            label="保存医疗档案"
-            busy={busy}
-            disabled={!petId || !title.trim()}
-            onPress={submit}
-            testID="medical-new.submit.button"
-          />
-        </Card>
-        <TextButton
-          label="取消"
-          disabled={busy}
-          onPress={requestClose}
-          testID="medical-new.cancel.button"
-        />
-      </ScrollView>
+        )}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 function Chip({
   active,
+  disabled,
   label,
   onPress,
   testID,
 }: {
   active: boolean;
+  disabled?: boolean;
   label: string;
   onPress(): void;
   testID?: string;
 }) {
   return (
-    <Pressable testID={testID} onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
+    >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -330,7 +412,8 @@ function parseDate(value: string, todayAsNow = false) {
   return date.toISOString();
 }
 const styles = StyleSheet.create({
-  content: { gap: spacing.xl, paddingBottom: 70 },
+  flex: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navButtonDisabled: { opacity: 0.45 },
@@ -347,7 +430,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipDisabled: { opacity: 0.55 },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.surface },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });

@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type MedicalRecordSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -42,6 +46,7 @@ const emptyForm: MedicalRecordDetailDraft = {
 export default function MedicalRecordDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const allowLeave = useRef(false);
   const [record, setRecord] = useState<MedicalRecordSummary>();
@@ -49,6 +54,7 @@ export default function MedicalRecordDetailScreen() {
   const [initialForm, setInitialForm] = useState<MedicalRecordDetailDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const canEdit = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   useEffect(() => {
     if (!session || !activeFamily || !id) return;
@@ -68,6 +74,7 @@ export default function MedicalRecordDetailScreen() {
     () => canEdit && !!initialForm && isMedicalRecordDetailDraftDirty(form, initialForm),
     [canEdit, form, initialForm],
   );
+  const canSave = canEdit && !busy && isDirty && Boolean(form.title.trim());
   const requestReturn = useCallback(() => {
     const decision = resolveDraftExitDecision({
       busy,
@@ -109,6 +116,18 @@ export default function MedicalRecordDetailScreen() {
     });
     return () => subscription.remove();
   }, [busy, isDirty, requestReturn]);
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   async function save() {
     if (!record || !session || !activeFamily || !canEdit || busy || !isDirty) return;
     let occurredAt: string;
@@ -202,95 +221,153 @@ export default function MedicalRecordDetailScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <TopBar busy={busy} onBack={requestReturn} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View>
-          <Text style={styles.eyebrow}>
-            {labels[record.type]} · {record.pet.name}
-          </Text>
-          <Text style={styles.title}>{record.title}</Text>
-          <Text style={styles.subtitle}>由家庭管理员维护的结构化医疗事实</Text>
-        </View>
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>本档案不构成诊断、处方或医疗建议。</Text>
-        </View>
-        <Card>
-          <Field
-            label="项目名称"
-            editable={canEdit && !busy}
-            value={form.title}
-            onChangeText={field('title')}
-          />
-          <Field
-            label="发生日期"
-            editable={canEdit && !busy}
-            value={form.occurredDate}
-            onChangeText={field('occurredDate')}
-            placeholder="YYYY-MM-DD"
-            maxLength={10}
-          />
-          <Field
-            label="下次日期（选填）"
-            editable={canEdit && !busy}
-            value={form.nextDate}
-            onChangeText={field('nextDate')}
-            placeholder="YYYY-MM-DD"
-            maxLength={10}
-          />
-          <Field
-            label="品牌/药品"
-            editable={canEdit && !busy}
-            value={form.brand}
-            onChangeText={field('brand')}
-          />
-          <Field
-            label="批次号"
-            editable={canEdit && !busy}
-            value={form.batchNumber}
-            onChangeText={field('batchNumber')}
-          />
-          <Field
-            label="剂量"
-            editable={canEdit && !busy}
-            value={form.dose}
-            onChangeText={field('dose')}
-          />
-          <Field
-            label="医院或服务机构"
-            editable={canEdit && !busy}
-            value={form.provider}
-            onChangeText={field('provider')}
-          />
-          <Field
-            label="反应"
-            editable={canEdit && !busy}
-            value={form.reaction}
-            onChangeText={field('reaction')}
-          />
-          <Field
-            label="备注"
-            editable={canEdit && !busy}
-            value={form.note}
-            onChangeText={field('note')}
-            multiline
-          />
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          {canEdit ? (
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TopBar busy={busy} onBack={requestReturn} />
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View>
+            <Text style={styles.eyebrow}>
+              {labels[record.type]} · {record.pet.name}
+            </Text>
+            <Text style={styles.title}>{record.title}</Text>
+            <Text style={styles.subtitle}>由家庭管理员维护的结构化医疗事实</Text>
+          </View>
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>本档案不构成诊断、处方或医疗建议。</Text>
+          </View>
+          <Card>
+            <Field
+              label="项目名称"
+              editable={canEdit && !busy}
+              value={form.title}
+              onChangeText={field('title')}
+            />
+            <Field
+              label="发生日期"
+              editable={canEdit && !busy}
+              value={form.occurredDate}
+              onChangeText={field('occurredDate')}
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+            <Field
+              label="下次日期（选填）"
+              editable={canEdit && !busy}
+              value={form.nextDate}
+              onChangeText={field('nextDate')}
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+            <Field
+              label="品牌/药品"
+              editable={canEdit && !busy}
+              value={form.brand}
+              onChangeText={field('brand')}
+            />
+            <Field
+              label="批次号"
+              editable={canEdit && !busy}
+              value={form.batchNumber}
+              onChangeText={field('batchNumber')}
+            />
+            <Field
+              label="剂量"
+              editable={canEdit && !busy}
+              value={form.dose}
+              onChangeText={field('dose')}
+            />
+            <Field
+              label="医院或服务机构"
+              editable={canEdit && !busy}
+              value={form.provider}
+              onChangeText={field('provider')}
+            />
+            <Field
+              label="反应"
+              editable={canEdit && !busy}
+              value={form.reaction}
+              onChangeText={field('reaction')}
+            />
+            <Field
+              label="备注"
+              editable={canEdit && !busy}
+              value={form.note}
+              onChangeText={field('note')}
+              multiline
+            />
+            {canEdit ? null : (
+              <Text style={styles.readonly}>
+                你当前为普通家庭成员，可以查看但不能修改医疗档案。
+              </Text>
+            )}
+          </Card>
+          {error && keyboardVisible ? (
+            <ErrorText testID="medical-detail.error">{error}</ErrorText>
+          ) : null}
+          {canEdit && keyboardVisible ? (
+            <>
+              <PrimaryButton
+                label="保存修改"
+                busy={busy}
+                disabled={!canSave}
+                onPress={save}
+                testID="medical-detail.save.inline-button"
+              />
+              <TextButton
+                label="删除这条医疗档案"
+                danger
+                disabled={busy}
+                onPress={remove}
+                testID="medical-detail.delete.inline-button"
+              />
+              <TextButton
+                label={busy ? '处理中，请等待' : '返回医疗档案'}
+                onPress={requestReturn}
+                testID="medical-detail.return.inline-button"
+              />
+            </>
+          ) : null}
+          {!canEdit ? (
+            <TextButton
+              label="返回医疗档案"
+              onPress={requestReturn}
+              testID="medical-detail.return.button"
+            />
+          ) : null}
+        </ScrollView>
+        {canEdit && !keyboardVisible ? (
+          <View
+            testID="medical-detail.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="medical-detail.error">{error}</ErrorText> : null}
             <PrimaryButton
               label="保存修改"
               busy={busy}
-              disabled={busy || !isDirty || !form.title.trim()}
+              disabled={!canSave}
               onPress={save}
+              testID="medical-detail.save.button"
             />
-          ) : (
-            <Text style={styles.readonly}>你当前为普通家庭成员，可以查看但不能修改医疗档案。</Text>
-          )}
-        </Card>
-        {canEdit ? (
-          <TextButton label="删除这条医疗档案" danger disabled={busy} onPress={remove} />
+            <TextButton
+              label="删除这条医疗档案"
+              danger
+              disabled={busy}
+              onPress={remove}
+              testID="medical-detail.delete.button"
+            />
+            <TextButton
+              label={busy ? '处理中，请等待' : '返回医疗档案'}
+              onPress={requestReturn}
+              testID="medical-detail.return.button"
+            />
+          </View>
         ) : null}
-        <TextButton label={busy ? '处理中，请等待' : '返回医疗档案'} onPress={requestReturn} />
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -337,6 +414,7 @@ function parseDate(value: string, todayAsNow = false) {
   return date.toISOString();
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: {
     minHeight: 50,
     flexDirection: 'row',
@@ -345,7 +423,7 @@ const styles = StyleSheet.create({
   },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h2, color: colors.ink },
-  content: { gap: spacing.xl, paddingBottom: 70 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   eyebrow: { ...typography.caption, color: colors.brand, fontWeight: '700' },
   title: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.sm },
@@ -356,6 +434,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     padding: spacing.md,
     textAlign: 'center',
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
