@@ -187,7 +187,7 @@ export default function TasksTab() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heading}>
-          <View>
+          <View style={styles.headingCopy}>
             <Text testID="tasks.title" style={styles.title}>
               照顾任务
             </Text>
@@ -199,17 +199,21 @@ export default function TasksTab() {
                 testID="tasks.manage-plans.button"
                 accessibilityRole="button"
                 onPress={() => router.push('/plans')}
-                style={styles.newButton}
+                style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
               >
-                <Text style={styles.newButtonText}>管理计划</Text>
+                <Text style={styles.headerButtonText}>管理计划</Text>
               </Pressable>
               <Pressable
                 testID="tasks.create-plan.button"
                 accessibilityRole="button"
                 onPress={() => router.push('/plans/new')}
-                style={styles.newButton}
+                style={({ pressed }) => [
+                  styles.headerButton,
+                  styles.headerButtonPrimary,
+                  pressed && styles.pressed,
+                ]}
               >
-                <Text style={styles.newButtonText}>新建</Text>
+                <Text style={styles.headerButtonTextPrimary}>新建计划</Text>
               </Pressable>
             </View>
           ) : null}
@@ -398,12 +402,23 @@ function emptyBody(scope: Scope) {
 }
 const styles = StyleSheet.create({
   content: { gap: spacing.xxl },
-  heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  heading: { gap: spacing.md },
+  headingCopy: { gap: spacing.xs },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   title: { ...typography.h1, color: colors.ink },
-  subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
-  newButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
-  newButtonText: { fontSize: 13, fontWeight: '600', color: colors.brand },
+  subtitle: { ...typography.secondary, color: colors.textSecondary },
+  headerButton: {
+    minHeight: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  headerButtonPrimary: { borderColor: colors.brandSoft, backgroundColor: colors.brandSoft },
+  headerButtonText: { fontSize: 13, fontWeight: '600', color: colors.ink },
+  headerButtonTextPrimary: { fontSize: 13, fontWeight: '700', color: colors.brand },
   segment: {
     height: 44,
     borderRadius: radii.selector,
@@ -464,4 +479,5 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   offlineNoticeText: { ...typography.caption, color: colors.warningDark },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 });
