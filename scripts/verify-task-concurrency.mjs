@@ -1,6 +1,6 @@
 import { PrismaClient, RecordSource, RecordStatus, RecordType, TaskStatus } from '@prisma/client';
 
-const base = 'http://127.0.0.1:3000/api/v1';
+const base = process.env.CATDIARY_API_BASE_URL ?? 'http://127.0.0.1:3000/api/v1';
 const prisma = new PrismaClient();
 
 async function request(path, init = {}) {

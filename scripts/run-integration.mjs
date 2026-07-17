@@ -1,10 +1,15 @@
 import { spawn } from 'node:child_process';
 
+const apiPort = process.env.PORT ?? '3000';
+const workerPort = process.env.WORKER_PORT ?? '3001';
+const apiBaseUrl = process.env.CATDIARY_API_BASE_URL ?? `http://127.0.0.1:${apiPort}/api/v1`;
+const workerBaseUrl = `http://127.0.0.1:${workerPort}`;
+
 const env = {
   ...process.env,
   NODE_ENV: 'test',
-  PORT: '3000',
-  WORKER_PORT: '3001',
+  PORT: apiPort,
+  WORKER_PORT: workerPort,
   DATABASE_URL:
     process.env.DATABASE_URL ??
     'postgresql://catdiary:catdiary@127.0.0.1:5433/catdiary?schema=public',
@@ -16,7 +21,8 @@ const env = {
   CHANNEL_ENCRYPTION_SECRET: 'integration-channel-encryption-secret-32-chars',
   DEV_OTP_CODE: '123456',
   DEFAULT_TIMEZONE: 'Asia/Shanghai',
-  PUBLIC_API_URL: 'http://127.0.0.1:3000/api/v1',
+  PUBLIC_API_URL: apiBaseUrl,
+  CATDIARY_API_BASE_URL: apiBaseUrl,
   UPLOAD_LOCAL_DIR: '/tmp/cat-diary-integration/uploads',
   EXPORT_LOCAL_DIR: '/tmp/cat-diary-integration/exports',
   THROTTLE_DEFAULT_LIMIT: '10000',
@@ -41,7 +47,7 @@ function run(args) {
 async function waitForApi() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const response = await fetch('http://127.0.0.1:3000/api/v1/health/ready');
+      const response = await fetch(`${apiBaseUrl}/health/ready`);
       if (response.ok) {
         if (response.headers.get('x-content-type-options') !== 'nosniff')
           throw new Error('Helmet content type protection is missing');
@@ -49,9 +55,9 @@ async function waitForApi() {
           throw new Error('Helmet frame protection is missing');
         const requestId = response.headers.get('x-request-id');
         if (!requestId) throw new Error('X-Request-Id is missing');
-        const deniedMetrics = await fetch('http://127.0.0.1:3000/api/v1/metrics');
+        const deniedMetrics = await fetch(`${apiBaseUrl}/metrics`);
         if (deniedMetrics.status !== 401) throw new Error('Metrics endpoint is not protected');
-        const metrics = await fetch('http://127.0.0.1:3000/api/v1/metrics', {
+        const metrics = await fetch(`${apiBaseUrl}/metrics`, {
           headers: { 'X-Metrics-Token': env.METRICS_TOKEN },
         });
         const metricsBody = await metrics.text();
@@ -69,10 +75,10 @@ async function waitForApi() {
 async function waitForWorker() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const live = await fetch('http://127.0.0.1:3001/health/live');
-      const ready = await fetch('http://127.0.0.1:3001/health/ready');
-      const deniedMetrics = await fetch('http://127.0.0.1:3001/metrics');
-      const metrics = await fetch('http://127.0.0.1:3001/metrics', {
+      const live = await fetch(`${workerBaseUrl}/health/live`);
+      const ready = await fetch(`${workerBaseUrl}/health/ready`);
+      const deniedMetrics = await fetch(`${workerBaseUrl}/metrics`);
+      const metrics = await fetch(`${workerBaseUrl}/metrics`, {
         headers: { 'X-Metrics-Token': env.METRICS_TOKEN },
       });
       const metricsBody = await metrics.text();
