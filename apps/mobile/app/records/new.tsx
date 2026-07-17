@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type ManualRecordType, type PetSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -57,8 +59,10 @@ import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit
 
 export default function NewRecordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ pet?: string; petId?: string; type?: string }>();
   const { session, activeFamily } = useSession();
+  const scrollRef = useRef<ScrollView>(null);
   const initialOccurredDate = useRef(datePart()).current;
   const initialOccurredTime = useRef(timePart()).current;
   const initialType = useRef(resolveInitialRecordType(paramValue(params.type))).current;
@@ -75,6 +79,7 @@ export default function NewRecordScreen() {
   const [abnormal, setAbnormal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const routePetId = useMemo(
     () => paramValue(params.petId) ?? paramValue(params.pet),
     [params.pet, params.petId],
@@ -150,6 +155,23 @@ export default function NewRecordScreen() {
       type,
     ],
   );
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+  const scrollToFieldOffset = useCallback((y: number) => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y, animated: true });
+    }, 120);
+  }, []);
   const requestClose = useCallback(() => {
     const decision = resolveDraftExitDecision({
       busy,
@@ -251,9 +273,10 @@ export default function NewRecordScreen() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -368,6 +391,7 @@ export default function NewRecordScreen() {
               label={fields.firstLabel}
               value={form.first}
               onChangeText={(first) => setForm((current) => ({ ...current, first }))}
+              onFocus={() => scrollToFieldOffset(420)}
               placeholder={fields.firstPlaceholder}
               keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
               editable={!fieldsDisabled}
@@ -394,6 +418,7 @@ export default function NewRecordScreen() {
                 label={fields.secondLabel}
                 value={form.second}
                 onChangeText={(second) => setForm((current) => ({ ...current, second }))}
+                onFocus={() => scrollToFieldOffset(560)}
                 placeholder={fields.secondPlaceholder}
                 keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
                 editable={!fieldsDisabled}
@@ -418,6 +443,7 @@ export default function NewRecordScreen() {
               label="备注（选填）"
               value={note}
               onChangeText={setNote}
+              onFocus={() => scrollToFieldOffset(720)}
               maxLength={500}
               placeholder="补充品牌、反应或观察情况"
               editable={!fieldsDisabled}
@@ -431,7 +457,16 @@ export default function NewRecordScreen() {
               testID="record-new.abnormal.switch"
               onChange={setAbnormal}
             />
-            {error ? <ErrorText>{error}</ErrorText> : null}
+          </Card>
+        </ScrollView>
+        {keyboardVisible ? null : (
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="record-new.error">{error}</ErrorText> : null}
             <PrimaryButton
               label="保存记录"
               busy={busy}
@@ -445,8 +480,8 @@ export default function NewRecordScreen() {
               testID="record-new.cancel.button"
               onPress={requestClose}
             />
-          </Card>
-        </ScrollView>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -522,7 +557,7 @@ function paramValue(value: string | string[] | undefined) {
 }
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { gap: spacing.xl, paddingBottom: 80 },
+  content: { gap: spacing.xl, paddingBottom: 148 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navButtonDisabled: { opacity: 0.45 },
@@ -582,5 +617,13 @@ const styles = StyleSheet.create({
   switchCopy: { flex: 1 },
   switchTitle: { ...typography.h3, color: colors.ink },
   switchBody: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
