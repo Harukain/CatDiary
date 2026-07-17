@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -73,6 +77,7 @@ const medicalLabels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用
 
 export default function PetDetailRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session, activeFamily } = useSession();
   const [pet, setPet] = useState<PetDetail | null>(null);
@@ -87,6 +92,7 @@ export default function PetDetailRoute() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const allowLeave = useRef(false);
 
   useFocusEffect(
@@ -137,8 +143,14 @@ export default function PetDetailRoute() {
   const birthValid =
     !birthDate ||
     isValidBirthDate(birthDate, new Date(), activeFamily?.timezone ?? 'Asia/Shanghai');
+  const canSave = canManage && !!name.trim() && birthValid && changed && !busy;
   const requestReturn = useCallback(() => {
-    if (busy) return;
+    if (busy) {
+      Alert.alert('猫咪档案正在处理', '请等待当前保存或删除操作完成，避免档案状态不一致。', [
+        { text: '继续等待', style: 'cancel' },
+      ]);
+      return;
+    }
     if (!changed || allowLeave.current) {
       router.back();
       return;
@@ -178,15 +190,28 @@ export default function PetDetailRoute() {
   );
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!changed || allowLeave.current) return false;
+      if (!busy && (!changed || allowLeave.current)) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
-  }, [changed, requestReturn]);
+  }, [busy, changed, requestReturn]);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   async function save() {
-    if (!session || !activeFamily || !pet || !name.trim() || busy) return;
+    if (!session || !activeFamily || !pet || !canSave) return;
     setBusy(true);
     setError('');
     setSuccess('');
@@ -224,6 +249,7 @@ export default function PetDetailRoute() {
   }
 
   function confirmDelete() {
+    if (busy) return;
     Alert.alert('删除猫咪档案', '档案将进入 30 天软删除期。相关历史记录不会立即永久删除。', [
       { text: '取消', style: 'cancel' },
       { text: '确认删除', style: 'destructive', onPress: () => void remove() },
@@ -231,7 +257,7 @@ export default function PetDetailRoute() {
   }
 
   async function remove() {
-    if (!session || !activeFamily || !pet) return;
+    if (!session || !activeFamily || !pet || busy) return;
     setBusy(true);
     setError('');
     try {
@@ -251,251 +277,357 @@ export default function PetDetailRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          testID="pet-detail.back.button"
-          accessibilityRole="button"
-          accessibilityLabel="返回"
-          disabled={busy}
-          onPress={requestReturn}
-          style={({ pressed }) => [
-            styles.back,
-            busy && styles.backDisabled,
-            pressed && styles.pressed,
-          ]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.nav}>
+          <Pressable
+            testID="pet-detail.back.button"
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            accessibilityHint={busy ? '猫咪档案正在处理，点击会提示继续等待' : '返回上一页'}
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text testID="pet-detail.title" style={styles.navTitle}>
+            猫咪档案
+          </Text>
+          <View style={styles.back} />
+        </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="pet-detail.title" style={styles.navTitle}>
-          猫咪档案
-        </Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {!pet && !error ? <ActivityIndicator color={colors.brand} /> : null}
-        {error && !pet ? (
-          <Card>
-            <Title>档案加载失败</Title>
-            <ErrorText>{error}</ErrorText>
-          </Card>
-        ) : null}
-        {pet ? (
-          <>
-            <Card elevated>
-              <View style={styles.profileTop}>
-                {pet.avatarUrl && session && activeFamily ? (
-                  <AuthenticatedImage
-                    accessibilityLabel={`${pet.name}的头像`}
-                    source={photoSource(
-                      { downloadUrl: pet.avatarUrl },
-                      session.accessToken,
-                      activeFamily.id,
-                    )}
-                    style={styles.avatarImage}
-                  />
-                ) : (
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{pet.name.slice(0, 1)}</Text>
-                  </View>
-                )}
-                <View style={styles.profileBody}>
-                  <Text style={styles.petName}>{pet.name}</Text>
-                  <Text style={styles.profileMeta}>
-                    {sexLabel(pet.sex)} · {pet.breed || '未填写品种'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.quickActions}>
-                <Pressable
-                  testID="pet-detail.quick-record.button"
-                  accessibilityRole="button"
-                  onPress={() =>
-                    guardedNavigate(
-                      () => router.push({ pathname: '/records/new', params: { petId: pet.id } }),
-                      '记录',
-                    )
-                  }
-                  style={styles.quickAction}
-                >
-                  <Ionicons name="create-outline" size={18} color={colors.brand} />
-                  <Text style={styles.quickActionText}>记录</Text>
-                </Pressable>
-                <Pressable
-                  testID="pet-detail.quick-photos.button"
-                  accessibilityRole="button"
-                  onPress={() =>
-                    guardedNavigate(
-                      () => router.push({ pathname: '/photos', params: { petId: pet.id } }),
-                      '相册',
-                    )
-                  }
-                  style={styles.quickAction}
-                >
-                  <Ionicons name="images-outline" size={18} color={colors.brand} />
-                  <Text style={styles.quickActionText}>相册</Text>
-                </Pressable>
-                <Pressable
-                  testID="pet-detail.quick-medical.button"
-                  accessibilityRole="button"
-                  onPress={() =>
-                    guardedNavigate(
-                      () =>
-                        router.push({ pathname: '/medical-records', params: { petId: pet.id } }),
-                      '医疗档案',
-                    )
-                  }
-                  style={styles.quickAction}
-                >
-                  <Ionicons name="medkit-outline" size={18} color={colors.brand} />
-                  <Text style={styles.quickActionText}>医疗档案</Text>
-                </Pressable>
-              </View>
-            </Card>
-
-            {profile && session && activeFamily ? (
-              <>
-                <CareOverview profile={profile} />
-                <WeightOverview points={profile.weight.trend} latest={profile.weight.latest} />
-                <MedicalOverview medical={profile.medical} />
-                <HealthOverview profile={profile} />
-                <RecentRecords
-                  records={profile.recentRecords}
-                  onRecordPress={(recordId) =>
-                    guardedNavigate(
-                      () => router.push({ pathname: '/records/[id]', params: { id: recordId } }),
-                      '查看记录',
-                    )
-                  }
-                />
-                <RecentPhotos
-                  photos={profile.photos}
-                  accessToken={session.accessToken}
-                  familyId={activeFamily.id}
-                  onPhotoPress={(photoId) =>
-                    guardedNavigate(
-                      () => router.push({ pathname: '/photos/[id]', params: { id: photoId } }),
-                      '查看照片',
-                    )
-                  }
-                />
-              </>
-            ) : pet && !error ? (
-              <Card>
-                <ActivityIndicator color={colors.brand} />
-                <Body>正在加载照顾概览。</Body>
-              </Card>
-            ) : null}
-
+          {!pet && !error ? <ActivityIndicator color={colors.brand} /> : null}
+          {error && !pet ? (
             <Card>
-              <Title>基础资料</Title>
-              <Body>基础资料会用于记录归属、任务提醒和就医摘要。</Body>
-              {error ? <ErrorText>{error}</ErrorText> : null}
-              {canManage ? (
-                <>
-                  <Field
-                    label="猫咪名字"
-                    value={name}
-                    maxLength={30}
-                    onChangeText={(value) => {
-                      setName(value);
-                      setError('');
-                      setSuccess('');
-                    }}
-                  />
-                  <View style={styles.field}>
-                    <Text style={styles.label}>性别</Text>
-                    <View style={styles.options}>
-                      {(
-                        [
-                          ['MALE', '公猫'],
-                          ['FEMALE', '母猫'],
-                          ['UNKNOWN', '未知'],
-                        ] as const
-                      ).map(([value, label]) => (
-                        <Pressable
-                          key={value}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: sex === value }}
-                          onPress={() => setSex(value)}
-                          style={[styles.option, sex === value && styles.optionActive]}
-                        >
-                          <Text
-                            style={[styles.optionText, sex === value && styles.optionTextActive]}
-                          >
-                            {label}
-                          </Text>
-                        </Pressable>
-                      ))}
+              <Title>档案加载失败</Title>
+              <ErrorText>{error}</ErrorText>
+            </Card>
+          ) : null}
+          {pet ? (
+            <>
+              <Card elevated>
+                <View style={styles.profileTop}>
+                  {pet.avatarUrl && session && activeFamily ? (
+                    <AuthenticatedImage
+                      accessibilityLabel={`${pet.name}的头像`}
+                      source={photoSource(
+                        { downloadUrl: pet.avatarUrl },
+                        session.accessToken,
+                        activeFamily.id,
+                      )}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{pet.name.slice(0, 1)}</Text>
                     </View>
+                  )}
+                  <View style={styles.profileBody}>
+                    <Text style={styles.petName}>{pet.name}</Text>
+                    <Text style={styles.profileMeta}>
+                      {sexLabel(pet.sex)} · {pet.breed || '未填写品种'}
+                    </Text>
                   </View>
-                  <Field
-                    label="出生日期"
-                    value={birthDate}
-                    placeholder="YYYY-MM-DD"
-                    maxLength={10}
-                    error={!birthValid ? '请输入有效且不晚于今天的 YYYY-MM-DD 日期' : undefined}
-                    onChangeText={(value) => {
-                      setBirthDate(value);
-                      setSuccess('');
-                    }}
+                </View>
+                <View style={styles.quickActions}>
+                  <Pressable
+                    testID="pet-detail.quick-record.button"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() =>
+                      guardedNavigate(
+                        () => router.push({ pathname: '/records/new', params: { petId: pet.id } }),
+                        '记录',
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.quickAction,
+                      busy && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Ionicons name="create-outline" size={18} color={colors.brand} />
+                    <Text style={styles.quickActionText}>记录</Text>
+                  </Pressable>
+                  <Pressable
+                    testID="pet-detail.quick-photos.button"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() =>
+                      guardedNavigate(
+                        () => router.push({ pathname: '/photos', params: { petId: pet.id } }),
+                        '相册',
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.quickAction,
+                      busy && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Ionicons name="images-outline" size={18} color={colors.brand} />
+                    <Text style={styles.quickActionText}>相册</Text>
+                  </Pressable>
+                  <Pressable
+                    testID="pet-detail.quick-medical.button"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() =>
+                      guardedNavigate(
+                        () =>
+                          router.push({ pathname: '/medical-records', params: { petId: pet.id } }),
+                        '医疗档案',
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.quickAction,
+                      busy && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Ionicons name="medkit-outline" size={18} color={colors.brand} />
+                    <Text style={styles.quickActionText}>医疗档案</Text>
+                  </Pressable>
+                </View>
+              </Card>
+
+              {profile && session && activeFamily ? (
+                <>
+                  <CareOverview profile={profile} />
+                  <WeightOverview points={profile.weight.trend} latest={profile.weight.latest} />
+                  <MedicalOverview medical={profile.medical} />
+                  <HealthOverview profile={profile} />
+                  <RecentRecords
+                    records={profile.recentRecords}
+                    onRecordPress={(recordId) =>
+                      guardedNavigate(
+                        () => router.push({ pathname: '/records/[id]', params: { id: recordId } }),
+                        '查看记录',
+                      )
+                    }
                   />
-                  <Field
-                    label="品种"
-                    value={breed}
-                    placeholder="例如：英短"
-                    maxLength={60}
-                    onChangeText={setBreed}
+                  <RecentPhotos
+                    photos={profile.photos}
+                    accessToken={session.accessToken}
+                    familyId={activeFamily.id}
+                    onPhotoPress={(photoId) =>
+                      guardedNavigate(
+                        () => router.push({ pathname: '/photos/[id]', params: { id: photoId } }),
+                        '查看照片',
+                      )
+                    }
                   />
-                  <View style={styles.field}>
-                    <Text style={styles.label}>是否绝育</Text>
-                    <View style={styles.options}>
-                      {[
-                        [true, '已绝育'],
-                        [false, '未绝育'],
-                        [null, '未知'],
-                      ].map(([value, label]) => (
-                        <Pressable
-                          key={String(value)}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: neutered === value }}
-                          onPress={() => setNeutered(value as boolean | null)}
-                          style={[styles.option, neutered === value && styles.optionActive]}
-                        >
-                          <Text
+                </>
+              ) : pet && !error ? (
+                <Card>
+                  <ActivityIndicator color={colors.brand} />
+                  <Body>正在加载照顾概览。</Body>
+                </Card>
+              ) : null}
+
+              <Card>
+                <Title>基础资料</Title>
+                <Body>基础资料会用于记录归属、任务提醒和就医摘要。</Body>
+                {error && keyboardVisible ? (
+                  <ErrorText testID="pet-detail.error">{error}</ErrorText>
+                ) : null}
+                {success && keyboardVisible ? (
+                  <SuccessText testID="pet-detail.success">{success}</SuccessText>
+                ) : null}
+                {canManage ? (
+                  <>
+                    <Field
+                      label="猫咪名字"
+                      value={name}
+                      maxLength={30}
+                      editable={!busy}
+                      onChangeText={(value) => {
+                        setName(value);
+                        setError('');
+                        setSuccess('');
+                      }}
+                    />
+                    <View style={styles.field}>
+                      <Text style={styles.label}>性别</Text>
+                      <View style={styles.options}>
+                        {(
+                          [
+                            ['MALE', '公猫'],
+                            ['FEMALE', '母猫'],
+                            ['UNKNOWN', '未知'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <Pressable
+                            key={value}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: sex === value, disabled: busy }}
+                            disabled={busy}
+                            onPress={() => {
+                              setSex(value);
+                              setSuccess('');
+                            }}
                             style={[
-                              styles.optionText,
-                              neutered === value && styles.optionTextActive,
+                              styles.option,
+                              sex === value && styles.optionActive,
+                              busy && styles.disabled,
                             ]}
                           >
-                            {label as string}
-                          </Text>
-                        </Pressable>
-                      ))}
+                            <Text
+                              style={[styles.optionText, sex === value && styles.optionTextActive]}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
                     </View>
-                  </View>
-                  <Field
-                    label="芯片编号"
-                    value={chipNumber}
-                    placeholder="选填"
-                    maxLength={50}
-                    onChangeText={setChipNumber}
-                  />
-                  <PrimaryButton
-                    label="保存修改"
-                    busy={busy}
-                    disabled={!name.trim() || !birthValid || !changed}
-                    onPress={save}
-                  />
-                  {success ? <SuccessText>{success}</SuccessText> : null}
-                  <TextButton label="删除猫咪档案" danger disabled={busy} onPress={confirmDelete} />
-                </>
-              ) : (
-                <ReadonlyFacts pet={pet} />
-              )}
-            </Card>
-          </>
+                    <Field
+                      label="出生日期"
+                      value={birthDate}
+                      placeholder="YYYY-MM-DD"
+                      maxLength={10}
+                      editable={!busy}
+                      error={!birthValid ? '请输入有效且不晚于今天的 YYYY-MM-DD 日期' : undefined}
+                      onChangeText={(value) => {
+                        setBirthDate(value);
+                        setError('');
+                        setSuccess('');
+                      }}
+                    />
+                    <Field
+                      label="品种"
+                      value={breed}
+                      placeholder="例如：英短"
+                      maxLength={60}
+                      editable={!busy}
+                      onChangeText={(value) => {
+                        setBreed(value);
+                        setError('');
+                        setSuccess('');
+                      }}
+                    />
+                    <View style={styles.field}>
+                      <Text style={styles.label}>是否绝育</Text>
+                      <View style={styles.options}>
+                        {[
+                          [true, '已绝育'],
+                          [false, '未绝育'],
+                          [null, '未知'],
+                        ].map(([value, label]) => (
+                          <Pressable
+                            key={String(value)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: neutered === value, disabled: busy }}
+                            disabled={busy}
+                            onPress={() => {
+                              setNeutered(value as boolean | null);
+                              setSuccess('');
+                            }}
+                            style={[
+                              styles.option,
+                              neutered === value && styles.optionActive,
+                              busy && styles.disabled,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.optionText,
+                                neutered === value && styles.optionTextActive,
+                              ]}
+                            >
+                              {label as string}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    <Field
+                      label="芯片编号"
+                      value={chipNumber}
+                      placeholder="选填"
+                      maxLength={50}
+                      editable={!busy}
+                      onChangeText={(value) => {
+                        setChipNumber(value);
+                        setError('');
+                        setSuccess('');
+                      }}
+                    />
+                    {keyboardVisible ? (
+                      <>
+                        <PrimaryButton
+                          label="保存修改"
+                          busy={busy}
+                          disabled={!canSave}
+                          testID="pet-detail.save.inline-button"
+                          onPress={() => void save()}
+                        />
+                        <TextButton
+                          label="删除猫咪档案"
+                          danger
+                          disabled={busy}
+                          testID="pet-detail.delete.inline-button"
+                          onPress={confirmDelete}
+                        />
+                        <TextButton
+                          label="返回猫咪列表"
+                          disabled={busy}
+                          testID="pet-detail.return.inline-button"
+                          onPress={requestReturn}
+                        />
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <ReadonlyFacts pet={pet} />
+                )}
+              </Card>
+            </>
+          ) : null}
+        </ScrollView>
+        {pet && canManage && !keyboardVisible ? (
+          <View
+            testID="pet-detail.footer"
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="pet-detail.error">{error}</ErrorText> : null}
+            {success ? <SuccessText testID="pet-detail.success">{success}</SuccessText> : null}
+            <PrimaryButton
+              label="保存修改"
+              busy={busy}
+              disabled={!canSave}
+              testID="pet-detail.save.button"
+              onPress={() => void save()}
+            />
+            <TextButton
+              label="删除猫咪档案"
+              danger
+              disabled={busy}
+              testID="pet-detail.delete.button"
+              onPress={confirmDelete}
+            />
+            <TextButton
+              label="返回猫咪列表"
+              disabled={busy}
+              testID="pet-detail.return.button"
+              onPress={requestReturn}
+            />
+          </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -846,11 +978,12 @@ function formatShortDateTime(value: string) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backDisabled: { opacity: 0.45 },
   navTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
-  content: { gap: spacing.lg, paddingBottom: spacing.huge },
+  scroll: { flex: 1 },
+  content: { gap: spacing.lg, paddingBottom: spacing.xl },
   profileTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {
     width: 60,
@@ -942,6 +1075,7 @@ const styles = StyleSheet.create({
   },
   recordDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.brand },
   recordDotDanger: { backgroundColor: colors.danger },
+  disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   photoTile: {
@@ -979,4 +1113,12 @@ const styles = StyleSheet.create({
   optionActive: { backgroundColor: colors.brandSoft, borderColor: colors.brand },
   optionText: { ...typography.secondary, color: colors.textSecondary },
   optionTextActive: { color: colors.brand, fontWeight: '600' },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
 });
