@@ -73,6 +73,11 @@ function runPreflight() {
     );
   }
 
+  const blockingPrompt = detectMaestroDriverBlockingPrompt(device.serial);
+  if (blockingPrompt) {
+    throw new Error(blockingPrompt.message);
+  }
+
   return {
     device: {
       serial: redactSerial(device.serial),
@@ -117,6 +122,106 @@ function parseKeyguardState(output) {
     screenOn: /screenState=SCREEN_STATE_ON/.test(output),
     interactive: /interactiveState=INTERACTIVE_STATE_AWAKE/.test(output),
   };
+}
+
+function detectMaestroDriverBlockingPrompt(serial) {
+  const foregroundPackage = currentForegroundPackage(serial);
+  if (!foregroundPackage || !isKnownSystemInstallPackage(foregroundPackage)) return null;
+
+  const uiXml = currentUiXml(serial);
+  if (!uiXml) return null;
+
+  return detectBlockingPromptFromUi(foregroundPackage, uiXml);
+}
+
+function currentForegroundPackage(serial) {
+  try {
+    return parseForegroundPackage(
+      commandOutput('adb', ['-s', serial, 'shell', 'dumpsys', 'window']),
+    );
+  } catch {
+    return '';
+  }
+}
+
+function parseForegroundPackage(output) {
+  const source = String(output ?? '');
+  const currentFocus = source.match(/\bmCurrentFocus=Window\{[^}]*\s([A-Za-z0-9_.]+)\/[^}\s]+/);
+  if (currentFocus?.[1]) return currentFocus[1];
+
+  const focusedApp = source.match(/\bmFocusedApp=.*?\s([A-Za-z0-9_.]+)\/[^}\s]+/);
+  return focusedApp?.[1] ?? '';
+}
+
+function isKnownSystemInstallPackage(packageName) {
+  return new Set([
+    'com.android.packageinstaller',
+    'com.android.permissioncontroller',
+    'com.android.settings',
+    'com.google.android.packageinstaller',
+    'com.oplus.appdetail',
+    'com.coloros.securitypermission',
+    'com.coloros.safecenter',
+    'com.heytap.appdetail',
+  ]).has(packageName);
+}
+
+function currentUiXml(serial) {
+  try {
+    commandOutput('adb', [
+      '-s',
+      serial,
+      'shell',
+      'uiautomator',
+      'dump',
+      '/sdcard/catdiary-maestro-preflight.xml',
+    ]);
+    return commandOutput('adb', [
+      '-s',
+      serial,
+      'shell',
+      'cat',
+      '/sdcard/catdiary-maestro-preflight.xml',
+    ]);
+  } catch {
+    return '';
+  }
+}
+
+function detectBlockingPromptFromUi(foregroundPackage, uiXml) {
+  const text = decodeXmlEntities(String(uiXml ?? ''));
+  if (
+    text.includes('dev.mobile.maestro') &&
+    (text.includes('中风险应用') || text.includes('继续安装') || text.includes('取消安装'))
+  ) {
+    return {
+      type: 'maestro-driver-install-warning',
+      message:
+        'Android 真机停在 Maestro driver 安装风险提示页。请在手机上点击“继续安装”；如果随后要求锁屏密码，必须由设备持有人在手机上输入。完成后重新执行 pnpm e2e:maestro:preflight。',
+    };
+  }
+
+  if (
+    foregroundPackage === 'com.android.settings' &&
+    (text.includes('输入锁屏密码') || text.includes('密码栏'))
+  ) {
+    return {
+      type: 'maestro-driver-lock-password',
+      message:
+        'Android 真机停在系统“输入锁屏密码”页，通常是安装 Maestro driver 的系统确认。请设备持有人在手机上输入锁屏密码完成确认，或取消后重新运行 pnpm e2e:maestro:preflight；脚本不应代输锁屏密码。',
+    };
+  }
+
+  return null;
+}
+
+function decodeXmlEntities(value) {
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&');
 }
 
 function booleanField(source, name) {
@@ -189,9 +294,28 @@ function runSelfCheck() {
     parsesDevice: devices.length === 1 && devices[0].serial === '476640dd',
     parsesModel: devices[0]?.model === 'PKG110',
     redactsSerial: redactSerial(devices[0]?.serial) === 'redacted-last4-40dd',
+    parsesCurrentFocus:
+      parseForegroundPackage(
+        'mCurrentFocus=Window{abc u0 com.android.settings/com.android.settings.password.ConfirmLockPassword}',
+      ) === 'com.android.settings',
     detectsLocked:
       locked.showing === true && locked.inputRestricted === true && locked.screenOn === true,
     detectsUnlocked: unlocked.showing === false && unlocked.inputRestricted === false,
+    detectsMaestroRiskPrompt:
+      detectBlockingPromptFromUi(
+        'com.oplus.appdetail',
+        '<node text="dev.mobile.maestro"/><node text="中风险应用"/><node text="继续安装"/>',
+      )?.type === 'maestro-driver-install-warning',
+    detectsMaestroPasswordPrompt:
+      detectBlockingPromptFromUi(
+        'com.android.settings',
+        '<node text="输入锁屏密码"/><node content-desc="密码栏，已输入 0 个值，共 6 个值"/>',
+      )?.type === 'maestro-driver-lock-password',
+    ignoresRegularAppScreen:
+      detectBlockingPromptFromUi(
+        'com.haruka.catdiary',
+        '<node text="今天，先照顾好它们"/><node text="查看任务"/>',
+      ) === null,
     filtersVersionBanner: lastMeaningfulLine('notice\n2.6.1') === '2.6.1',
     acceptsPnpmArgumentSeparator: parseArgs(['--', '--json']).json === true,
   };
