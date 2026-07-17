@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
@@ -34,6 +34,7 @@ const types: Array<{ value: MedicalRecordType; label: string }> = [
 ];
 export default function NewMedicalRecordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ petId?: string }>();
   const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const initialOccurredDate = useRef(today()).current;
@@ -58,11 +59,14 @@ export default function NewMedicalRecordScreen() {
     if (!session || !activeFamily) return;
     void authApi.listPets(session.accessToken, activeFamily.id).then((items) => {
       setPets(items);
-      const nextPetId = items[0]?.id ?? '';
+      const requestedPetId = params.petId ?? '';
+      const nextPetId = items.some((item) => item.id === requestedPetId)
+        ? requestedPetId
+        : (items[0]?.id ?? '');
       setPetId(nextPetId);
       setInitialPetId(nextPetId);
     });
-  }, [activeFamily, session]);
+  }, [activeFamily, params.petId, session]);
   const isDirty = useMemo(
     () =>
       isMedicalRecordDraftDirty(

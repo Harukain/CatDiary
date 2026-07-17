@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -14,12 +15,22 @@ import {
   sharePreparedMedicalSummary,
   type PreparedMedicalSummary,
 } from '../../src/features/medical/share-summary';
-import { Body, Card, ErrorText, Screen, SuccessText, Title } from '../../src/shared/ui/primitives';
+import {
+  Body,
+  Card,
+  ErrorText,
+  PrimaryButton,
+  Screen,
+  SuccessText,
+  TextButton,
+  Title,
+} from '../../src/shared/ui/primitives';
 
 const labels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用药' } as const;
 
 export default function MedicalRecordsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ petId?: string }>();
   const { session, activeFamily } = useSession();
   const [records, setRecords] = useState<MedicalRecordSummary[]>([]);
@@ -109,160 +120,204 @@ export default function MedicalRecordsScreen() {
       setSummaryOperation('');
     }
   }
+  function openNewMedicalRecord() {
+    router.push({
+      pathname: '/medical-records/new',
+      params: petId ? { petId } : {},
+    });
+  }
   const canEdit = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const summaryBusy = summaryOperation !== '';
+  const canGenerateSummary = !summaryBusy && !!session && !!activeFamily && !!petId;
+  const canShareSummary = !summaryBusy && !!preparedSummary;
+  const canAddMedicalRecord = canEdit && !summaryBusy;
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.heading}>
-          <View>
-            <Text testID="medical-records.title" style={styles.title}>
-              医疗档案
-            </Text>
-            <Text style={styles.subtitle}>结构化保存疫苗、驱虫和用药事实</Text>
-          </View>
-          <Pressable
-            testID="medical-records.close.button"
-            accessibilityLabel="关闭"
-            onPress={() => router.back()}
-            style={styles.close}
-          >
-            <Ionicons name="close" size={22} color={colors.ink} />
-          </Pressable>
-        </View>
+      <View style={styles.flex}>
         <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {pets.map((pet) => (
-            <Pressable
-              key={pet.id}
-              testID="medical-records.pet.filter"
-              onPress={() => void selectPet(pet.id)}
-              style={[styles.filter, pet.id === petId && styles.filterActive]}
-            >
-              <Text style={[styles.filterText, pet.id === petId && styles.filterTextActive]}>
-                {pet.name}
+          <View style={styles.heading}>
+            <View>
+              <Text testID="medical-records.title" style={styles.title}>
+                医疗档案
               </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <View style={styles.actions}>
-          {canEdit ? (
+              <Text style={styles.subtitle}>结构化保存疫苗、驱虫和用药事实</Text>
+            </View>
             <Pressable
-              testID="medical-records.add.button"
-              onPress={() => router.push('/medical-records/new')}
-              style={styles.action}
+              testID="medical-records.close.button"
+              accessibilityLabel="关闭"
+              disabled={summaryBusy}
+              onPress={() => router.back()}
+              style={[styles.close, summaryBusy && styles.closeDisabled]}
             >
-              <Ionicons name="add-circle-outline" size={20} color={colors.brand} />
-              <Text style={styles.actionText}>新增档案</Text>
+              <Ionicons name="close" size={22} color={colors.ink} />
             </Pressable>
-          ) : null}
-          <Pressable
-            testID="medical-records.export.button"
-            disabled={!petId || summaryBusy}
-            onPress={() => void generateSummary()}
-            style={[styles.action, (!petId || summaryBusy) && styles.disabled]}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
           >
-            {summaryOperation === 'generate' ? (
-              <ActivityIndicator size="small" color={colors.brand} />
-            ) : (
-              <Ionicons name="document-text-outline" size={20} color={colors.brand} />
-            )}
-            <Text style={styles.actionText}>{preparedSummary ? '重新生成摘要' : '生成摘要'}</Text>
-          </Pressable>
-        </View>
-        {preparedSummary || summarySuccess || summaryError ? (
-          <Card>
-            <Title>就医摘要</Title>
-            {summarySuccess ? (
-              <View testID="medical-records.summary-ready.text">
-                <SuccessText>{summarySuccess}</SuccessText>
-              </View>
-            ) : null}
-            {summaryError ? <ErrorText>{summaryError}</ErrorText> : null}
-            {preparedSummary ? (
+            {pets.map((pet) => (
               <Pressable
-                testID="medical-records.summary-share.button"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: summaryBusy }}
+                key={pet.id}
+                testID="medical-records.pet.filter"
                 disabled={summaryBusy}
-                onPress={() => void shareSummary()}
-                style={({ pressed }) => [
-                  styles.shareButton,
-                  summaryBusy && styles.disabled,
-                  pressed && styles.pressed,
+                onPress={() => void selectPet(pet.id)}
+                style={[
+                  styles.filter,
+                  pet.id === petId && styles.filterActive,
+                  summaryBusy && styles.filterDisabled,
                 ]}
               >
-                {summaryOperation === 'share' ? (
-                  <ActivityIndicator color={colors.surface} />
-                ) : (
-                  <Ionicons name="share-outline" size={18} color={colors.surface} />
-                )}
-                <Text style={styles.shareButtonText}>
-                  {summaryOperation === 'share' ? '打开系统分享…' : '分享摘要'}
+                <Text style={[styles.filterText, pet.id === petId && styles.filterTextActive]}>
+                  {pet.name}
                 </Text>
               </Pressable>
-            ) : null}
-          </Card>
-        ) : null}
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>
-            医疗档案不代替兽医诊断或处方。紧急情况请及时联系执业兽医。
-          </Text>
+            ))}
+          </ScrollView>
+          {preparedSummary || summarySuccess || summaryError ? (
+            <Card>
+              <Title>就医摘要</Title>
+              {summarySuccess ? (
+                <View testID="medical-records.summary-ready.text">
+                  <SuccessText>{summarySuccess}</SuccessText>
+                </View>
+              ) : null}
+              {summaryError ? <ErrorText>{summaryError}</ErrorText> : null}
+              {preparedSummary ? (
+                <Body>
+                  摘要已在本机准备好。请使用底部“分享就医摘要”打开系统分享面板保存或转发。
+                </Body>
+              ) : null}
+            </Card>
+          ) : null}
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              医疗档案不代替兽医诊断或处方。紧急情况请及时联系执业兽医。
+            </Text>
+          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : error ? (
+            <ErrorText>{error}</ErrorText>
+          ) : records.length ? (
+            records.map((record) => (
+              <Pressable
+                accessibilityRole="button"
+                testID="medical-records.item"
+                key={record.id}
+                onPress={() =>
+                  router.push({ pathname: '/medical-records/[id]', params: { id: record.id } })
+                }
+                style={({ pressed }) => [styles.record, pressed && styles.pressed]}
+              >
+                <View style={styles.recordTop}>
+                  <Text style={styles.type}>{labels[record.type]}</Text>
+                  <Text style={styles.date}>
+                    {new Date(record.occurredAt).toLocaleDateString('zh-CN')}
+                  </Text>
+                </View>
+                <Text style={styles.recordTitle}>{record.title}</Text>
+                <Text style={styles.meta}>
+                  {record.pet.name}
+                  {record.brand ? ` · ${record.brand}` : ''}
+                  {record.dose ? ` · ${record.dose}` : ''}
+                </Text>
+                {record.provider ? (
+                  <Text style={styles.detail}>机构：{record.provider}</Text>
+                ) : null}
+                {record.nextDueAt ? (
+                  <Text testID="medical-records.next-date" style={styles.next}>
+                    下次日期：{new Date(record.nextDueAt).toLocaleDateString('zh-CN')}
+                  </Text>
+                ) : null}
+                {record.reaction ? (
+                  <Text style={styles.reaction}>反应：{record.reaction}</Text>
+                ) : null}
+              </Pressable>
+            ))
+          ) : (
+            <Card>
+              <Title>还没有医疗档案</Title>
+              <Body>接种疫苗、完成驱虫或用药后，在这里保存品牌、批次、剂量和下次日期。</Body>
+            </Card>
+          )}
+        </ScrollView>
+        <View
+          testID="medical-records.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          {preparedSummary ? (
+            <PrimaryButton
+              testID="medical-records.summary-share.button"
+              label="分享就医摘要"
+              busy={summaryOperation === 'share'}
+              disabled={!canShareSummary}
+              onPress={() => void shareSummary()}
+            />
+          ) : canEdit ? (
+            <PrimaryButton
+              testID="medical-records.add.button"
+              label="新增医疗档案"
+              disabled={!canAddMedicalRecord}
+              onPress={openNewMedicalRecord}
+            />
+          ) : (
+            <PrimaryButton
+              testID="medical-records.export.button"
+              label={summaryOperation === 'generate' ? '正在生成摘要' : '生成就医摘要'}
+              busy={summaryOperation === 'generate'}
+              disabled={!canGenerateSummary}
+              onPress={() => void generateSummary()}
+            />
+          )}
+          {preparedSummary ? (
+            <TextButton
+              testID="medical-records.export.button"
+              label={summaryOperation === 'generate' ? '正在生成摘要' : '重新生成摘要'}
+              disabled={!canGenerateSummary}
+              onPress={() => void generateSummary()}
+            />
+          ) : canEdit ? (
+            <TextButton
+              testID="medical-records.export.button"
+              label={summaryOperation === 'generate' ? '正在生成摘要' : '生成就医摘要'}
+              disabled={!canGenerateSummary}
+              onPress={() => void generateSummary()}
+            />
+          ) : null}
+          {preparedSummary && canEdit ? (
+            <TextButton
+              testID="medical-records.add.button"
+              label="新增医疗档案"
+              disabled={!canAddMedicalRecord}
+              onPress={openNewMedicalRecord}
+            />
+          ) : null}
+          <TextButton
+            testID="medical-records.return.button"
+            label={summaryBusy ? '处理中，请等待' : '返回上一页'}
+            disabled={summaryBusy}
+            onPress={() => router.back()}
+          />
         </View>
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : error ? (
-          <ErrorText>{error}</ErrorText>
-        ) : records.length ? (
-          records.map((record) => (
-            <Pressable
-              accessibilityRole="button"
-              testID="medical-records.item"
-              key={record.id}
-              onPress={() =>
-                router.push({ pathname: '/medical-records/[id]', params: { id: record.id } })
-              }
-              style={({ pressed }) => [styles.record, pressed && styles.pressed]}
-            >
-              <View style={styles.recordTop}>
-                <Text style={styles.type}>{labels[record.type]}</Text>
-                <Text style={styles.date}>
-                  {new Date(record.occurredAt).toLocaleDateString('zh-CN')}
-                </Text>
-              </View>
-              <Text style={styles.recordTitle}>{record.title}</Text>
-              <Text style={styles.meta}>
-                {record.pet.name}
-                {record.brand ? ` · ${record.brand}` : ''}
-                {record.dose ? ` · ${record.dose}` : ''}
-              </Text>
-              {record.provider ? <Text style={styles.detail}>机构：{record.provider}</Text> : null}
-              {record.nextDueAt ? (
-                <Text testID="medical-records.next-date" style={styles.next}>
-                  下次日期：{new Date(record.nextDueAt).toLocaleDateString('zh-CN')}
-                </Text>
-              ) : null}
-              {record.reaction ? (
-                <Text style={styles.reaction}>反应：{record.reaction}</Text>
-              ) : null}
-            </Pressable>
-          ))
-        ) : (
-          <Card>
-            <Title>还没有医疗档案</Title>
-            <Body>接种疫苗、完成驱虫或用药后，在这里保存品牌、批次、剂量和下次日期。</Body>
-          </Card>
-        )}
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing.lg, paddingBottom: 80 },
+  flex: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.lg, paddingBottom: spacing.xl },
   heading: { flexDirection: 'row', justifyContent: 'space-between' },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
@@ -274,6 +329,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  closeDisabled: { opacity: 0.45 },
   filters: { gap: spacing.sm },
   filter: {
     paddingHorizontal: spacing.lg,
@@ -282,32 +338,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   filterActive: { backgroundColor: colors.ink },
+  filterDisabled: { opacity: 0.62 },
   filterText: { ...typography.caption, color: colors.textSecondary },
   filterTextActive: { color: colors.surface },
-  actions: { flexDirection: 'row', gap: spacing.md },
-  action: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  actionText: { ...typography.h3, color: colors.brand },
-  shareButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  shareButtonText: { ...typography.body, color: colors.surface, fontWeight: '700' },
-  disabled: { opacity: 0.45 },
   notice: { padding: spacing.md, borderRadius: radii.input, backgroundColor: colors.brandSoft },
   noticeText: { ...typography.caption, color: colors.warningDark },
   record: {
@@ -330,4 +363,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   reaction: { ...typography.caption, color: colors.dangerDark },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
 });
