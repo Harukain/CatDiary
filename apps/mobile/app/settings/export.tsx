@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type ExportJobSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -21,10 +22,20 @@ import {
   type DataExportPhase,
 } from '../../src/features/exports/export-flow';
 import { shareDataExport } from '../../src/features/exports/share-export';
-import { Body, Card, ErrorText, Screen, SuccessText, Title } from '../../src/shared/ui/primitives';
+import {
+  Body,
+  Card,
+  ErrorText,
+  PrimaryButton,
+  Screen,
+  SuccessText,
+  TextButton,
+  Title,
+} from '../../src/shared/ui/primitives';
 
 export default function ExportSettingsRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, activeFamily } = useSession();
   const isAdmin = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const [format, setFormat] = useState<'JSON' | 'CSV'>('JSON');
@@ -36,6 +47,8 @@ export default function ExportSettingsRoute() {
   const [success, setSuccess] = useState('');
   const busy = phase !== 'idle';
   const canEditOptions = canEditDataExportOptions(phase);
+  const canGenerateExport = !busy && !!session && !!activeFamily;
+  const canShareExport = !busy && !!readyJob;
   const requestReturn = useCallback(() => {
     if (!busy) {
       router.back();
@@ -136,152 +149,160 @@ export default function ExportSettingsRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          testID="export.back.button"
-          accessibilityLabel="返回"
-          accessibilityHint={busy ? '导出进行中，点击会提示继续等待' : '返回上一页'}
-          onPress={requestReturn}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text testID="export.title" style={styles.navTitle}>
-          数据导出
-        </Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-          <Text style={styles.title}>带走属于你的数据</Text>
-          <Text style={styles.subtitle}>导出文件异步生成，完成后通过系统分享保存。</Text>
-        </View>
-        <Card>
-          <Title>导出格式</Title>
-          <View style={styles.options}>
-            <Option
-              testID="export.format.json"
-              label="JSON"
-              detail="结构完整，适合备份和迁移"
-              active={format === 'JSON'}
-              disabled={!canEditOptions}
-              onPress={() => updateFormat('JSON')}
-            />
-            <Option
-              testID="export.format.csv"
-              label="CSV"
-              detail="可使用表格工具查看"
-              active={format === 'CSV'}
-              disabled={!canEditOptions}
-              onPress={() => updateFormat('CSV')}
-            />
-          </View>
-          <Title>导出范围</Title>
-          <View style={styles.options}>
-            {isAdmin ? (
-              <Option
-                testID="export.scope.family"
-                label="整个家庭"
-                detail="猫咪、计划、任务、记录、医疗和照片元数据"
-                active={scope === 'FAMILY'}
-                disabled={!canEditOptions}
-                onPress={() => updateScope('FAMILY')}
-              />
-            ) : null}
-            <Option
-              testID="export.scope.personal"
-              label="仅我的数据"
-              detail="个人资料、本人记录、照片和通知偏好"
-              active={scope === 'PERSONAL'}
-              disabled={!canEditOptions}
-              onPress={() => updateScope('PERSONAL')}
-            />
-          </View>
-          {!canEditOptions ? (
-            <Text style={styles.lockedHint}>导出生成中，格式和范围已锁定。</Text>
-          ) : null}
-          {job ? (
-            <View testID="export.status.card" style={styles.status}>
-              <Ionicons
-                name={
-                  job.status === 'READY'
-                    ? 'checkmark-circle'
-                    : job.status === 'FAILED'
-                      ? 'alert-circle'
-                      : 'time-outline'
-                }
-                size={20}
-                color={
-                  job.status === 'READY'
-                    ? colors.successDark
-                    : job.status === 'FAILED'
-                      ? colors.dangerDark
-                      : colors.warningDark
-                }
-              />
-              <View>
-                <Text testID="export.status.text" style={styles.statusTitle}>
-                  {statusLabel(job.status)}
-                </Text>
-                {job.expiresAt ? (
-                  <Text style={styles.statusBody}>
-                    文件保留至 {new Date(job.expiresAt).toLocaleString('zh-CN')}
-                  </Text>
-                ) : null}
-              </View>
-              {busy ? <ActivityIndicator color={colors.brand} /> : null}
-            </View>
-          ) : null}
-          {success ? (
-            <View testID="export.ready.text">
-              <SuccessText>{success}</SuccessText>
-            </View>
-          ) : null}
-          {error ? <ErrorText>{error}</ErrorText> : null}
+      <View style={styles.flex}>
+        <View style={styles.nav}>
           <Pressable
-            testID="export.generate.button"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: busy || !session || !activeFamily }}
-            disabled={busy || !session || !activeFamily}
-            onPress={() => void start()}
-            style={({ pressed }) => [
-              styles.exportButton,
-              (busy || !session || !activeFamily) && styles.exportButtonDisabled,
-              pressed && styles.pressed,
-            ]}
+            testID="export.back.button"
+            accessibilityLabel="返回"
+            accessibilityHint={busy ? '导出进行中，点击会提示继续等待' : '返回上一页'}
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
           >
-            {busy ? <ActivityIndicator color={colors.surface} /> : null}
-            <Text style={styles.exportButtonText}>{dataExportButtonLabel(phase)}</Text>
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </Pressable>
-          {readyJob ? (
-            <Pressable
-              testID="export.share.button"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => void shareReadyExport()}
-              style={({ pressed }) => [
-                styles.shareButton,
-                busy && styles.exportButtonDisabled,
-                pressed && styles.pressed,
-              ]}
-            >
-              {phase === 'sharing' ? (
-                <ActivityIndicator color={colors.brand} />
-              ) : (
-                <Ionicons name="share-outline" size={18} color={colors.brand} />
-              )}
-              <Text style={styles.shareButtonText}>
-                {phase === 'sharing' ? dataExportButtonLabel(phase) : '分享导出文件'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </Card>
-        <View style={styles.notice}>
-          <Ionicons name="lock-closed-outline" size={20} color={colors.brand} />
-          <Body>普通成员不能导出全家庭数据。文件 7 天后自动删除，下载链接 10 分钟失效。</Body>
+          <Text testID="export.title" style={styles.navTitle}>
+            数据导出
+          </Text>
+          <View style={styles.back} />
         </View>
-      </ScrollView>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <Text style={styles.title}>带走属于你的数据</Text>
+            <Text style={styles.subtitle}>导出文件异步生成，完成后通过系统分享保存。</Text>
+          </View>
+          <Card>
+            <Title>导出格式</Title>
+            <View style={styles.options}>
+              <Option
+                testID="export.format.json"
+                label="JSON"
+                detail="结构完整，适合备份和迁移"
+                active={format === 'JSON'}
+                disabled={!canEditOptions}
+                onPress={() => updateFormat('JSON')}
+              />
+              <Option
+                testID="export.format.csv"
+                label="CSV"
+                detail="可使用表格工具查看"
+                active={format === 'CSV'}
+                disabled={!canEditOptions}
+                onPress={() => updateFormat('CSV')}
+              />
+            </View>
+            <Title>导出范围</Title>
+            <View style={styles.options}>
+              {isAdmin ? (
+                <Option
+                  testID="export.scope.family"
+                  label="整个家庭"
+                  detail="猫咪、计划、任务、记录、医疗和照片元数据"
+                  active={scope === 'FAMILY'}
+                  disabled={!canEditOptions}
+                  onPress={() => updateScope('FAMILY')}
+                />
+              ) : null}
+              <Option
+                testID="export.scope.personal"
+                label="仅我的数据"
+                detail="个人资料、本人记录、照片和通知偏好"
+                active={scope === 'PERSONAL'}
+                disabled={!canEditOptions}
+                onPress={() => updateScope('PERSONAL')}
+              />
+            </View>
+            {!canEditOptions ? (
+              <Text style={styles.lockedHint}>导出生成中，格式和范围已锁定。</Text>
+            ) : null}
+            {job ? (
+              <View testID="export.status.card" style={styles.status}>
+                <Ionicons
+                  name={
+                    job.status === 'READY'
+                      ? 'checkmark-circle'
+                      : job.status === 'FAILED'
+                        ? 'alert-circle'
+                        : 'time-outline'
+                  }
+                  size={20}
+                  color={
+                    job.status === 'READY'
+                      ? colors.successDark
+                      : job.status === 'FAILED'
+                        ? colors.dangerDark
+                        : colors.warningDark
+                  }
+                />
+                <View style={styles.statusCopy}>
+                  <Text testID="export.status.text" style={styles.statusTitle}>
+                    {statusLabel(job.status)}
+                  </Text>
+                  {job.expiresAt ? (
+                    <Text style={styles.statusBody}>
+                      文件保留至 {new Date(job.expiresAt).toLocaleString('zh-CN')}
+                    </Text>
+                  ) : null}
+                </View>
+                {busy ? <ActivityIndicator color={colors.brand} /> : null}
+              </View>
+            ) : null}
+            {success ? (
+              <View testID="export.ready.text">
+                <SuccessText>{success}</SuccessText>
+              </View>
+            ) : null}
+            {error ? <ErrorText>{error}</ErrorText> : null}
+          </Card>
+          <View style={styles.notice}>
+            <Ionicons name="lock-closed-outline" size={20} color={colors.brand} />
+            <Body>普通成员不能导出全家庭数据。文件 7 天后自动删除，下载链接 10 分钟失效。</Body>
+          </View>
+        </ScrollView>
+        <View
+          testID="export.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          {readyJob ? (
+            <PrimaryButton
+              testID="export.share.button"
+              label={phase === 'sharing' ? dataExportButtonLabel(phase) : '分享导出文件'}
+              busy={phase === 'sharing'}
+              disabled={!canShareExport}
+              onPress={() => void shareReadyExport()}
+            />
+          ) : (
+            <PrimaryButton
+              testID="export.generate.button"
+              label={dataExportButtonLabel(phase)}
+              busy={phase === 'queued' || phase === 'processing'}
+              disabled={!canGenerateExport}
+              onPress={() => void start()}
+            />
+          )}
+          {readyJob ? (
+            <TextButton
+              testID="export.generate.button"
+              label={busy ? '处理中，请等待' : '重新生成导出文件'}
+              disabled={!canGenerateExport}
+              onPress={() => void start()}
+            />
+          ) : null}
+          <TextButton
+            testID="export.return.button"
+            label={busy ? '处理中，请等待' : '返回上一页'}
+            disabled={busy}
+            onPress={requestReturn}
+          />
+        </View>
+      </View>
     </Screen>
   );
 }
@@ -340,10 +361,12 @@ function statusLabel(status: ExportJobSummary['status']) {
           : '文件已过期';
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h3, color: colors.ink },
-  content: { gap: spacing.xl, paddingBottom: 104 },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   options: { gap: spacing.sm },
@@ -372,6 +395,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.input,
     backgroundColor: colors.page,
   },
+  statusCopy: { flex: 1, gap: spacing.xs },
   statusTitle: { ...typography.h3, color: colors.ink },
   statusBody: { ...typography.caption, color: colors.textSecondary },
   notice: {
@@ -382,29 +406,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
     padding: spacing.lg,
   },
-  exportButton: {
-    minHeight: 48,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
-  exportButtonDisabled: { opacity: 0.72 },
-  exportButtonText: { ...typography.body, color: colors.surface, fontWeight: '700' },
-  shareButton: {
-    minHeight: 44,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  shareButtonText: { ...typography.body, color: colors.brand, fontWeight: '700' },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
