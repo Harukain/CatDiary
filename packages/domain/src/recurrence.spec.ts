@@ -39,6 +39,19 @@ describe('generateOccurrences', () => {
     ]);
   });
 
+  it('generates a one-off occurrence when the scheduled minute is on the next local day', () => {
+    const result = generateOccurrences({
+      startAt: new Date('2026-07-17T16:22:00.000Z'),
+      timezone: 'Asia/Shanghai',
+      localTime: '00:22',
+      rule: { frequency: 'once' },
+      from: new Date('2026-07-17T15:52:00.000Z'),
+      to: new Date('2026-07-24T15:52:00.000Z'),
+    });
+
+    expect(result.map((value) => value.toISOString())).toEqual(['2026-07-17T16:22:00.000Z']);
+  });
+
   it('does not clamp a monthly day into shorter months', () => {
     const result = generateOccurrences({
       startAt: new Date('2026-01-31T00:00:00.000Z'),

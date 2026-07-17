@@ -63,6 +63,7 @@ const phone = `137${suffix}`;
 const title = `计划任务记录闭环-${suffix}`;
 const note = `plan-task-record-flow-${suffix}`;
 const scheduledAt = new Date(Date.now() + 30 * 60_000);
+scheduledAt.setSeconds(0, 0);
 const taskScope = localDateKey(scheduledAt) === localDateKey(new Date()) ? 'today' : 'upcoming';
 
 const session = await login(phone, 'Plan task record flow');
@@ -90,7 +91,7 @@ const plan = await request('/plans', {
     type: 'LITTER',
     title,
     detail: '集成测试：计划生成任务，任务完成后生成记录',
-    startAt: new Date().toISOString(),
+    startAt: scheduledAt.toISOString(),
     localTime: localTime(scheduledAt),
     recurrenceRule: { frequency: 'once' },
   }),
