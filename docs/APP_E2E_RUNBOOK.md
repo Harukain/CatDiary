@@ -32,6 +32,8 @@ OPPO/一加/ColorOS 类设备可能会在 Maestro 首次运行时弹出 `dev.mob
 pnpm e2e:maestro:no-reinstall
 ```
 
+如果点击“继续安装”后系统要求“输入锁屏密码”，必须由设备持有人在手机上输入锁屏密码并完成安装确认；脚本、ADB 和 Codex 都不应代输手机锁屏密码。密码确认完成后，重新执行 `pnpm e2e:maestro:preflight`，再使用 `pnpm e2e:maestro:no-reinstall` 运行流程。若手机停留在该系统密码页，Maestro 会长时间无输出，并不代表猫伴日记 App 崩溃。
+
 该命令会复用已安装的 Maestro driver/server，避免反复触发厂商安装页。如果仍然卡在 `Launch app "com.haruka.catdiary"`，或日志出现 `DEADLINE_EXCEEDED`、`Couldn't close Maestro Android driver due to gRPC timeout`，说明当前设备的厂商安全机制仍阻断 Maestro driver 通道。此时不要把问题归因到猫伴日记代码，应改用 Pixel/三星/Android Emulator 跑 Maestro，或用 `pnpm android:preflight -- --fix --launch` 加 adb/手工路径完成真机截图与 logcat 验收。
 
 运行前提：
