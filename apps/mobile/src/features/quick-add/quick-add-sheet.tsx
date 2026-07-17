@@ -19,6 +19,7 @@ import {
   type QuickAddActionPath,
   visibleQuickAddActionsByPlacement,
 } from './quick-add-actions';
+import { quickAddScrollBottomPadding, quickAddSheetMaxHeight } from './quick-add-sheet-layout';
 
 export function QuickAddSheet({
   visible,
@@ -97,7 +98,13 @@ export function QuickAddSheet({
               <Ionicons name="close" size={20} color={colors.ink} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.actions} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.actions,
+              { paddingBottom: quickAddScrollBottomPadding(insets.bottom) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>常用记录</Text>
               <Text style={styles.sectionHint}>保存前会再次确认归属</Text>
@@ -185,7 +192,7 @@ const styles = StyleSheet.create({
   modal: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.overlay },
   sheet: {
-    maxHeight: '82%',
+    maxHeight: quickAddSheetMaxHeight,
     borderTopLeftRadius: radii.navigation,
     borderTopRightRadius: radii.navigation,
     backgroundColor: colors.page,
