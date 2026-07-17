@@ -117,6 +117,7 @@ async function main() {
       'verify-preferences-account.mjs',
       'verify-session-push-tokens.mjs',
       'verify-family-reminder-boundary.mjs',
+      'verify-plan-task-record-flow.mjs',
       'verify-task-concurrency.mjs',
       'verify-api-performance.mjs',
       'verify-exports.mjs',
