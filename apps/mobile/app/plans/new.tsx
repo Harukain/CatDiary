@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -50,8 +54,10 @@ type Frequency = (typeof frequencies)[number]['value'];
 
 export default function NewPlanRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const { session, activeFamily } = useSession();
+  const scrollRef = useRef<ScrollView>(null);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [petId, setPetId] = useState<string | null>(null);
@@ -69,6 +75,7 @@ export default function NewPlanRoute() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
   const allowLeave = useRef(false);
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
@@ -140,6 +147,15 @@ export default function NewPlanRoute() {
       (type === 'LITTER' || !!petId),
     [localTime, petId, title, type],
   );
+  const submitHint = useMemo(() => {
+    if (!title.trim()) return '填写计划名称后才能保存';
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(localTime))
+      return '提醒时间需使用 24 小时格式，例如 08:30';
+    if (type !== 'LITTER' && !petId) {
+      return pets.length ? '请选择归属猫咪' : '先添加猫咪后才能创建单猫计划';
+    }
+    return '';
+  }, [localTime, petId, pets.length, title, type]);
   const currentSnapshot = formSnapshot({
     petId,
     assigneeId,
@@ -165,6 +181,23 @@ export default function NewPlanRoute() {
     });
     return () => subscription.remove();
   });
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+  function scrollToFieldOffset(y: number) {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y, animated: true });
+    }, 120);
+  }
   async function submit() {
     if (!session || !activeFamily || !valid || busy) return;
     setBusy(true);
@@ -290,214 +323,247 @@ export default function NewPlanRoute() {
         <Text style={styles.navTitle}>{planId ? '编辑照顾计划' : '新建照顾计划'}</Text>
         <View style={styles.back} />
       </View>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {!canManage ? (
-          <Card>
-            <Title>无管理权限</Title>
-            <Body>只有家庭管理员可以创建长期照顾计划。</Body>
-          </Card>
-        ) : loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : loadError ? (
-          <Card>
-            <Title>{planId ? '计划无法打开' : '建档信息加载失败'}</Title>
-            <ErrorText>{loadError}</ErrorText>
-            <PrimaryButton label="重新加载" onPress={() => setReloadKey((value) => value + 1)} />
-            <TextButton label="返回" onPress={returnToPlans} />
-          </Card>
-        ) : (
-          <Card>
-            <Title>要提醒什么？</Title>
-            <View style={styles.grid}>
-              {planTypes.map((item) => (
-                <Pressable
-                  key={item.value}
-                  testID={`plan.type.${item.value}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: type === item.value }}
-                  onPress={() => {
-                    setType(item.value);
-                    setTitle(item.title);
-                  }}
-                  style={[styles.choice, type === item.value && styles.choiceActive]}
-                >
-                  <Text style={[styles.choiceText, type === item.value && styles.choiceTextActive]}>
-                    {item.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={styles.field}>
-              <Text style={styles.label}>负责人</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.petRow}
-              >
-                <Pressable
-                  testID="plan.assignee.all"
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: assigneeId === null }}
-                  onPress={() => setAssigneeId(null)}
-                  style={[styles.petChip, assigneeId === null && styles.petChipActive]}
-                >
-                  <Text
-                    style={[styles.petChipText, assigneeId === null && styles.petChipTextActive]}
-                  >
-                    家庭成员共同负责
-                  </Text>
-                </Pressable>
-                {members.map((member) => (
-                  <Pressable
-                    key={member.id}
-                    testID="plan.assignee.member"
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: assigneeId === member.user.id }}
-                    onPress={() => setAssigneeId(member.user.id)}
-                    style={[styles.petChip, assigneeId === member.user.id && styles.petChipActive]}
-                  >
-                    <Text
-                      style={[
-                        styles.petChipText,
-                        assigneeId === member.user.id && styles.petChipTextActive,
-                      ]}
-                    >
-                      {member.user.displayName ?? '家庭成员'}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-            <View style={styles.field}>
-              <Text style={styles.label}>归属猫咪</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.petRow}
-              >
-                {type === 'LITTER' ? (
-                  <Pressable
-                    testID="plan.pet.public"
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: petId === null }}
-                    onPress={() => setPetId(null)}
-                    style={[styles.petChip, petId === null && styles.petChipActive]}
-                  >
-                    <Text style={[styles.petChipText, petId === null && styles.petChipTextActive]}>
-                      公共任务
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {pets.map((pet) => (
-                  <Pressable
-                    key={pet.id}
-                    testID="plan.pet.item"
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: petId === pet.id }}
-                    onPress={() => setPetId(pet.id)}
-                    style={[styles.petChip, petId === pet.id && styles.petChipActive]}
-                  >
-                    <Text
-                      style={[styles.petChipText, petId === pet.id && styles.petChipTextActive]}
-                    >
-                      {pet.name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-            <Field
-              testID="plan.title.input"
-              label="计划名称"
-              value={title}
-              maxLength={80}
-              onChangeText={setTitle}
-            />
-            <Field
-              testID="plan.detail.input"
-              label="说明"
-              value={detail}
-              maxLength={500}
-              placeholder="选填，例如剂量或注意事项"
-              onChangeText={setDetail}
-            />
-            <Field
-              testID="plan.local-time.input"
-              label="提醒时间"
-              value={localTime}
-              maxLength={5}
-              keyboardType="numbers-and-punctuation"
-              placeholder="HH:mm"
-              onChangeText={setLocalTime}
-            />
-            <View style={styles.field}>
-              <Text style={styles.label}>重复</Text>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {!canManage ? (
+            <Card>
+              <Title>无管理权限</Title>
+              <Body>只有家庭管理员可以创建长期照顾计划。</Body>
+            </Card>
+          ) : loading ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : loadError ? (
+            <Card>
+              <Title>{planId ? '计划无法打开' : '建档信息加载失败'}</Title>
+              <ErrorText>{loadError}</ErrorText>
+              <PrimaryButton label="重新加载" onPress={() => setReloadKey((value) => value + 1)} />
+              <TextButton label="返回" onPress={returnToPlans} />
+            </Card>
+          ) : (
+            <Card>
+              <Title>要提醒什么？</Title>
               <View style={styles.grid}>
-                {frequencies.map((item) => (
+                {planTypes.map((item) => (
                   <Pressable
                     key={item.value}
-                    testID={`plan.frequency.${item.value}`}
+                    testID={`plan.type.${item.value}`}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: frequency === item.value }}
-                    onPress={() => setFrequency(item.value)}
-                    style={[styles.choice, frequency === item.value && styles.choiceActive]}
+                    accessibilityState={{ selected: type === item.value }}
+                    onPress={() => {
+                      setType(item.value);
+                      setTitle(item.title);
+                    }}
+                    style={[styles.choice, type === item.value && styles.choiceActive]}
                   >
                     <Text
-                      style={[
-                        styles.choiceText,
-                        frequency === item.value && styles.choiceTextActive,
-                      ]}
+                      style={[styles.choiceText, type === item.value && styles.choiceTextActive]}
                     >
                       {item.label}
                     </Text>
                   </Pressable>
                 ))}
               </View>
-            </View>
-            {existingPlan ? (
               <View style={styles.field}>
-                <Text style={styles.label}>保存后的未来任务</Text>
-                <View style={styles.grid}>
+                <Text style={styles.label}>负责人</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.petRow}
+                >
                   <Pressable
+                    testID="plan.assignee.all"
                     accessibilityRole="button"
-                    accessibilityState={{ selected: futureTaskPolicy === 'keep' }}
-                    onPress={() => setFutureTaskPolicy('keep')}
-                    style={[styles.choice, futureTaskPolicy === 'keep' && styles.choiceActive]}
+                    accessibilityState={{ selected: assigneeId === null }}
+                    onPress={() => setAssigneeId(null)}
+                    style={[styles.petChip, assigneeId === null && styles.petChipActive]}
                   >
                     <Text
-                      style={[
-                        styles.choiceText,
-                        futureTaskPolicy === 'keep' && styles.choiceTextActive,
-                      ]}
+                      style={[styles.petChipText, assigneeId === null && styles.petChipTextActive]}
                     >
-                      保留已有任务
+                      家庭成员共同负责
                     </Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: futureTaskPolicy === 'regenerate' }}
-                    onPress={() => setFutureTaskPolicy('regenerate')}
-                    style={[
-                      styles.choice,
-                      futureTaskPolicy === 'regenerate' && styles.choiceActive,
-                    ]}
-                  >
-                    <Text
+                  {members.map((member) => (
+                    <Pressable
+                      key={member.id}
+                      testID="plan.assignee.member"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: assigneeId === member.user.id }}
+                      onPress={() => setAssigneeId(member.user.id)}
                       style={[
-                        styles.choiceText,
-                        futureTaskPolicy === 'regenerate' && styles.choiceTextActive,
+                        styles.petChip,
+                        assigneeId === member.user.id && styles.petChipActive,
                       ]}
                     >
-                      重新生成未来任务
-                    </Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.policyHint}>
-                  仅当修改时间或重复规则时需要重新生成；已完成的历史不会受影响。
-                </Text>
+                      <Text
+                        style={[
+                          styles.petChipText,
+                          assigneeId === member.user.id && styles.petChipTextActive,
+                        ]}
+                      >
+                        {member.user.displayName ?? '家庭成员'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </View>
-            ) : null}
-            {error ? <ErrorText>{error}</ErrorText> : null}
+              <View style={styles.field}>
+                <Text style={styles.label}>归属猫咪</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.petRow}
+                >
+                  {type === 'LITTER' ? (
+                    <Pressable
+                      testID="plan.pet.public"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: petId === null }}
+                      onPress={() => setPetId(null)}
+                      style={[styles.petChip, petId === null && styles.petChipActive]}
+                    >
+                      <Text
+                        style={[styles.petChipText, petId === null && styles.petChipTextActive]}
+                      >
+                        公共任务
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {pets.map((pet) => (
+                    <Pressable
+                      key={pet.id}
+                      testID="plan.pet.item"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: petId === pet.id }}
+                      onPress={() => setPetId(pet.id)}
+                      style={[styles.petChip, petId === pet.id && styles.petChipActive]}
+                    >
+                      <Text
+                        style={[styles.petChipText, petId === pet.id && styles.petChipTextActive]}
+                      >
+                        {pet.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+              <Field
+                testID="plan.title.input"
+                label="计划名称"
+                value={title}
+                maxLength={80}
+                onFocus={() => scrollToFieldOffset(260)}
+                onChangeText={setTitle}
+              />
+              <Field
+                testID="plan.detail.input"
+                label="说明"
+                value={detail}
+                maxLength={500}
+                placeholder="选填，例如剂量或注意事项"
+                onFocus={() => scrollToFieldOffset(380)}
+                onChangeText={setDetail}
+              />
+              <Field
+                testID="plan.local-time.input"
+                label="提醒时间"
+                value={localTime}
+                maxLength={5}
+                keyboardType="numbers-and-punctuation"
+                placeholder="HH:mm"
+                onFocus={() => scrollToFieldOffset(500)}
+                onChangeText={setLocalTime}
+              />
+              <View style={styles.field}>
+                <Text style={styles.label}>重复</Text>
+                <View style={styles.grid}>
+                  {frequencies.map((item) => (
+                    <Pressable
+                      key={item.value}
+                      testID={`plan.frequency.${item.value}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: frequency === item.value }}
+                      onPress={() => setFrequency(item.value)}
+                      style={[styles.choice, frequency === item.value && styles.choiceActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceText,
+                          frequency === item.value && styles.choiceTextActive,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              {existingPlan ? (
+                <View style={styles.field}>
+                  <Text style={styles.label}>保存后的未来任务</Text>
+                  <View style={styles.grid}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: futureTaskPolicy === 'keep' }}
+                      onPress={() => setFutureTaskPolicy('keep')}
+                      style={[styles.choice, futureTaskPolicy === 'keep' && styles.choiceActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceText,
+                          futureTaskPolicy === 'keep' && styles.choiceTextActive,
+                        ]}
+                      >
+                        保留已有任务
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: futureTaskPolicy === 'regenerate' }}
+                      onPress={() => setFutureTaskPolicy('regenerate')}
+                      style={[
+                        styles.choice,
+                        futureTaskPolicy === 'regenerate' && styles.choiceActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceText,
+                          futureTaskPolicy === 'regenerate' && styles.choiceTextActive,
+                        ]}
+                      >
+                        重新生成未来任务
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.policyHint}>
+                    仅当修改时间或重复规则时需要重新生成；已完成的历史不会受影响。
+                  </Text>
+                </View>
+              ) : null}
+              {existingPlan ? (
+                <TextButton label="删除照顾计划" danger disabled={busy} onPress={confirmDelete} />
+              ) : null}
+            </Card>
+          )}
+        </ScrollView>
+        {canManage && !loading && !loadError && !keyboardVisible ? (
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+            ]}
+          >
+            {error ? <ErrorText testID="plan.error">{error}</ErrorText> : null}
+            {submitHint ? <Text style={styles.footerHint}>{submitHint}</Text> : null}
             <PrimaryButton
               testID="plan.submit.button"
               label={existingPlan ? '保存计划' : '保存并生成任务'}
@@ -505,12 +571,14 @@ export default function NewPlanRoute() {
               disabled={!valid}
               onPress={submit}
             />
-            {existingPlan ? (
-              <TextButton label="删除照顾计划" danger disabled={busy} onPress={confirmDelete} />
-            ) : null}
-          </Card>
-        )}
-      </ScrollView>
+            <TextButton
+              label={busy ? '保存中，请等待' : '取消'}
+              disabled={busy}
+              onPress={requestReturn}
+            />
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -532,10 +600,11 @@ function formSnapshot(input: {
   return JSON.stringify(input);
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
-  content: { paddingBottom: spacing.huge },
+  content: { paddingBottom: 148 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: {
     minWidth: '22%',
@@ -566,4 +635,13 @@ const styles = StyleSheet.create({
   petChipText: { fontSize: 13, color: colors.textSecondary },
   petChipTextActive: { color: colors.surface, fontWeight: '600' },
   policyHint: { ...typography.caption, color: colors.textSecondary },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  footerHint: { ...typography.caption, color: colors.warningDark },
 });
