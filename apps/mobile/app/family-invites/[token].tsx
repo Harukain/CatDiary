@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { colors } from '@cat-diary/design-tokens';
 import { authApi, AuthApiError } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
@@ -16,23 +17,54 @@ import {
 
 export default function AcceptInviteRoute() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token: string }>();
-  const { session, addFamily } = useSession();
+  const { token } = useLocalSearchParams<{ token?: string | string[] }>();
+  const { restoring, session, addFamily } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  if (!session)
+  const inviteToken = Array.isArray(token) ? token[0] : token;
+  const invitePath = inviteToken ? `/family-invites/${encodeURIComponent(inviteToken)}` : '/';
+  const canAccept = !!session && !!inviteToken && !busy;
+  if (restoring) {
     return (
-      <Redirect
-        href={{ pathname: '/(auth)/login', params: { next: `/family-invites/${token}` } }}
-      />
+      <Screen>
+        <BrandHeader title="家庭邀请" subtitle="正在恢复登录状态" />
+        <Card testID="family-invite.restoring.card">
+          <Title>正在确认账号</Title>
+          <Body>恢复完成后再处理家庭邀请，避免把邀请接受到错误账号下。</Body>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      </Screen>
     );
+  }
+  if (!inviteToken) {
+    return (
+      <Screen>
+        <BrandHeader title="家庭邀请" subtitle="加入后可共同完成任务并记录猫咪日常" />
+        <Card testID="family-invite.invalid-token.card">
+          <Title>邀请链接不可用</Title>
+          <Body>当前链接缺少邀请码。请让家庭管理员重新发送邀请链接。</Body>
+          <TextButton
+            testID="family-invite.invalid-token.return.button"
+            label="返回首页"
+            onPress={() => router.replace('/')}
+          />
+        </Card>
+      </Screen>
+    );
+  }
+  if (!session)
+    return <Redirect href={{ pathname: '/(auth)/login', params: { next: invitePath } }} />;
 
   async function accept() {
-    if (!token || busy) return;
+    if (!session) {
+      setError('登录状态已失效，请重新登录后再试');
+      return;
+    }
+    if (!canAccept) return;
     setBusy(true);
     setError('');
     try {
-      const family = await authApi.acceptInvite(session!.accessToken, token);
+      const family = await authApi.acceptInvite(session.accessToken, inviteToken);
       addFamily(family);
       router.replace('/(tabs)');
     } catch (cause) {
@@ -59,11 +91,13 @@ export default function AcceptInviteRoute() {
           testID="family-invite.accept.button"
           label="接受邀请"
           busy={busy}
+          disabled={!canAccept}
           onPress={accept}
         />
         <TextButton
           testID="family-invite.dismiss.button"
           label="暂不加入"
+          disabled={busy}
           onPress={() => router.replace('/')}
         />
       </Card>
