@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type PlanSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -29,36 +30,58 @@ type Scope = 'enabled' | 'paused';
 
 export default function PlansRoute() {
   const router = useRouter();
-  const { session, activeFamily } = useSession();
+  const insets = useSafeAreaInsets();
+  const { restoring, session, activeFamily } = useSession();
   const [scope, setScope] = useState<Scope>('enabled');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
+  const contextUnavailable = !restoring && (!session || !activeFamily);
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const actionBusy = !!busyId;
+  const interactionDisabled = actionBusy || loading || contextUnavailable;
+  const canCreate = !!session && !!activeFamily && canManage && !loading && !actionBusy;
 
-  const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
-    setLoading(true);
-    setError('');
-    try {
-      const [nextPlans, nextPets] = await Promise.all([
-        authApi.listPlans(session.accessToken, activeFamily.id, scope === 'enabled'),
-        authApi.listPets(session.accessToken, activeFamily.id),
-      ]);
-      setPlans(nextPlans);
-      setPets(nextPets);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '照顾计划加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeFamily, scope, session]);
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) return;
+      if (!session || !activeFamily) {
+        if (!shouldApply()) return;
+        setPlans([]);
+        setPets([]);
+        setLoading(false);
+        setError('');
+        return;
+      }
+      if (!shouldApply()) return;
+      setLoading(true);
+      setError('');
+      try {
+        const [nextPlans, nextPets] = await Promise.all([
+          authApi.listPlans(session.accessToken, activeFamily.id, scope === 'enabled'),
+          authApi.listPets(session.accessToken, activeFamily.id),
+        ]);
+        if (!shouldApply()) return;
+        setPlans(nextPlans);
+        setPets(nextPets);
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setError(cause instanceof Error ? cause.message : '照顾计划加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, restoring, scope, session],
+  );
   useFocusEffect(
     useCallback(() => {
-      void load();
+      let active = true;
+      void load(() => active);
+      return () => {
+        active = false;
+      };
     }, [load]),
   );
 
@@ -84,6 +107,7 @@ export default function PlansRoute() {
   }, [actionBusy, requestReturn]);
 
   function requestScope(nextScope: Scope) {
+    if (loading || contextUnavailable) return;
     if (actionBusy) {
       Alert.alert('照顾计划正在处理', '请等待当前暂停或恢复操作完成，再切换计划列表。', [
         { text: '继续等待', style: 'cancel' },
@@ -93,6 +117,7 @@ export default function PlansRoute() {
     setScope(nextScope);
   }
   function requestCreate() {
+    if (!canManage || loading || contextUnavailable) return;
     if (actionBusy) {
       Alert.alert('照顾计划正在处理', '请等待当前暂停或恢复操作完成，再新建照顾计划。', [
         { text: '继续等待', style: 'cancel' },
@@ -151,121 +176,168 @@ export default function PlansRoute() {
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={requestReturn} style={styles.back}>
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text style={styles.navTitle}>照顾计划</Text>
-        {canManage ? (
+      <View style={styles.flex}>
+        <View style={styles.nav}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="新建照顾计划"
-            accessibilityHint={
-              actionBusy ? '照顾计划处理中，点击会提示继续等待' : '创建新的照顾计划'
-            }
-            onPress={requestCreate}
-            style={[styles.newButton, actionBusy && styles.newButtonBusy]}
+            accessibilityLabel="返回"
+            onPress={requestReturn}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
           >
-            <Ionicons name="add" size={21} color={colors.brand} />
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </Pressable>
-        ) : (
-          <View style={styles.newButton} />
-        )}
-      </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View>
-          <Text style={styles.title}>长期照顾计划</Text>
-          <Text style={styles.subtitle}>暂停只影响未来任务，不会删除已经发生的记录。</Text>
+          <Text testID="plans.title" style={styles.navTitle}>
+            照顾计划
+          </Text>
+          <View style={styles.back} />
         </View>
-        <View style={styles.segment}>
-          <ScopeButton
-            active={scope === 'enabled'}
-            label="进行中"
-            busy={actionBusy}
-            onPress={() => requestScope('enabled')}
-          />
-          <ScopeButton
-            active={scope === 'paused'}
-            label="已暂停"
-            busy={actionBusy}
-            onPress={() => requestScope('paused')}
-          />
-        </View>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : plans.length ? (
-          <View style={styles.list}>
-            {plans.map((plan) => (
-              <Card key={plan.id}>
-                <View style={styles.planTop}>
-                  <Pressable
-                    accessibilityRole={canManage ? 'button' : undefined}
-                    accessibilityLabel={canManage ? `编辑${plan.title}` : undefined}
-                    accessibilityHint={
-                      actionBusy ? '照顾计划处理中，点击会提示继续等待' : undefined
-                    }
-                    disabled={!canManage}
-                    onPress={() => requestEdit(plan)}
-                    style={({ pressed }) => [
-                      styles.planHeading,
-                      actionBusy && styles.planHeadingBusy,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.planTitle}>{plan.title}</Text>
-                    <Text style={styles.planMeta}>
-                      {petName(plan, pets)} · {typeLabel(plan.recordType)} · {plan.localTime}
-                    </Text>
-                  </Pressable>
-                  <View
-                    style={[styles.badge, plan.enabled ? styles.activeBadge : styles.pausedBadge]}
-                  >
-                    <Text
-                      style={[
-                        styles.badgeText,
-                        plan.enabled ? styles.activeText : styles.pausedText,
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View>
+            <Text style={styles.title}>长期照顾计划</Text>
+            <Text style={styles.subtitle}>暂停只影响未来任务，不会删除已经发生的记录。</Text>
+          </View>
+          <View style={styles.segment}>
+            <ScopeButton
+              active={scope === 'enabled'}
+              label="进行中"
+              testID="plans.scope.enabled"
+              disabled={interactionDisabled}
+              onPress={() => requestScope('enabled')}
+            />
+            <ScopeButton
+              active={scope === 'paused'}
+              label="已暂停"
+              testID="plans.scope.paused"
+              disabled={interactionDisabled}
+              onPress={() => requestScope('paused')}
+            />
+          </View>
+          {restoring || loading ? (
+            <View testID="plans.loading" style={styles.stateCard}>
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在整理照顾计划。</Body>
+            </View>
+          ) : contextUnavailable ? (
+            <Card testID="plans.context-empty">
+              <Title>缺少家庭上下文</Title>
+              <Body>请返回首页确认当前账号和家庭，再重新进入照顾计划。</Body>
+            </Card>
+          ) : error ? (
+            <Card testID="plans.error.card">
+              <ErrorText testID="plans.error.text">{error}</ErrorText>
+              <Body>可以重新加载计划列表。暂停、恢复等操作不会因为本次加载失败而自动重试。</Body>
+            </Card>
+          ) : plans.length ? (
+            <View style={styles.list}>
+              {plans.map((plan) => (
+                <Card key={plan.id}>
+                  <View style={styles.planTop}>
+                    <Pressable
+                      accessibilityRole={canManage ? 'button' : undefined}
+                      accessibilityLabel={canManage ? `编辑${plan.title}` : undefined}
+                      accessibilityHint={
+                        actionBusy ? '照顾计划处理中，点击会提示继续等待' : undefined
+                      }
+                      accessibilityState={{ disabled: !canManage || actionBusy }}
+                      disabled={!canManage || actionBusy}
+                      onPress={() => requestEdit(plan)}
+                      style={({ pressed }) => [
+                        styles.planHeading,
+                        actionBusy && styles.planHeadingBusy,
+                        pressed && styles.pressed,
                       ]}
                     >
-                      {plan.enabled ? '进行中' : '已暂停'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.recurrence}>{recurrenceLabel(plan)}</Text>
-                {plan.detail ? <Text style={styles.detail}>{plan.detail}</Text> : null}
-                {canManage ? (
-                  busyId === plan.id ? (
-                    <ActivityIndicator color={colors.brand} />
-                  ) : (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => requestToggle(plan)}
-                      style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}
-                    >
-                      <Text style={styles.toggleText}>
-                        {plan.enabled ? '暂停计划' : '恢复计划'}
+                      <Text style={styles.planTitle}>{plan.title}</Text>
+                      <Text style={styles.planMeta}>
+                        {petName(plan, pets)} · {typeLabel(plan.recordType)} · {plan.localTime}
                       </Text>
                     </Pressable>
-                  )
-                ) : null}
-              </Card>
-            ))}
-          </View>
-        ) : (
-          <Card>
-            <Title>{scope === 'enabled' ? '还没有进行中的计划' : '没有已暂停的计划'}</Title>
-            <Body>
-              {scope === 'enabled'
-                ? '创建疫苗、驱虫、用药或铲屎计划后，系统会生成未来 7 天任务。'
-                : '暂停中的计划会保留在这里，随时可以恢复。'}
-            </Body>
-            {canManage && scope === 'enabled' ? (
-              <PrimaryButton label="新建照顾计划" disabled={actionBusy} onPress={requestCreate} />
-            ) : null}
-          </Card>
-        )}
-        <TextButton label={actionBusy ? '处理中，请等待' : '返回任务'} onPress={requestReturn} />
-      </ScrollView>
+                    <View
+                      style={[styles.badge, plan.enabled ? styles.activeBadge : styles.pausedBadge]}
+                    >
+                      <Text
+                        style={[
+                          styles.badgeText,
+                          plan.enabled ? styles.activeText : styles.pausedText,
+                        ]}
+                      >
+                        {plan.enabled ? '进行中' : '已暂停'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.recurrence}>{recurrenceLabel(plan)}</Text>
+                  {plan.detail ? <Text style={styles.detail}>{plan.detail}</Text> : null}
+                  {canManage ? (
+                    busyId === plan.id ? (
+                      <ActivityIndicator color={colors.brand} />
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: actionBusy }}
+                        disabled={actionBusy}
+                        onPress={() => requestToggle(plan)}
+                        style={({ pressed }) => [
+                          styles.toggle,
+                          actionBusy && styles.muted,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.toggleText}>
+                          {plan.enabled ? '暂停计划' : '恢复计划'}
+                        </Text>
+                      </Pressable>
+                    )
+                  ) : null}
+                </Card>
+              ))}
+            </View>
+          ) : (
+            <Card testID="plans.empty.card">
+              <Title>{scope === 'enabled' ? '还没有进行中的计划' : '没有已暂停的计划'}</Title>
+              <Body>
+                {scope === 'enabled'
+                  ? '创建疫苗、驱虫、用药或铲屎计划后，系统会生成未来 7 天任务。'
+                  : '暂停中的计划会保留在这里，随时可以恢复。'}
+              </Body>
+              {!canManage ? <Body>家庭成员可以查看任务和完成任务，计划由管理员维护。</Body> : null}
+            </Card>
+          )}
+        </ScrollView>
+        <View
+          testID="plans.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          {error && !contextUnavailable ? (
+            <PrimaryButton
+              label="重新加载计划"
+              testID="plans.reload.button"
+              busy={loading}
+              disabled={actionBusy}
+              onPress={() => void load()}
+            />
+          ) : (
+            <PrimaryButton
+              label={canManage ? '新建照顾计划' : '仅管理员可新建计划'}
+              testID="plans.create.button"
+              disabled={!canCreate}
+              onPress={requestCreate}
+            />
+          )}
+          <TextButton
+            label={actionBusy ? '处理中，请等待' : '返回任务'}
+            testID="plans.return.button"
+            onPress={requestReturn}
+          />
+        </View>
+      </View>
     </Screen>
   );
 }
@@ -273,21 +345,25 @@ export default function PlansRoute() {
 function ScopeButton({
   active,
   label,
-  busy,
+  testID,
+  disabled,
   onPress,
 }: {
   active: boolean;
   label: string;
-  busy?: boolean;
+  testID?: string;
+  disabled?: boolean;
   onPress(): void;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityHint={busy ? '照顾计划处理中，点击会提示继续等待' : undefined}
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      accessibilityHint={disabled ? '照顾计划暂不可切换' : undefined}
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.segmentButton, active && styles.segmentButtonActive, busy && styles.muted]}
+      style={[styles.segmentButton, active && styles.segmentButtonActive, disabled && styles.muted]}
     >
       <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
     </Pressable>
@@ -326,12 +402,12 @@ function recurrenceLabel(plan: PlanSummary) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h3, color: colors.ink },
-  newButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  newButtonBusy: { opacity: 0.55 },
-  content: { gap: spacing.xl, paddingBottom: spacing.huge },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
   segment: {
@@ -351,6 +427,13 @@ const styles = StyleSheet.create({
   segmentButtonActive: { backgroundColor: colors.brandSoft },
   segmentText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   segmentTextActive: { color: colors.brand },
+  stateCard: {
+    padding: spacing.xl,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   list: { gap: spacing.md },
   muted: { opacity: 0.55 },
   planTop: {
@@ -373,5 +456,13 @@ const styles = StyleSheet.create({
   detail: { ...typography.secondary, color: colors.textSecondary },
   toggle: { minHeight: 44, alignItems: 'flex-start', justifyContent: 'center' },
   toggleText: { ...typography.caption, color: colors.warningDark, fontWeight: '700' },
+  footer: {
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    gap: spacing.xs,
+  },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
