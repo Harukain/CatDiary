@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,11 +25,13 @@ import { useSession } from '../../src/features/auth/session-provider';
 import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import {
   Card,
+  Body,
   ErrorText,
   Field,
   PrimaryButton,
   Screen,
   TextButton,
+  Title,
 } from '../../src/shared/ui/primitives';
 import {
   buildRecordData,
@@ -60,33 +62,80 @@ const manualTypes = new Set<string>([
 ]);
 
 export default function RecordDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : (params.id ?? '');
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
+  const mountedRef = useRef(true);
   const [record, setRecord] = useState<RecordSummary>();
   const [form, setForm] = useState<RecordFormValue>({ first: '', second: '', blood: false });
   const [occurredDate, setOccurredDate] = useState('');
   const [occurredTime, setOccurredTime] = useState('');
   const [note, setNote] = useState('');
   const [abnormal, setAbnormal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+  const applyRecord = useCallback((item: RecordSummary) => {
+    setRecord(item);
+    setForm(initialRecordForm(item));
+    setOccurredDate(datePart(item.occurredAt));
+    setOccurredTime(timePart(item.occurredAt));
+    setNote(item.note ?? '');
+    setAbnormal(item.abnormal);
+  }, []);
+  const clearRecordState = useCallback(() => {
+    setRecord(undefined);
+    setForm({ first: '', second: '', blood: false });
+    setOccurredDate('');
+    setOccurredTime('');
+    setNote('');
+    setAbnormal(false);
+  }, []);
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+      if (!session || !activeFamily || !id) {
+        if (!shouldApply()) return;
+        clearRecordState();
+        setError('');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const item = await authApi.getRecord(session.accessToken, activeFamily.id, id);
+        if (!shouldApply()) return;
+        applyRecord(item);
+      } catch (cause) {
+        if (!shouldApply()) return;
+        clearRecordState();
+        setError(cause instanceof Error ? cause.message : '记录加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, applyRecord, clearRecordState, id, restoring, session],
+  );
   useEffect(() => {
-    if (!session || !activeFamily || !id) return;
-    void authApi
-      .getRecord(session.accessToken, activeFamily.id, id)
-      .then((item) => {
-        setRecord(item);
-        setForm(initialRecordForm(item));
-        setOccurredDate(datePart(item.occurredAt));
-        setOccurredTime(timePart(item.occurredAt));
-        setNote(item.note ?? '');
-        setAbnormal(item.abnormal);
-      })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : '记录加载失败'));
-  }, [activeFamily, id, session]);
+    let mounted = true;
+    void load(() => mounted);
+    return () => {
+      mounted = false;
+    };
+  }, [load]);
   const type = record && manualTypes.has(record.type) ? (record.type as ManualRecordType) : null;
   const fields = useMemo(() => (type ? fieldConfig(type) : null), [type]);
   const choices = type === 'STOOL' ? stoolOptions : type === 'VOMIT' ? vomitOptions : null;
@@ -110,8 +159,23 @@ export default function RecordDetailScreen() {
       occurredTime,
       originalOccurredTime: timePart(record.occurredAt),
     });
+  const contextUnavailable = !restoring && (!session || !activeFamily || !id);
+  const loadingInitial = restoring || (loading && !record);
+  const interactionLocked = busy || loading || contextUnavailable;
+  const editable = !!permissions?.edit.allowed && !!type;
+  const readOnlyReason =
+    permissions?.edit.reason ?? '此记录类型需要在对应的猫咪档案中维护，当前页面仅提供查看。';
+  const showSeparateDeleteReason =
+    !permissions?.delete.allowed && permissions?.delete.reason !== readOnlyReason;
+  const canSave =
+    !!record &&
+    editable &&
+    !interactionLocked &&
+    !!type &&
+    detailDirty &&
+    isRecordDraftReady(type, form, record.petId);
   const requestReturn = useCallback(() => {
-    if (busy) {
+    if (busy || loading) {
       Alert.alert('记录正在处理', '请等待当前操作完成，避免记录状态与服务器不一致。', [
         { text: '继续等待', style: 'cancel' },
       ]);
@@ -129,10 +193,10 @@ export default function RecordDetailScreen() {
         onPress: () => router.back(),
       },
     ]);
-  }, [busy, detailDirty, router]);
+  }, [busy, detailDirty, loading, router]);
   const requestNavigate = useCallback(
     (action: () => void) => {
-      if (busy) {
+      if (busy || loading) {
         Alert.alert('记录正在处理', '请等待当前操作完成，避免记录状态与服务器不一致。', [
           { text: '继续等待', style: 'cancel' },
         ]);
@@ -151,16 +215,16 @@ export default function RecordDetailScreen() {
         },
       ]);
     },
-    [busy, detailDirty],
+    [busy, detailDirty, loading],
   );
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!busy && !detailDirty) return false;
+      if (!busy && !loading && !detailDirty) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
-  }, [busy, detailDirty, requestReturn]);
+  }, [busy, detailDirty, loading, requestReturn]);
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
@@ -174,7 +238,7 @@ export default function RecordDetailScreen() {
     };
   }, []);
   async function save() {
-    if (!record || !session || !activeFamily || !type) return;
+    if (!record || !session || !activeFamily || !type || !canSave) return;
     if (!permissions?.edit.allowed) {
       setError(permissions?.edit.reason ?? '你当前无权修改这条记录');
       return;
@@ -198,6 +262,7 @@ export default function RecordDetailScreen() {
         abnormal: abnormal || ((type === 'STOOL' || type === 'VOMIT') && form.blood),
         version: record.version,
       });
+      if (!mountedRef.current) return;
       setRecord(next);
       setForm(initialRecordForm(next));
       setOccurredDate(datePart(next.occurredAt));
@@ -206,13 +271,14 @@ export default function RecordDetailScreen() {
       setAbnormal(next.abnormal);
       Alert.alert('已保存', '记录已经更新');
     } catch (cause) {
+      if (!mountedRef.current) return;
       setError(cause instanceof Error ? cause.message : '保存失败');
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
   function remove() {
-    if (!record || !session || !activeFamily) return;
+    if (!record || !session || !activeFamily || interactionLocked) return;
     if (!permissions?.delete.allowed) {
       setError(permissions?.delete.reason ?? '你当前无权删除这条记录');
       return;
@@ -224,6 +290,7 @@ export default function RecordDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
+          setError('');
           try {
             await authApi.deleteRecord(
               session.accessToken,
@@ -231,8 +298,9 @@ export default function RecordDetailScreen() {
               record.id,
               record.version,
             );
-            router.back();
+            if (mountedRef.current) router.back();
           } catch (cause) {
+            if (!mountedRef.current) return;
             setError(cause instanceof Error ? cause.message : '删除失败');
             setBusy(false);
           }
@@ -240,27 +308,45 @@ export default function RecordDetailScreen() {
       },
     ]);
   }
-  if (!record && !error)
+  if (loadingInitial)
     return (
       <Screen>
         <Stack.Screen options={{ gestureEnabled: false }} />
-        <ActivityIndicator color={colors.brand} />
+        <Card testID="record-detail.loading.card">
+          <ActivityIndicator color={colors.brand} />
+          <Body>正在整理记录详情…</Body>
+        </Card>
+      </Screen>
+    );
+  if (contextUnavailable)
+    return (
+      <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Card testID="record-detail.context-empty.card">
+          <Title>需要先完成家庭设置</Title>
+          <Body>登录并选择家庭后，才能查看、编辑或删除这条记录。</Body>
+          <TextButton label="去我的页面检查家庭" onPress={() => router.push('/(tabs)/me')} />
+          <TextButton label="返回时间线" onPress={() => router.back()} />
+        </Card>
       </Screen>
     );
   if (!record)
     return (
       <Screen>
         <Stack.Screen options={{ gestureEnabled: false }} />
-        <ErrorText>{error}</ErrorText>
-        <TextButton label="返回" onPress={() => router.back()} />
+        <Card testID="record-detail.error.card">
+          <Title>记录加载失败</Title>
+          <ErrorText testID="record-detail.load-error">{error}</ErrorText>
+          <TextButton
+            label="重新加载"
+            testID="record-detail.reload.button"
+            disabled={loading}
+            onPress={() => void load()}
+          />
+          <TextButton label="返回时间线" onPress={() => router.back()} />
+        </Card>
       </Screen>
     );
-  const editable = !!permissions?.edit.allowed && !!type;
-  const readOnlyReason =
-    permissions?.edit.reason ?? '此记录类型需要在对应的猫咪档案中维护，当前页面仅提供查看。';
-  const showSeparateDeleteReason =
-    !permissions?.delete.allowed && permissions?.delete.reason !== readOnlyReason;
-  const canSave = type ? isRecordDraftReady(type, form, record.petId) : false;
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
@@ -269,7 +355,7 @@ export default function RecordDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={[styles.content, editable && styles.contentWithFooter]}
+          contentContainerStyle={[styles.content, !keyboardVisible && styles.contentWithFooter]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -293,6 +379,7 @@ export default function RecordDetailScreen() {
               <PrimaryButton
                 label="建立健康事件"
                 testID="record-detail.create-health-event.button"
+                disabled={interactionLocked}
                 onPress={() =>
                   requestNavigate(() =>
                     router.push({
@@ -325,7 +412,7 @@ export default function RecordDetailScreen() {
                       value={occurredDate}
                       onChangeText={setOccurredDate}
                       maxLength={10}
-                      editable={!busy}
+                      editable={!interactionLocked}
                       placeholder="YYYY-MM-DD"
                     />
                   </View>
@@ -335,7 +422,7 @@ export default function RecordDetailScreen() {
                       value={occurredTime}
                       onChangeText={setOccurredTime}
                       maxLength={5}
-                      editable={!busy}
+                      editable={!interactionLocked}
                       placeholder="HH:mm"
                     />
                   </View>
@@ -345,7 +432,7 @@ export default function RecordDetailScreen() {
                   value={form.first}
                   onChangeText={(first) => setForm((current) => ({ ...current, first }))}
                   keyboardType={fields.firstNumeric ? 'decimal-pad' : 'default'}
-                  editable={!busy}
+                  editable={!interactionLocked}
                 />
                 {choices ? (
                   <View style={styles.optionBlock}>
@@ -356,7 +443,7 @@ export default function RecordDetailScreen() {
                           key={item.value}
                           label={item.label}
                           active={form.second === item.value}
-                          disabled={busy}
+                          disabled={interactionLocked}
                           onPress={() => setForm((current) => ({ ...current, second: item.value }))}
                         />
                       ))}
@@ -368,7 +455,7 @@ export default function RecordDetailScreen() {
                     value={form.second}
                     onChangeText={(second) => setForm((current) => ({ ...current, second }))}
                     keyboardType={fields.secondNumeric ? 'decimal-pad' : 'default'}
-                    editable={!busy}
+                    editable={!interactionLocked}
                   />
                 ) : null}
                 {type === 'STOOL' || type === 'VOMIT' ? (
@@ -380,7 +467,7 @@ export default function RecordDetailScreen() {
                       setForm((current) => ({ ...current, blood }));
                       if (blood) setAbnormal(true);
                     }}
-                    disabled={busy}
+                    disabled={interactionLocked}
                     danger
                   />
                 ) : null}
@@ -389,7 +476,7 @@ export default function RecordDetailScreen() {
                   body="会进入健康摘要并在时间线突出显示"
                   value={abnormal}
                   onChange={setAbnormal}
-                  disabled={busy}
+                  disabled={interactionLocked}
                 />
                 <Field
                   label="备注"
@@ -397,7 +484,7 @@ export default function RecordDetailScreen() {
                   onChangeText={setNote}
                   maxLength={500}
                   multiline
-                  editable={!busy}
+                  editable={!interactionLocked}
                   placeholder="补充观察或反应"
                 />
                 {error && keyboardVisible ? <ErrorText>{error}</ErrorText> : null}
@@ -405,7 +492,7 @@ export default function RecordDetailScreen() {
                   <PrimaryButton
                     label="保存修改"
                     busy={busy}
-                    disabled={!canSave || !detailDirty}
+                    disabled={!canSave}
                     testID="record-detail.save.inline-button"
                     onPress={save}
                   />
@@ -421,12 +508,18 @@ export default function RecordDetailScreen() {
                         key={photo.id}
                         accessibilityRole="button"
                         accessibilityLabel={photo.note ? `查看照片：${photo.note}` : '查看照片详情'}
+                        accessibilityState={{ disabled: interactionLocked }}
+                        disabled={interactionLocked}
                         onPress={() =>
                           requestNavigate(() =>
                             router.push({ pathname: '/photos/[id]', params: { id: photo.id } }),
                           )
                         }
-                        style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
+                        style={({ pressed }) => [
+                          styles.photoTile,
+                          interactionLocked && styles.disabled,
+                          pressed && !interactionLocked && styles.pressed,
+                        ]}
                       >
                         <AuthenticatedImage
                           accessibilityLabel={photo.note ? `照片：${photo.note}` : '照片缩略图'}
@@ -459,17 +552,17 @@ export default function RecordDetailScreen() {
             )}
           </Card>
           {!editable && error ? <ErrorText>{error}</ErrorText> : null}
-          {(!editable || keyboardVisible) && permissions?.delete.allowed ? (
-            <TextButton label="删除这条记录" danger disabled={busy} onPress={remove} />
+          {keyboardVisible && permissions?.delete.allowed ? (
+            <TextButton label="删除这条记录" danger disabled={interactionLocked} onPress={remove} />
           ) : null}
           {showSeparateDeleteReason && permissions?.delete.reason ? (
             <PermissionNotice title="删除权限" body={permissions.delete.reason} />
           ) : null}
-          {(!editable || keyboardVisible) && (
-            <TextButton label="返回时间线" disabled={busy} onPress={requestReturn} />
+          {keyboardVisible && (
+            <TextButton label="返回时间线" disabled={interactionLocked} onPress={requestReturn} />
           )}
         </ScrollView>
-        {editable && !keyboardVisible ? (
+        {!keyboardVisible ? (
           <View
             testID="record-detail.footer"
             style={[
@@ -478,26 +571,28 @@ export default function RecordDetailScreen() {
             ]}
           >
             {error ? <ErrorText testID="record-detail.error">{error}</ErrorText> : null}
-            <PrimaryButton
-              label="保存修改"
-              busy={busy}
-              disabled={!canSave || !detailDirty}
-              testID="record-detail.save.button"
-              onPress={save}
-            />
+            {editable ? (
+              <PrimaryButton
+                label="保存修改"
+                busy={busy}
+                disabled={!canSave}
+                testID="record-detail.save.button"
+                onPress={save}
+              />
+            ) : null}
             <View style={styles.footerActions}>
               {permissions?.delete.allowed ? (
                 <TextButton
                   label="删除这条记录"
                   danger
-                  disabled={busy}
+                  disabled={interactionLocked}
                   testID="record-detail.delete.button"
                   onPress={remove}
                 />
               ) : null}
               <TextButton
                 label="返回时间线"
-                disabled={busy}
+                disabled={interactionLocked}
                 testID="record-detail.back-timeline.button"
                 onPress={requestReturn}
               />
