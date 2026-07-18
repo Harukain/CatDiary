@@ -27,41 +27,91 @@ import { AuthenticatedImage } from '../../src/features/photos/authenticated-imag
 import { isPhotoDetailDraftDirty } from '../../src/features/photos/photo-form';
 import { photoSource } from '../../src/features/photos/photo-source';
 import {
+  Body,
+  Card,
   ErrorText,
   Field,
   PrimaryButton,
   Screen,
   TextButton,
+  Title,
 } from '../../src/shared/ui/primitives';
 
 export default function PhotoDetailRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { session, activeFamily } = useSession();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const photoId = Array.isArray(id) ? id[0] : id;
+  const { restoring, session, activeFamily } = useSession();
   const allowLeave = useRef(false);
   const [photo, setPhoto] = useState<PhotoSummary | null>(null);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petIds, setPetIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const originalPetIds = useMemo(() => photo?.pets.map((entry) => entry.petId) ?? [], [photo]);
-  useEffect(() => {
-    if (!session || !activeFamily || !id) return;
-    Promise.all([
-      authApi.getPhoto(session.accessToken, activeFamily.id, id),
-      authApi.listPets(session.accessToken, activeFamily.id),
-    ])
-      .then(([value, rows]) => {
+
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+
+      if (!session || !activeFamily || !photoId) {
+        if (!shouldApply()) return;
+        setPhoto(null);
+        setPets([]);
+        setPetIds([]);
+        setNote('');
+        setLoading(false);
+        setError('');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      setPhoto((current) => (current?.id === photoId ? current : null));
+
+      try {
+        const [value, rows] = await Promise.all([
+          authApi.getPhoto(session.accessToken, activeFamily.id, photoId),
+          authApi.listPets(session.accessToken, activeFamily.id),
+        ]);
+        if (!shouldApply()) return;
         setPhoto(value);
         setPets(rows);
         setPetIds(value.pets.map((entry) => entry.petId));
         setNote(value.note ?? '');
-      })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : '照片加载失败'));
-  }, [activeFamily, id, session]);
+        allowLeave.current = false;
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setPhoto(null);
+        setPets([]);
+        setPetIds([]);
+        setNote('');
+        setError(cause instanceof Error ? cause.message : '照片加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, photoId, restoring, session],
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    void load(() => mounted);
+    return () => {
+      mounted = false;
+    };
+  }, [load]);
+
+  const contextUnavailable = !restoring && (!session || !activeFamily || !photoId);
+  const loadingInitial = restoring || (loading && !photo);
+  const interactionLocked = busy || loading || contextUnavailable;
   const canManageAvatar = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const changed =
     !!photo &&
@@ -71,7 +121,7 @@ export default function PhotoDetailRoute() {
       petIds,
       originalPetIds,
     });
-  const canSave = changed && !!petIds.length && !busy;
+  const canSave = changed && !!petIds.length && !busy && !loading && !contextUnavailable;
   const requestBack = useCallback(() => {
     if (busy) {
       Alert.alert('照片正在处理', '请等待当前操作完成，避免照片归属或备注状态不一致。', [
@@ -116,7 +166,7 @@ export default function PhotoDetailRoute() {
     };
   }, []);
   function togglePet(petId: string) {
-    if (busy) return;
+    if (interactionLocked) return;
     setPetIds((current) =>
       current.includes(petId)
         ? current.length > 1
@@ -145,8 +195,9 @@ export default function PhotoDetailRoute() {
     }
   }
   async function setAvatar(petId: string) {
-    if (!session || !activeFamily || !photo) return;
+    if (!session || !activeFamily || !photo || interactionLocked || !canManageAvatar) return;
     setBusy(true);
+    setError('');
     try {
       await authApi.setPhotoAvatar(session.accessToken, activeFamily.id, photo.id, petId);
       Alert.alert('头像已更新', '猫咪档案将使用这张照片作为头像。');
@@ -157,15 +208,16 @@ export default function PhotoDetailRoute() {
     }
   }
   function confirmDelete() {
-    if (busy) return;
+    if (interactionLocked || !photo) return;
     Alert.alert('删除照片', '照片会先进入软删除状态，不会立即从存储中永久清除。', [
       { text: '取消', style: 'cancel' },
       { text: '删除', style: 'destructive', onPress: () => void remove() },
     ]);
   }
   async function remove() {
-    if (!session || !activeFamily || !photo || busy) return;
+    if (!session || !activeFamily || !photo || interactionLocked) return;
     setBusy(true);
+    setError('');
     try {
       await authApi.deletePhoto(session.accessToken, activeFamily.id, photo.id, photo.version);
       router.replace('/photos');
@@ -202,9 +254,41 @@ export default function PhotoDetailRoute() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
-          {!photo && !error ? (
-            <ActivityIndicator color={colors.brand} />
-          ) : photo && session && activeFamily ? (
+          {loadingInitial ? (
+            <Card testID="photo-detail.loading.card">
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在加载照片详情…</Body>
+            </Card>
+          ) : null}
+          {!loadingInitial && contextUnavailable ? (
+            <Card testID="photo-detail.context-empty.card">
+              <Title>需要先选择家庭和照片</Title>
+              <Body>当前没有可用的登录、家庭或照片参数，先回到相册重新进入照片详情。</Body>
+              <TextButton
+                label="返回相册"
+                testID="photo-detail.context-empty.back"
+                onPress={() => router.replace('/photos')}
+              />
+            </Card>
+          ) : null}
+          {!loadingInitial && !contextUnavailable && error && !photo ? (
+            <Card testID="photo-detail.error.card">
+              <Title>照片加载失败</Title>
+              <ErrorText testID="photo-detail.load-error">{error}</ErrorText>
+              <TextButton
+                label="重新加载"
+                disabled={loading}
+                testID="photo-detail.reload.button"
+                onPress={() => void load()}
+              />
+              <TextButton
+                label="返回相册"
+                testID="photo-detail.error.back"
+                onPress={() => router.replace('/photos')}
+              />
+            </Card>
+          ) : null}
+          {photo && session && activeFamily ? (
             <>
               <AuthenticatedImage
                 testID="photo-detail.image"
@@ -220,13 +304,16 @@ export default function PhotoDetailRoute() {
                       key={pet.id}
                       testID="photo-detail.pet.item"
                       accessibilityRole="button"
-                      accessibilityState={{ selected: petIds.includes(pet.id), disabled: busy }}
-                      disabled={busy}
+                      accessibilityState={{
+                        selected: petIds.includes(pet.id),
+                        disabled: interactionLocked,
+                      }}
+                      disabled={interactionLocked}
                       onPress={() => togglePet(pet.id)}
                       style={[
                         styles.chip,
                         petIds.includes(pet.id) && styles.chipActive,
-                        busy && styles.disabled,
+                        interactionLocked && styles.disabled,
                       ]}
                     >
                       <Text
@@ -243,7 +330,7 @@ export default function PhotoDetailRoute() {
                   onChangeText={setNote}
                   maxLength={500}
                   multiline
-                  editable={!busy}
+                  editable={!interactionLocked}
                   placeholder="写下这一刻"
                   testID="photo-detail.note.input"
                 />
@@ -262,13 +349,13 @@ export default function PhotoDetailRoute() {
                     <TextButton
                       label="删除照片"
                       danger
-                      disabled={busy}
+                      disabled={interactionLocked}
                       testID="photo-detail.delete.inline-button"
                       onPress={confirmDelete}
                     />
                     <TextButton
                       label="返回相册"
-                      disabled={busy}
+                      disabled={interactionLocked}
                       testID="photo-detail.return.inline-button"
                       onPress={requestBack}
                     />
@@ -282,7 +369,7 @@ export default function PhotoDetailRoute() {
                       <TextButton
                         key={petId}
                         label={`设为 ${pets.find((pet) => pet.id === petId)?.name ?? '猫咪'} 的头像`}
-                        disabled={busy}
+                        disabled={interactionLocked}
                         testID="photo-detail.set-avatar.button"
                         onPress={() => void setAvatar(petId)}
                       />
@@ -291,8 +378,6 @@ export default function PhotoDetailRoute() {
                 ) : null}
               </View>
             </>
-          ) : error ? (
-            <ErrorText>{error}</ErrorText>
           ) : null}
         </ScrollView>
         {photo && !keyboardVisible ? (
@@ -314,13 +399,13 @@ export default function PhotoDetailRoute() {
             <TextButton
               label="删除照片"
               danger
-              disabled={busy}
+              disabled={interactionLocked}
               testID="photo-detail.delete.button"
               onPress={confirmDelete}
             />
             <TextButton
               label="返回相册"
-              disabled={busy}
+              disabled={interactionLocked}
               testID="photo-detail.return.button"
               onPress={requestBack}
             />
