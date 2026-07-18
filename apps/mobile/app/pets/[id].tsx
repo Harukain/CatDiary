@@ -78,8 +78,9 @@ const medicalLabels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用
 export default function PetDetailRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { session, activeFamily } = useSession();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const petId = Array.isArray(id) ? id[0] : id;
+  const { restoring, session, activeFamily } = useSession();
   const [pet, setPet] = useState<PetDetail | null>(null);
   const [profile, setProfile] = useState<PetProfileSummary | null>(null);
   const [name, setName] = useState('');
@@ -89,44 +90,85 @@ export default function PetDetailRoute() {
   const [chipNumber, setChipNumber] = useState('');
   const [neutered, setNeutered] = useState<boolean | null>(null);
   const [initialDraft, setInitialDraft] = useState<PetProfileDraft | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const allowLeave = useRef(false);
 
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+
+      if (!session || !activeFamily || !petId) {
+        if (!shouldApply()) return;
+        setPet(null);
+        setProfile(null);
+        setName('');
+        setSex('UNKNOWN');
+        setBirthDate('');
+        setBreed('');
+        setChipNumber('');
+        setNeutered(null);
+        setInitialDraft(null);
+        setLoading(false);
+        setError('');
+        setSuccess('');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      setSuccess('');
+      setPet((current) => (current?.id === petId ? current : null));
+      setProfile((current) => (current?.pet.id === petId ? current : null));
+
+      try {
+        const [detail, summary] = await Promise.all([
+          authApi.getPet(session.accessToken, activeFamily.id, petId),
+          authApi.getPetProfileSummary(session.accessToken, activeFamily.id, petId),
+        ]);
+        if (!shouldApply()) return;
+        setPet(detail);
+        setProfile(summary);
+        setName(detail.name);
+        setSex(detail.sex ?? 'UNKNOWN');
+        setBirthDate(detail.birthDate?.slice(0, 10) ?? '');
+        setBreed(detail.breed ?? '');
+        setChipNumber(detail.chipNumber ?? '');
+        setNeutered(detail.neutered ?? null);
+        setInitialDraft(petDraftFromDetail(detail));
+        allowLeave.current = false;
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setPet(null);
+        setProfile(null);
+        setInitialDraft(null);
+        setError(cause instanceof Error ? cause.message : '猫咪档案加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, petId, restoring, session],
+  );
+
   useFocusEffect(
     useCallback(() => {
-      if (!session || !activeFamily || !id) return;
       let mounted = true;
-      setError('');
-      void Promise.all([
-        authApi.getPet(session.accessToken, activeFamily.id, id),
-        authApi.getPetProfileSummary(session.accessToken, activeFamily.id, id),
-      ])
-        .then(([detail, summary]) => {
-          if (!mounted) return;
-          setPet(detail);
-          setProfile(summary);
-          setName(detail.name);
-          setSex(detail.sex ?? 'UNKNOWN');
-          setBirthDate(detail.birthDate?.slice(0, 10) ?? '');
-          setBreed(detail.breed ?? '');
-          setChipNumber(detail.chipNumber ?? '');
-          setNeutered(detail.neutered ?? null);
-          setInitialDraft(petDraftFromDetail(detail));
-          allowLeave.current = false;
-        })
-        .catch((cause) => {
-          if (!mounted) return;
-          setError(cause instanceof Error ? cause.message : '猫咪档案加载失败');
-        });
+      void load(() => mounted);
       return () => {
         mounted = false;
       };
-    }, [activeFamily, id, session]),
+    }, [load]),
   );
 
+  const contextUnavailable = !restoring && (!session || !activeFamily || !petId);
+  const loadingInitial = restoring || (loading && !pet);
+  const interactionLocked = busy || loading || contextUnavailable;
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const currentDraft = useMemo<PetProfileDraft>(
     () => ({
@@ -143,7 +185,8 @@ export default function PetDetailRoute() {
   const birthValid =
     !birthDate ||
     isValidBirthDate(birthDate, new Date(), activeFamily?.timezone ?? 'Asia/Shanghai');
-  const canSave = canManage && !!name.trim() && birthValid && changed && !busy;
+  const canSave =
+    canManage && !!name.trim() && birthValid && changed && !busy && !loading && !contextUnavailable;
   const requestReturn = useCallback(() => {
     if (busy) {
       Alert.alert('猫咪档案正在处理', '请等待当前保存或删除操作完成，避免档案状态不一致。', [
@@ -169,7 +212,7 @@ export default function PetDetailRoute() {
   }, [busy, changed, router]);
   const guardedNavigate = useCallback(
     (navigate: () => void, actionLabel = '前往') => {
-      if (busy) return;
+      if (interactionLocked) return;
       if (!changed || allowLeave.current) {
         navigate();
         return;
@@ -186,7 +229,7 @@ export default function PetDetailRoute() {
         },
       ]);
     },
-    [busy, changed],
+    [changed, interactionLocked],
   );
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -249,7 +292,7 @@ export default function PetDetailRoute() {
   }
 
   function confirmDelete() {
-    if (busy) return;
+    if (interactionLocked || !pet) return;
     Alert.alert('删除猫咪档案', '档案将进入 30 天软删除期。相关历史记录不会立即永久删除。', [
       { text: '取消', style: 'cancel' },
       { text: '确认删除', style: 'destructive', onPress: () => void remove() },
@@ -257,7 +300,7 @@ export default function PetDetailRoute() {
   }
 
   async function remove() {
-    if (!session || !activeFamily || !pet || busy) return;
+    if (!session || !activeFamily || !pet || interactionLocked) return;
     setBusy(true);
     setError('');
     try {
@@ -303,11 +346,38 @@ export default function PetDetailRoute() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {!pet && !error ? <ActivityIndicator color={colors.brand} /> : null}
-          {error && !pet ? (
-            <Card>
+          {loadingInitial ? (
+            <Card testID="pet-detail.loading.card">
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在加载猫咪档案…</Body>
+            </Card>
+          ) : null}
+          {!loadingInitial && contextUnavailable ? (
+            <Card testID="pet-detail.context-empty.card">
+              <Title>需要先选择家庭和猫咪</Title>
+              <Body>当前没有可用的登录、家庭或猫咪参数，先回到猫咪列表重新进入档案。</Body>
+              <TextButton
+                label="返回猫咪列表"
+                testID="pet-detail.context-empty.back"
+                onPress={() => router.replace('/pets')}
+              />
+            </Card>
+          ) : null}
+          {!loadingInitial && !contextUnavailable && error && !pet ? (
+            <Card testID="pet-detail.error.card">
               <Title>档案加载失败</Title>
-              <ErrorText>{error}</ErrorText>
+              <ErrorText testID="pet-detail.load-error">{error}</ErrorText>
+              <TextButton
+                label="重新加载"
+                disabled={loading}
+                testID="pet-detail.reload.button"
+                onPress={() => void load()}
+              />
+              <TextButton
+                label="返回猫咪列表"
+                testID="pet-detail.error.back"
+                onPress={() => router.replace('/pets')}
+              />
             </Card>
           ) : null}
           {pet ? (
@@ -340,8 +410,8 @@ export default function PetDetailRoute() {
                   <Pressable
                     testID="pet-detail.quick-record.button"
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: busy }}
-                    disabled={busy}
+                    accessibilityState={{ disabled: interactionLocked }}
+                    disabled={interactionLocked}
                     onPress={() =>
                       guardedNavigate(
                         () => router.push({ pathname: '/records/new', params: { petId: pet.id } }),
@@ -350,8 +420,8 @@ export default function PetDetailRoute() {
                     }
                     style={({ pressed }) => [
                       styles.quickAction,
-                      busy && styles.disabled,
-                      pressed && styles.pressed,
+                      interactionLocked && styles.disabled,
+                      pressed && !interactionLocked && styles.pressed,
                     ]}
                   >
                     <Ionicons name="create-outline" size={18} color={colors.brand} />
@@ -360,8 +430,8 @@ export default function PetDetailRoute() {
                   <Pressable
                     testID="pet-detail.quick-photos.button"
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: busy }}
-                    disabled={busy}
+                    accessibilityState={{ disabled: interactionLocked }}
+                    disabled={interactionLocked}
                     onPress={() =>
                       guardedNavigate(
                         () => router.push({ pathname: '/photos', params: { petId: pet.id } }),
@@ -370,8 +440,8 @@ export default function PetDetailRoute() {
                     }
                     style={({ pressed }) => [
                       styles.quickAction,
-                      busy && styles.disabled,
-                      pressed && styles.pressed,
+                      interactionLocked && styles.disabled,
+                      pressed && !interactionLocked && styles.pressed,
                     ]}
                   >
                     <Ionicons name="images-outline" size={18} color={colors.brand} />
@@ -380,8 +450,8 @@ export default function PetDetailRoute() {
                   <Pressable
                     testID="pet-detail.quick-medical.button"
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: busy }}
-                    disabled={busy}
+                    accessibilityState={{ disabled: interactionLocked }}
+                    disabled={interactionLocked}
                     onPress={() =>
                       guardedNavigate(
                         () =>
@@ -391,8 +461,8 @@ export default function PetDetailRoute() {
                     }
                     style={({ pressed }) => [
                       styles.quickAction,
-                      busy && styles.disabled,
-                      pressed && styles.pressed,
+                      interactionLocked && styles.disabled,
+                      pressed && !interactionLocked && styles.pressed,
                     ]}
                   >
                     <Ionicons name="medkit-outline" size={18} color={colors.brand} />
@@ -409,6 +479,7 @@ export default function PetDetailRoute() {
                   <HealthOverview profile={profile} />
                   <RecentRecords
                     records={profile.recentRecords}
+                    disabled={interactionLocked}
                     onRecordPress={(recordId) =>
                       guardedNavigate(
                         () => router.push({ pathname: '/records/[id]', params: { id: recordId } }),
@@ -420,6 +491,7 @@ export default function PetDetailRoute() {
                     photos={profile.photos}
                     accessToken={session.accessToken}
                     familyId={activeFamily.id}
+                    disabled={interactionLocked}
                     onPhotoPress={(photoId) =>
                       guardedNavigate(
                         () => router.push({ pathname: '/photos/[id]', params: { id: photoId } }),
@@ -575,13 +647,13 @@ export default function PetDetailRoute() {
                         <TextButton
                           label="删除猫咪档案"
                           danger
-                          disabled={busy}
+                          disabled={interactionLocked}
                           testID="pet-detail.delete.inline-button"
                           onPress={confirmDelete}
                         />
                         <TextButton
                           label="返回猫咪列表"
-                          disabled={busy}
+                          disabled={interactionLocked}
                           testID="pet-detail.return.inline-button"
                           onPress={requestReturn}
                         />
@@ -615,13 +687,13 @@ export default function PetDetailRoute() {
             <TextButton
               label="删除猫咪档案"
               danger
-              disabled={busy}
+              disabled={interactionLocked}
               testID="pet-detail.delete.button"
               onPress={confirmDelete}
             />
             <TextButton
               label="返回猫咪列表"
-              disabled={busy}
+              disabled={interactionLocked}
               testID="pet-detail.return.button"
               onPress={requestReturn}
             />
@@ -808,9 +880,11 @@ function HealthOverview({ profile }: { profile: PetProfileSummary }) {
 
 function RecentRecords({
   records,
+  disabled = false,
   onRecordPress,
 }: {
   records: PetProfileRecordSummary[];
+  disabled?: boolean;
   onRecordPress(recordId: string): void;
 }) {
   return (
@@ -821,8 +895,14 @@ function RecentRecords({
           <Pressable
             key={record.id}
             accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
             onPress={() => onRecordPress(record.id)}
-            style={({ pressed }) => [styles.recordRow, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.recordRow,
+              disabled && styles.disabled,
+              pressed && !disabled && styles.pressed,
+            ]}
           >
             <View style={[styles.recordDot, record.abnormal && styles.recordDotDanger]} />
             <View style={styles.rowBody}>
@@ -844,11 +924,13 @@ function RecentPhotos({
   photos,
   accessToken,
   familyId,
+  disabled = false,
   onPhotoPress,
 }: {
   photos: PhotoSummary[];
   accessToken: string;
   familyId: string;
+  disabled?: boolean;
   onPhotoPress(photoId: string): void;
 }) {
   return (
@@ -861,8 +943,14 @@ function RecentPhotos({
               key={photo.id}
               accessibilityRole="button"
               accessibilityLabel="查看照片"
+              accessibilityState={{ disabled }}
+              disabled={disabled}
               onPress={() => onPhotoPress(photo.id)}
-              style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.photoTile,
+                disabled && styles.disabled,
+                pressed && !disabled && styles.pressed,
+              ]}
             >
               <AuthenticatedImage
                 source={photoThumbnailSource(photo, accessToken, familyId)}
