@@ -16,11 +16,29 @@ describe('family members mobile layout', () => {
 
   it('keeps invite errors from replacing the invite action with reload', () => {
     expect(familyMembersSource).toContain(
-      'const listUnavailable = !!error && members.length === 0;',
+      'const listUnavailable = !restoring && !!error && members.length === 0;',
     );
-    expect(familyMembersSource).toContain('const canInvite = canManage && phoneValid');
+    expect(familyMembersSource).toMatch(/const canInvite\s*=\s*canManage\s*&&\s*phoneValid/);
     expect(familyMembersSource).toContain('error={phoneError}');
     expect(familyMembersSource).toContain('{listUnavailable ? (');
+  });
+
+  it('shows explicit restoring and missing context states before member actions', () => {
+    expect(familyMembersSource).toContain(
+      'const { restoring, session, activeFamily } = useSession();',
+    );
+    expect(familyMembersSource).toContain(
+      'const contextUnavailable = !restoring && (!session || !activeFamily);',
+    );
+    expect(familyMembersSource).toContain('if (restoring) return;');
+    expect(familyMembersSource).toContain("setError('');");
+    expect(familyMembersSource).toContain("setSuccess('');");
+    expect(familyMembersSource).toContain("setDevToken('');");
+    expect(familyMembersSource).toContain('testID="family-members.loading.card"');
+    expect(familyMembersSource).toContain('testID="family-members.context-unavailable.card"');
+    expect(familyMembersSource).toContain(
+      'disabled={busy || restoring || contextUnavailable || !session || !activeFamily}',
+    );
   });
 
   it('keeps row actions readable on narrow phones', () => {

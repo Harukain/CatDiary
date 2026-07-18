@@ -39,7 +39,7 @@ type MembersOperation = '' | 'invite' | `role:${string}` | `remove:${string}`;
 export default function MembersRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [phone, setPhone] = useState('');
   const [operation, setOperation] = useState<MembersOperation>('');
@@ -51,13 +51,25 @@ export default function MembersRoute() {
   const phoneValid = phoneSchema.safeParse(phone).success;
   const phoneError = phone.length > 0 && !phoneValid ? '请输入 11 位手机号' : '';
   const busy = operation !== '';
-  const canInvite = canManage && phoneValid && !busy && !loading && !!session && !!activeFamily;
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const canInvite =
+    canManage &&
+    phoneValid &&
+    !busy &&
+    !loading &&
+    !contextUnavailable &&
+    !!session &&
+    !!activeFamily;
   const navigationDisabled = busy;
-  const listUnavailable = !!error && members.length === 0;
+  const listUnavailable = !restoring && !!error && members.length === 0;
 
   const load = useCallback(async () => {
+    if (restoring) return;
     if (!session || !activeFamily) {
       setMembers([]);
+      setError('');
+      setSuccess('');
+      setDevToken('');
       setLoading(false);
       return;
     }
@@ -70,7 +82,7 @@ export default function MembersRoute() {
     } finally {
       setLoading(false);
     }
-  }, [activeFamily, session]);
+  }, [activeFamily, restoring, session]);
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -205,157 +217,178 @@ export default function MembersRoute() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Card>
-            <Title>{activeFamily?.name ?? '当前家庭'}</Title>
-            <Body>
-              {canManage
-                ? '管理员可以邀请、调整角色和移除成员。家庭必须至少保留一名管理员。'
-                : '你可以查看家庭成员。邀请、角色调整和移除需要家庭管理员操作。'}
-            </Body>
-            {error ? (
-              <View testID="family-members.error.text">
-                <ErrorText>{error}</ErrorText>
+          {restoring || loading ? (
+            <Card testID="family-members.loading.card">
+              <View style={styles.loading}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.loadingText}>正在加载家庭成员…</Text>
               </View>
-            ) : null}
-            {success ? (
-              <View testID="family-members.success.text">
-                <SuccessText>{success}</SuccessText>
-              </View>
-            ) : null}
-            <View>
-              {loading ? (
-                <View style={styles.loading}>
-                  <ActivityIndicator color={colors.brand} />
-                  <Text style={styles.loadingText}>正在加载成员…</Text>
-                </View>
-              ) : members.length === 0 ? (
-                <Text style={styles.emptyText}>暂无成员，请重新加载成员列表。</Text>
-              ) : (
-                members.map((member) => {
-                  const memberName = familyMemberDisplayName(member, session?.user.id);
-                  const canOperate = canOperateFamilyMember({
-                    currentRole: activeFamily?.role,
-                    currentUserId: session?.user.id,
-                    member,
-                  });
-                  const roleBusy = operation === memberOperationKey('role', member.id);
-                  const removeBusy = operation === memberOperationKey('remove', member.id);
-                  const disabled = busy || loading;
-                  return (
-                    <View key={member.id} testID="family-members.member.item" style={styles.member}>
-                      <View style={styles.memberTop}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{memberName.slice(0, 1)}</Text>
-                        </View>
-                        <View style={styles.memberBody}>
-                          <Text
-                            testID="family-members.member.name"
-                            numberOfLines={1}
-                            style={styles.memberName}
-                          >
-                            {memberName}
-                          </Text>
-                          <Text testID="family-members.member.role" style={styles.role}>
-                            {roleLabel(member.role)}
-                          </Text>
-                        </View>
-                      </View>
-                      {canOperate ? (
-                        <View style={styles.actions}>
-                          <Pressable
-                            testID="family-members.member.role.button"
-                            accessibilityRole="button"
-                            accessibilityLabel={
-                              member.role === 'MEMBER'
-                                ? `将 ${memberName} 设为管理员`
-                                : `将 ${memberName} 设为普通成员`
-                            }
-                            accessibilityState={{ disabled }}
-                            disabled={disabled}
-                            onPress={() => confirmToggleRole(member)}
-                            style={({ pressed }) => [
-                              styles.roleAction,
-                              disabled && styles.disabled,
-                              pressed && styles.pressed,
-                            ]}
-                          >
-                            {roleBusy ? <ActivityIndicator color={colors.warningDark} /> : null}
-                            <Text style={styles.actionText}>
-                              {member.role === 'MEMBER' ? '设为管理员' : '设为成员'}
-                            </Text>
-                          </Pressable>
-                          <Pressable
-                            testID="family-members.member.remove.button"
-                            accessibilityRole="button"
-                            accessibilityLabel={`移除 ${memberName}`}
-                            accessibilityState={{ disabled }}
-                            disabled={disabled}
-                            onPress={() => confirmRemove(member)}
-                            style={({ pressed }) => [
-                              styles.removeAction,
-                              disabled && styles.disabled,
-                              pressed && styles.pressed,
-                            ]}
-                          >
-                            {removeBusy ? (
-                              <ActivityIndicator color={colors.dangerDark} />
-                            ) : (
-                              <Ionicons
-                                name="trash-outline"
-                                size={18}
-                                color={disabled ? colors.textTertiary : colors.danger}
-                              />
-                            )}
-                            <Text
-                              style={[
-                                styles.removeText,
-                                disabled && { color: colors.textTertiary },
-                              ]}
-                            >
-                              移除
-                            </Text>
-                          </Pressable>
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          </Card>
-          {canManage ? (
-            <Card>
-              <Title>邀请家人</Title>
-              <Body>输入对方手机号后在底部生成邀请。开发环境会展示可复制的邀请深链。</Body>
-              <Field
-                testID="family-members.invite-phone.input"
-                label="手机号"
-                error={phoneError}
-                keyboardType="number-pad"
-                maxLength={11}
-                value={phone}
-                placeholder="请输入对方手机号"
-                onChangeText={(value) => {
-                  setPhone(normalizeInvitePhone(value));
-                  setError('');
-                  setSuccess('');
-                }}
-              />
-              {devToken ? (
-                <View testID="family-members.dev-invite" style={styles.devInvite}>
-                  <Text style={styles.devTitle}>开发邀请已创建</Text>
-                  <Text
-                    testID="family-members.dev-invite.link"
-                    selectable
-                    style={styles.token}
-                  >{`catdiary:///family-invites/${devToken}`}</Text>
-                  <Text style={styles.devBody}>
-                    正式环境将通过短信或分享链接交付，不会展示 Token。
-                  </Text>
-                </View>
-              ) : null}
             </Card>
-          ) : null}
+          ) : contextUnavailable ? (
+            <Card testID="family-members.context-unavailable.card">
+              <Title>需要登录并选择家庭</Title>
+              <ErrorText>家庭成员属于家庭协作设置，请先登录并选择家庭后再查看。</ErrorText>
+              <TextButton
+                label={session ? '去我的页面检查家庭' : '去登录'}
+                onPress={() =>
+                  session ? router.push('/(tabs)/me') : router.replace('/(auth)/login')
+                }
+              />
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <Title>{activeFamily?.name ?? '当前家庭'}</Title>
+                <Body>
+                  {canManage
+                    ? '管理员可以邀请、调整角色和移除成员。家庭必须至少保留一名管理员。'
+                    : '你可以查看家庭成员。邀请、角色调整和移除需要家庭管理员操作。'}
+                </Body>
+                {error ? (
+                  <View testID="family-members.error.text">
+                    <ErrorText>{error}</ErrorText>
+                  </View>
+                ) : null}
+                {success ? (
+                  <View testID="family-members.success.text">
+                    <SuccessText>{success}</SuccessText>
+                  </View>
+                ) : null}
+                <View>
+                  {members.length === 0 ? (
+                    <Text style={styles.emptyText}>暂无成员，请重新加载成员列表。</Text>
+                  ) : (
+                    members.map((member) => {
+                      const memberName = familyMemberDisplayName(member, session?.user.id);
+                      const canOperate = canOperateFamilyMember({
+                        currentRole: activeFamily?.role,
+                        currentUserId: session?.user.id,
+                        member,
+                      });
+                      const roleBusy = operation === memberOperationKey('role', member.id);
+                      const removeBusy = operation === memberOperationKey('remove', member.id);
+                      const disabled = busy || loading || contextUnavailable;
+                      return (
+                        <View
+                          key={member.id}
+                          testID="family-members.member.item"
+                          style={styles.member}
+                        >
+                          <View style={styles.memberTop}>
+                            <View style={styles.avatar}>
+                              <Text style={styles.avatarText}>{memberName.slice(0, 1)}</Text>
+                            </View>
+                            <View style={styles.memberBody}>
+                              <Text
+                                testID="family-members.member.name"
+                                numberOfLines={1}
+                                style={styles.memberName}
+                              >
+                                {memberName}
+                              </Text>
+                              <Text testID="family-members.member.role" style={styles.role}>
+                                {roleLabel(member.role)}
+                              </Text>
+                            </View>
+                          </View>
+                          {canOperate ? (
+                            <View style={styles.actions}>
+                              <Pressable
+                                testID="family-members.member.role.button"
+                                accessibilityRole="button"
+                                accessibilityLabel={
+                                  member.role === 'MEMBER'
+                                    ? `将 ${memberName} 设为管理员`
+                                    : `将 ${memberName} 设为普通成员`
+                                }
+                                accessibilityState={{ disabled }}
+                                disabled={disabled}
+                                onPress={() => confirmToggleRole(member)}
+                                style={({ pressed }) => [
+                                  styles.roleAction,
+                                  disabled && styles.disabled,
+                                  pressed && styles.pressed,
+                                ]}
+                              >
+                                {roleBusy ? <ActivityIndicator color={colors.warningDark} /> : null}
+                                <Text style={styles.actionText}>
+                                  {member.role === 'MEMBER' ? '设为管理员' : '设为成员'}
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                testID="family-members.member.remove.button"
+                                accessibilityRole="button"
+                                accessibilityLabel={`移除 ${memberName}`}
+                                accessibilityState={{ disabled }}
+                                disabled={disabled}
+                                onPress={() => confirmRemove(member)}
+                                style={({ pressed }) => [
+                                  styles.removeAction,
+                                  disabled && styles.disabled,
+                                  pressed && styles.pressed,
+                                ]}
+                              >
+                                {removeBusy ? (
+                                  <ActivityIndicator color={colors.dangerDark} />
+                                ) : (
+                                  <Ionicons
+                                    name="trash-outline"
+                                    size={18}
+                                    color={disabled ? colors.textTertiary : colors.danger}
+                                  />
+                                )}
+                                <Text
+                                  style={[
+                                    styles.removeText,
+                                    disabled && { color: colors.textTertiary },
+                                  ]}
+                                >
+                                  移除
+                                </Text>
+                              </Pressable>
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              </Card>
+              {canManage ? (
+                <Card>
+                  <Title>邀请家人</Title>
+                  <Body>输入对方手机号后在底部生成邀请。开发环境会展示可复制的邀请深链。</Body>
+                  <Field
+                    testID="family-members.invite-phone.input"
+                    label="手机号"
+                    error={phoneError}
+                    keyboardType="number-pad"
+                    maxLength={11}
+                    value={phone}
+                    placeholder="请输入对方手机号"
+                    onChangeText={(value) => {
+                      setPhone(normalizeInvitePhone(value));
+                      setError('');
+                      setSuccess('');
+                    }}
+                  />
+                  {devToken ? (
+                    <View testID="family-members.dev-invite" style={styles.devInvite}>
+                      <Text style={styles.devTitle}>开发邀请已创建</Text>
+                      <Text
+                        testID="family-members.dev-invite.link"
+                        selectable
+                        style={styles.token}
+                      >{`catdiary:///family-invites/${devToken}`}</Text>
+                      <Text style={styles.devBody}>
+                        正式环境将通过短信或分享链接交付，不会展示 Token。
+                      </Text>
+                    </View>
+                  ) : null}
+                </Card>
+              ) : null}
+            </>
+          )}
         </ScrollView>
         <View
           testID="family-members.footer"
@@ -369,7 +402,7 @@ export default function MembersRoute() {
               testID="family-members.reload.button"
               label="重新加载成员"
               busy={loading}
-              disabled={busy || !session || !activeFamily}
+              disabled={busy || restoring || contextUnavailable || !session || !activeFamily}
               onPress={() => void load()}
             />
           ) : canManage ? (
