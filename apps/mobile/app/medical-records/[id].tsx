@@ -24,12 +24,14 @@ import {
 } from '../../src/features/medical/medical-form';
 import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit';
 import {
+  Body,
   Card,
   ErrorText,
   Field,
   PrimaryButton,
   Screen,
   TextButton,
+  Title,
 } from '../../src/shared/ui/primitives';
 const labels = { VACCINE: '疫苗', DEWORMING: '驱虫', MEDICATION: '用药' } as const;
 const emptyForm: MedicalRecordDetailDraft = {
@@ -44,37 +46,78 @@ const emptyForm: MedicalRecordDetailDraft = {
   note: '',
 };
 export default function MedicalRecordDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const medicalRecordId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const allowLeave = useRef(false);
-  const [record, setRecord] = useState<MedicalRecordSummary>();
+  const [record, setRecord] = useState<MedicalRecordSummary | null>(null);
   const [form, setForm] = useState<MedicalRecordDetailDraft>(emptyForm);
   const [initialForm, setInitialForm] = useState<MedicalRecordDetailDraft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const canEdit = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
-  useEffect(() => {
-    if (!session || !activeFamily || !id) return;
-    void authApi
-      .getMedicalRecord(session.accessToken, activeFamily.id, id)
-      .then((item) => {
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+      if (!session || !activeFamily || !medicalRecordId) {
+        if (!shouldApply()) return;
+        setRecord(null);
+        setForm(emptyForm);
+        setInitialForm(null);
+        setError('');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      setRecord((current) => (current?.id === medicalRecordId ? current : null));
+      try {
+        const item = await authApi.getMedicalRecord(
+          session.accessToken,
+          activeFamily.id,
+          medicalRecordId,
+        );
+        if (!shouldApply()) return;
         setRecord(item);
         const nextForm = medicalFormFromRecord(item);
         setForm(nextForm);
         setInitialForm(nextForm);
-      })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : '医疗档案加载失败'));
-  }, [activeFamily, id, session]);
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setRecord(null);
+        setForm(emptyForm);
+        setInitialForm(null);
+        setError(cause instanceof Error ? cause.message : '医疗档案加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, medicalRecordId, restoring, session],
+  );
+  useEffect(() => {
+    let mounted = true;
+    void load(() => mounted);
+    return () => {
+      mounted = false;
+    };
+  }, [load]);
+  const contextUnavailable = !restoring && (!session || !activeFamily || !medicalRecordId);
+  const loadingInitial = restoring || (loading && !record);
+  const interactionLocked = busy || loading || contextUnavailable;
+  const canEdit = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const field = (key: keyof typeof form) => (value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
   const isDirty = useMemo(
     () => canEdit && !!initialForm && isMedicalRecordDetailDraftDirty(form, initialForm),
     [canEdit, form, initialForm],
   );
-  const canSave = canEdit && !busy && isDirty && Boolean(form.title.trim());
+  const canSave = canEdit && !interactionLocked && isDirty && Boolean(form.title.trim());
   const requestReturn = useCallback(() => {
     const decision = resolveDraftExitDecision({
       busy,
@@ -129,7 +172,7 @@ export default function MedicalRecordDetailScreen() {
     };
   }, []);
   async function save() {
-    if (!record || !session || !activeFamily || !canEdit || busy || !isDirty) return;
+    if (!record || !session || !activeFamily || !canSave) return;
     let occurredAt: string;
     let nextDueAt: string | null;
     try {
@@ -172,7 +215,7 @@ export default function MedicalRecordDetailScreen() {
     }
   }
   function remove() {
-    if (!record || !session || !activeFamily || busy) return;
+    if (!record || !session || !activeFamily || !canEdit || interactionLocked) return;
     Alert.alert(
       '删除医疗档案？',
       '记录将被软删除并保留审计信息。此操作不会删除已经生成的历史摘要文件。',
@@ -183,6 +226,7 @@ export default function MedicalRecordDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             setBusy(true);
+            setError('');
             try {
               await authApi.deleteMedicalRecord(
                 session.accessToken,
@@ -201,12 +245,31 @@ export default function MedicalRecordDetailScreen() {
       ],
     );
   }
-  if (!record && !error)
+  if (loadingInitial)
     return (
       <Screen>
         <Stack.Screen options={{ gestureEnabled: false }} />
         <TopBar busy={busy} onBack={requestReturn} />
-        <ActivityIndicator color={colors.brand} />
+        <Card testID="medical-detail.loading.card">
+          <ActivityIndicator color={colors.brand} />
+          <Body>正在加载医疗档案…</Body>
+        </Card>
+      </Screen>
+    );
+  if (contextUnavailable)
+    return (
+      <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <TopBar busy={busy} onBack={requestReturn} />
+        <Card testID="medical-detail.context-empty.card">
+          <Title>需要先选择家庭和医疗档案</Title>
+          <Body>当前没有可用的登录、家庭或医疗档案参数，先回到医疗档案列表重新进入。</Body>
+          <TextButton
+            label="返回医疗档案"
+            testID="medical-detail.context-empty.back"
+            onPress={() => router.replace('/medical-records')}
+          />
+        </Card>
       </Screen>
     );
   if (!record)
@@ -214,8 +277,21 @@ export default function MedicalRecordDetailScreen() {
       <Screen>
         <Stack.Screen options={{ gestureEnabled: false }} />
         <TopBar busy={busy} onBack={requestReturn} />
-        <ErrorText>{error}</ErrorText>
-        <TextButton label="返回" onPress={requestReturn} />
+        <Card testID="medical-detail.error.card">
+          <Title>医疗档案加载失败</Title>
+          <ErrorText testID="medical-detail.load-error">{error || '医疗档案加载失败'}</ErrorText>
+          <TextButton
+            label="重新加载"
+            disabled={loading}
+            testID="medical-detail.reload.button"
+            onPress={() => void load()}
+          />
+          <TextButton
+            label="返回医疗档案"
+            testID="medical-detail.error.back"
+            onPress={() => router.replace('/medical-records')}
+          />
+        </Card>
       </Screen>
     );
   return (
@@ -240,13 +316,13 @@ export default function MedicalRecordDetailScreen() {
           <Card>
             <Field
               label="项目名称"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.title}
               onChangeText={field('title')}
             />
             <Field
               label="发生日期"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.occurredDate}
               onChangeText={field('occurredDate')}
               placeholder="YYYY-MM-DD"
@@ -254,7 +330,7 @@ export default function MedicalRecordDetailScreen() {
             />
             <Field
               label="下次日期（选填）"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.nextDate}
               onChangeText={field('nextDate')}
               placeholder="YYYY-MM-DD"
@@ -262,37 +338,37 @@ export default function MedicalRecordDetailScreen() {
             />
             <Field
               label="品牌/药品"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.brand}
               onChangeText={field('brand')}
             />
             <Field
               label="批次号"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.batchNumber}
               onChangeText={field('batchNumber')}
             />
             <Field
               label="剂量"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.dose}
               onChangeText={field('dose')}
             />
             <Field
               label="医院或服务机构"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.provider}
               onChangeText={field('provider')}
             />
             <Field
               label="反应"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.reaction}
               onChangeText={field('reaction')}
             />
             <Field
               label="备注"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={form.note}
               onChangeText={field('note')}
               multiline
@@ -318,12 +394,13 @@ export default function MedicalRecordDetailScreen() {
               <TextButton
                 label="删除这条医疗档案"
                 danger
-                disabled={busy}
+                disabled={interactionLocked}
                 onPress={remove}
                 testID="medical-detail.delete.inline-button"
               />
               <TextButton
                 label={busy ? '处理中，请等待' : '返回医疗档案'}
+                disabled={interactionLocked}
                 onPress={requestReturn}
                 testID="medical-detail.return.inline-button"
               />
@@ -332,6 +409,7 @@ export default function MedicalRecordDetailScreen() {
           {!canEdit ? (
             <TextButton
               label="返回医疗档案"
+              disabled={interactionLocked}
               onPress={requestReturn}
               testID="medical-detail.return.button"
             />
@@ -356,12 +434,13 @@ export default function MedicalRecordDetailScreen() {
             <TextButton
               label="删除这条医疗档案"
               danger
-              disabled={busy}
+              disabled={interactionLocked}
               onPress={remove}
               testID="medical-detail.delete.button"
             />
             <TextButton
               label={busy ? '处理中，请等待' : '返回医疗档案'}
+              disabled={interactionLocked}
               onPress={requestReturn}
               testID="medical-detail.return.button"
             />

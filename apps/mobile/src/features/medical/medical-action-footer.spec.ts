@@ -32,4 +32,62 @@ describe('medical record form bottom actions', () => {
       'paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm)',
     );
   });
+
+  it('shows explicit restoration, missing context, and load failure states on medical detail', () => {
+    expect(medicalDetailSource).toContain(
+      'const { restoring, session, activeFamily } = useSession();',
+    );
+    expect(medicalDetailSource).toContain('const [loading, setLoading] = useState(true);');
+    expect(medicalDetailSource).toContain(
+      'const contextUnavailable = !restoring && (!session || !activeFamily || !medicalRecordId);',
+    );
+    expect(medicalDetailSource).toContain(
+      'const loadingInitial = restoring || (loading && !record);',
+    );
+    expect(medicalDetailSource).toContain('testID="medical-detail.loading.card"');
+    expect(medicalDetailSource).toContain('testID="medical-detail.context-empty.card"');
+    expect(medicalDetailSource).toContain('testID="medical-detail.error.card"');
+    expect(medicalDetailSource).toContain('testID="medical-detail.reload.button"');
+    expect(medicalDetailSource).toContain('testID="medical-detail.load-error"');
+  });
+
+  it('guards async medical record loading against stale effects and array route params', () => {
+    expect(medicalDetailSource).toContain(
+      'const medicalRecordId = Array.isArray(id) ? id[0] : id;',
+    );
+    expect(medicalDetailSource).toContain('void load(() => mounted);');
+    expect(medicalDetailSource).toContain('mounted = false;');
+    expect(medicalDetailSource).toContain('if (shouldApply()) setLoading(false);');
+    expect(medicalDetailSource).toContain(
+      'setRecord((current) => (current?.id === medicalRecordId ? current : null));',
+    );
+    expect(
+      (medicalDetailSource.match(/if \(!shouldApply\(\)\) return;/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('locks medical detail editing, saving, deletion, and return actions together', () => {
+    expect(medicalDetailSource).toContain(
+      'const interactionLocked = busy || loading || contextUnavailable;',
+    );
+    expect(medicalDetailSource).toContain(
+      'const canSave = canEdit && !interactionLocked && isDirty && Boolean(form.title.trim());',
+    );
+    expect(medicalDetailSource).toContain(
+      'if (!record || !session || !activeFamily || !canSave) return;',
+    );
+    expect(medicalDetailSource).toContain(
+      'if (!record || !session || !activeFamily || !canEdit || interactionLocked) return;',
+    );
+    expect(medicalDetailSource).toContain('editable={canEdit && !interactionLocked}');
+    expect(
+      (medicalDetailSource.match(/disabled={interactionLocked}/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  it('routes missing or failed medical detail loads back to the medical record list', () => {
+    expect(medicalDetailSource).toContain("onPress={() => router.replace('/medical-records')}");
+    expect(medicalDetailSource).toContain('testID="medical-detail.context-empty.back"');
+    expect(medicalDetailSource).toContain('testID="medical-detail.error.back"');
+  });
 });
