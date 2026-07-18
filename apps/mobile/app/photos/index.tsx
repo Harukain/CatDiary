@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, shadows, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type PhotoSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
@@ -19,13 +20,22 @@ import {
 } from '../../src/features/photos/photo-form';
 import { AuthenticatedImage } from '../../src/features/photos/authenticated-image';
 import { photoThumbnailSource } from '../../src/features/photos/photo-source';
-import { Body, ErrorText, PrimaryButton, Screen } from '../../src/shared/ui/primitives';
+import {
+  Body,
+  Card,
+  ErrorText,
+  PrimaryButton,
+  Screen,
+  TextButton,
+  Title,
+} from '../../src/shared/ui/primitives';
 
 export default function PhotosRoute() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ pet?: string; petId?: string }>();
   const { width: screenWidth } = useWindowDimensions();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const routePetId = useMemo(
     () => paramValue(params.petId) ?? paramValue(params.pet),
     [params.pet, params.petId],
@@ -35,6 +45,8 @@ export default function PhotosRoute() {
   const [petId, setPetId] = useState(routePetId ?? '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const canUpload = !!session && !!activeFamily && !loading;
   const gridLayout = useMemo(
     () =>
       photoAlbumGridLayout({
@@ -45,7 +57,14 @@ export default function PhotosRoute() {
     [screenWidth],
   );
   const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
+    if (restoring) return;
+    if (!session || !activeFamily) {
+      setPets([]);
+      setPhotos([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -64,115 +83,159 @@ export default function PhotosRoute() {
     } finally {
       setLoading(false);
     }
-  }, [activeFamily, petId, session]);
+  }, [activeFamily, petId, restoring, session]);
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
   );
+  function openUpload() {
+    if (!canUpload) return;
+    router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined });
+  }
 
   return (
     <Screen>
-      <View style={styles.nav}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.navButton}>
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <View>
-          <Text testID="photos.title" style={styles.title}>
-            猫咪相册
-          </Text>
-          <Text style={styles.subtitle}>把一起生活的小片段收好</Text>
-        </View>
-        <Pressable
-          testID="photos.add.button"
-          accessibilityLabel="上传照片"
-          onPress={() =>
-            router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
-          }
-          style={styles.add}
-        >
-          <Ionicons name="add" size={23} color={colors.surface} />
-        </Pressable>
-      </View>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-        >
-          <Filter
-            label="全部"
-            active={!petId}
-            testID="photos.filter.all"
-            onPress={() => setPetId('')}
-          />
-          {pets.map((pet) => (
-            <Filter
-              key={pet.id}
-              label={pet.name}
-              active={petId === pet.id}
-              testID="photos.filter.pet"
-              onPress={() => setPetId(pet.id)}
-            />
-          ))}
-        </ScrollView>
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : error ? (
-          <ErrorText>{error}</ErrorText>
-        ) : photos.length ? (
-          <View style={styles.grid}>
-            {photos.map((photo, index) => (
-              <Pressable
-                key={photo.id}
-                testID="photos.item"
-                accessibilityRole="button"
-                accessibilityLabel={`${photo.pets.map((entry) => entry.pet.name).join('、')}的照片`}
-                onPress={() => router.push({ pathname: '/photos/[id]', params: { id: photo.id } })}
-                style={[
-                  styles.tile,
-                  { width: gridLayout.columnWidth },
-                  index % 5 === 0 && styles.tileWide,
-                  index % 5 === 0 && { width: gridLayout.contentWidth },
-                ]}
-              >
-                <AuthenticatedImage
-                  source={photoThumbnailSource(photo, session!.accessToken, activeFamily!.id)}
-                  style={styles.image}
-                  resizeMode="cover"
-                />
-                <View style={styles.caption}>
-                  <Text numberOfLines={1} style={styles.petNames}>
-                    {photo.pets.map((entry) => entry.pet.name).join(' · ')}
-                  </Text>
-                  {photo.note ? (
-                    <Text numberOfLines={1} style={styles.note}>
-                      {photo.note}
-                    </Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            ))}
+      <View style={styles.flex}>
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <View style={styles.headingCopy}>
+            <Text testID="photos.title" style={styles.title}>
+              猫咪相册
+            </Text>
+            <Text style={styles.subtitle}>把一起生活的小片段收好</Text>
           </View>
-        ) : (
-          <View style={styles.empty}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="images-outline" size={30} color={colors.brand} />
+          <View style={styles.navButton} />
+        </View>
+        <ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+          >
+            <Filter
+              label="全部"
+              active={!petId}
+              disabled={loading || contextUnavailable}
+              testID="photos.filter.all"
+              onPress={() => setPetId('')}
+            />
+            {pets.map((pet) => (
+              <Filter
+                key={pet.id}
+                label={pet.name}
+                active={petId === pet.id}
+                disabled={loading || contextUnavailable}
+                testID="photos.filter.pet"
+                onPress={() => setPetId(pet.id)}
+              />
+            ))}
+          </ScrollView>
+          {restoring || loading ? (
+            <View testID="photos.loading" style={styles.stateCard}>
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在整理相册。</Body>
             </View>
-            <Text style={styles.emptyTitle}>还没有照片</Text>
-            <Body>
-              {petId ? '这只猫咪还没有绑定照片。' : '上传第一张照片，开始记录你们的生活。'}
-            </Body>
+          ) : contextUnavailable ? (
+            <Card testID="photos.context-empty">
+              <Title>缺少家庭上下文</Title>
+              <Body>请返回首页确认当前账号和家庭，再重新进入相册。</Body>
+            </Card>
+          ) : error ? (
+            <Card testID="photos.error.card">
+              <ErrorText testID="photos.error.text">{error}</ErrorText>
+              <Body>可以重新加载相册。已上传的照片不会因为本次加载失败而丢失。</Body>
+            </Card>
+          ) : session && activeFamily && photos.length ? (
+            <View style={styles.grid}>
+              {photos.map((photo, index) => (
+                <Pressable
+                  key={photo.id}
+                  testID="photos.item"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${photo.pets.map((entry) => entry.pet.name).join('、')}的照片`}
+                  onPress={() =>
+                    router.push({ pathname: '/photos/[id]', params: { id: photo.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.tile,
+                    { width: gridLayout.columnWidth },
+                    index % 5 === 0 && styles.tileWide,
+                    index % 5 === 0 && { width: gridLayout.contentWidth },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <AuthenticatedImage
+                    source={photoThumbnailSource(photo, session.accessToken, activeFamily.id)}
+                    style={styles.image}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.caption}>
+                    <Text numberOfLines={1} style={styles.petNames}>
+                      {photo.pets.map((entry) => entry.pet.name).join(' · ')}
+                    </Text>
+                    {photo.note ? (
+                      <Text numberOfLines={1} style={styles.note}>
+                        {photo.note}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="images-outline" size={30} color={colors.brand} />
+              </View>
+              <Text style={styles.emptyTitle}>还没有照片</Text>
+              <Body>
+                {petId ? '这只猫咪还没有绑定照片。' : '上传第一张照片，开始记录你们的生活。'}
+              </Body>
+            </View>
+          )}
+        </ScrollView>
+        <View
+          testID="photos.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          {error && !contextUnavailable ? (
+            <PrimaryButton
+              label="重新加载相册"
+              testID="photos.reload.button"
+              busy={loading}
+              onPress={() => void load()}
+            />
+          ) : (
             <PrimaryButton
               label="上传照片"
-              testID="photos.empty.upload.button"
-              onPress={() =>
-                router.push({ pathname: '/photos/new', params: petId ? { petId } : undefined })
-              }
+              testID="photos.upload.button"
+              disabled={!canUpload}
+              onPress={openUpload}
             />
-          </View>
-        )}
-      </ScrollView>
+          )}
+          <TextButton
+            label="返回上一页"
+            testID="photos.return.button"
+            onPress={() => router.back()}
+          />
+        </View>
+      </View>
     </Screen>
   );
 }
@@ -180,11 +243,13 @@ export default function PhotosRoute() {
 function Filter({
   label,
   active,
+  disabled,
   testID,
   onPress,
 }: {
   label: string;
   active: boolean;
+  disabled?: boolean;
   testID?: string;
   onPress(): void;
 }) {
@@ -192,9 +257,10 @@ function Filter({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.filter, active && styles.filterActive]}
+      style={[styles.filter, active && styles.filterActive, disabled && styles.disabled]}
     >
       <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
     </Pressable>
@@ -205,20 +271,14 @@ function paramValue(value: string | string[] | undefined) {
   return value ?? null;
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  navButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headingCopy: { flex: 1 },
   title: { ...typography.h2, color: colors.ink },
-  subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  add: {
-    marginLeft: 'auto',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: { paddingBottom: 110, gap: spacing.lg },
+  subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  scroll: { flex: 1 },
+  content: { paddingBottom: spacing.xl, gap: spacing.lg },
   filters: { gap: spacing.sm, paddingVertical: spacing.sm },
   filter: {
     minHeight: 38,
@@ -243,9 +303,16 @@ const styles = StyleSheet.create({
   },
   tileWide: { aspectRatio: 1.6 },
   image: { width: '100%', flex: 1, backgroundColor: colors.brandSoft },
-  caption: { padding: spacing.md, gap: 3 },
+  caption: { padding: spacing.md, gap: spacing.xs },
   petNames: { ...typography.caption, color: colors.ink, fontWeight: '700' },
   note: { fontSize: 12, color: colors.textSecondary },
+  stateCard: {
+    padding: spacing.xl,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   empty: {
     marginTop: spacing.huge,
     alignSelf: 'center',
@@ -267,4 +334,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: { ...typography.h2, color: colors.ink },
+  footer: {
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    gap: spacing.xs,
+  },
+  disabled: { opacity: 0.55 },
+  pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
 });
