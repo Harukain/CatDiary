@@ -156,6 +156,7 @@ export function TextButton({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
       style={styles.textButton}
