@@ -36,19 +36,24 @@ import {
 export default function ExportSettingsRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const isAdmin = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
   const [format, setFormat] = useState<'JSON' | 'CSV'>('JSON');
   const [scope, setScope] = useState<'FAMILY' | 'PERSONAL'>(isAdmin ? 'FAMILY' : 'PERSONAL');
+  const [, setScopeFamilyId] = useState<string | null>(activeFamily?.id ?? null);
   const [job, setJob] = useState<ExportJobSummary>();
   const [readyJob, setReadyJob] = useState<ExportJobSummary>();
   const [phase, setPhase] = useState<DataExportPhase>('idle');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const busy = phase !== 'idle';
-  const canEditOptions = canEditDataExportOptions(phase);
-  const canGenerateExport = !busy && !!session && !!activeFamily;
-  const canShareExport = !busy && !!readyJob;
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const canEditOptions = !restoring && !contextUnavailable && canEditDataExportOptions(phase);
+  const canGenerateExport =
+    !restoring && !contextUnavailable && !busy && !!session && !!activeFamily;
+  const canShareExport = !restoring && !contextUnavailable && !busy && !!readyJob;
+  const showExportActions = !restoring && !contextUnavailable;
+  const readyExportAvailable = showExportActions && !!readyJob;
   const requestReturn = useCallback(() => {
     if (!busy) {
       router.back();
@@ -74,6 +79,29 @@ export default function ExportSettingsRoute() {
     setSuccess('');
     setError('');
   }
+  useEffect(() => {
+    if (restoring) return;
+    if (!session || !activeFamily) {
+      setJob(undefined);
+      setReadyJob(undefined);
+      setSuccess('');
+      setError('');
+      setPhase('idle');
+      setScopeFamilyId(null);
+      setScope('PERSONAL');
+      return;
+    }
+    if (!canEditDataExportOptions(phase)) return;
+    setScopeFamilyId((currentFamilyId) => {
+      if (currentFamilyId !== activeFamily.id) {
+        setScope(isAdmin ? 'FAMILY' : 'PERSONAL');
+        resetReadyExport();
+        return activeFamily.id;
+      }
+      if (!isAdmin) setScope('PERSONAL');
+      return currentFamilyId;
+    });
+  }, [activeFamily, isAdmin, phase, restoring, session]);
   function updateFormat(nextFormat: 'JSON' | 'CSV') {
     if (!canEditOptions) return;
     setFormat(nextFormat);
@@ -85,9 +113,9 @@ export default function ExportSettingsRoute() {
     resetReadyExport();
   }
   async function start() {
-    if (!session || !activeFamily || busy) return;
+    if (restoring || contextUnavailable || !session || !activeFamily || busy) return;
     const selectedFormat = format;
-    const selectedScope = scope;
+    const selectedScope = isAdmin ? scope : 'PERSONAL';
     setPhase('queued');
     setError('');
     setSuccess('');
@@ -128,7 +156,7 @@ export default function ExportSettingsRoute() {
     }
   }
   async function shareReadyExport() {
-    if (!session || !activeFamily || !readyJob || busy) return;
+    if (restoring || contextUnavailable || !session || !activeFamily || !readyJob || busy) return;
     setPhase('sharing');
     setError('');
     try {
@@ -175,93 +203,115 @@ export default function ExportSettingsRoute() {
             <Text style={styles.title}>带走属于你的数据</Text>
             <Text style={styles.subtitle}>导出文件异步生成，完成后通过系统分享保存。</Text>
           </View>
-          <Card>
-            <Title>导出格式</Title>
-            <View style={styles.options}>
-              <Option
-                testID="export.format.json"
-                label="JSON"
-                detail="结构完整，适合备份和迁移"
-                active={format === 'JSON'}
-                disabled={!canEditOptions}
-                onPress={() => updateFormat('JSON')}
+          {restoring ? (
+            <Card testID="export.restoring.card">
+              <View style={styles.inlineState}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.inlineStateText}>正在恢复账号与家庭数据…</Text>
+              </View>
+            </Card>
+          ) : contextUnavailable ? (
+            <Card testID="export.context-unavailable.card">
+              <Title>需要登录并选择家庭</Title>
+              <ErrorText>数据导出属于账号与家庭数据，请先登录并选择家庭后再继续。</ErrorText>
+              <TextButton
+                label={session ? '去我的页面检查家庭' : '去登录'}
+                onPress={() =>
+                  session ? router.push('/(tabs)/me') : router.replace('/(auth)/login')
+                }
               />
-              <Option
-                testID="export.format.csv"
-                label="CSV"
-                detail="可使用表格工具查看"
-                active={format === 'CSV'}
-                disabled={!canEditOptions}
-                onPress={() => updateFormat('CSV')}
-              />
-            </View>
-            <Title>导出范围</Title>
-            <View style={styles.options}>
-              {isAdmin ? (
-                <Option
-                  testID="export.scope.family"
-                  label="整个家庭"
-                  detail="猫咪、计划、任务、记录、医疗和照片元数据"
-                  active={scope === 'FAMILY'}
-                  disabled={!canEditOptions}
-                  onPress={() => updateScope('FAMILY')}
-                />
-              ) : null}
-              <Option
-                testID="export.scope.personal"
-                label="仅我的数据"
-                detail="个人资料、本人记录、照片和通知偏好"
-                active={scope === 'PERSONAL'}
-                disabled={!canEditOptions}
-                onPress={() => updateScope('PERSONAL')}
-              />
-            </View>
-            {!canEditOptions ? (
-              <Text style={styles.lockedHint}>导出生成中，格式和范围已锁定。</Text>
-            ) : null}
-            {job ? (
-              <View testID="export.status.card" style={styles.status}>
-                <Ionicons
-                  name={
-                    job.status === 'READY'
-                      ? 'checkmark-circle'
-                      : job.status === 'FAILED'
-                        ? 'alert-circle'
-                        : 'time-outline'
-                  }
-                  size={20}
-                  color={
-                    job.status === 'READY'
-                      ? colors.successDark
-                      : job.status === 'FAILED'
-                        ? colors.dangerDark
-                        : colors.warningDark
-                  }
-                />
-                <View style={styles.statusCopy}>
-                  <Text testID="export.status.text" style={styles.statusTitle}>
-                    {statusLabel(job.status)}
-                  </Text>
-                  {job.expiresAt ? (
-                    <Text style={styles.statusBody}>
-                      文件保留至 {new Date(job.expiresAt).toLocaleString('zh-CN')}
-                    </Text>
-                  ) : null}
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <Title>导出格式</Title>
+                <View style={styles.options}>
+                  <Option
+                    testID="export.format.json"
+                    label="JSON"
+                    detail="结构完整，适合备份和迁移"
+                    active={format === 'JSON'}
+                    disabled={!canEditOptions}
+                    onPress={() => updateFormat('JSON')}
+                  />
+                  <Option
+                    testID="export.format.csv"
+                    label="CSV"
+                    detail="可使用表格工具查看"
+                    active={format === 'CSV'}
+                    disabled={!canEditOptions}
+                    onPress={() => updateFormat('CSV')}
+                  />
                 </View>
-                {busy ? <ActivityIndicator color={colors.brand} /> : null}
+                <Title>导出范围</Title>
+                <View style={styles.options}>
+                  {isAdmin ? (
+                    <Option
+                      testID="export.scope.family"
+                      label="整个家庭"
+                      detail="猫咪、计划、任务、记录、医疗和照片元数据"
+                      active={scope === 'FAMILY'}
+                      disabled={!canEditOptions}
+                      onPress={() => updateScope('FAMILY')}
+                    />
+                  ) : null}
+                  <Option
+                    testID="export.scope.personal"
+                    label="仅我的数据"
+                    detail="个人资料、本人记录、照片和通知偏好"
+                    active={scope === 'PERSONAL'}
+                    disabled={!canEditOptions}
+                    onPress={() => updateScope('PERSONAL')}
+                  />
+                </View>
+                {!canEditOptions ? (
+                  <Text style={styles.lockedHint}>导出生成中，格式和范围已锁定。</Text>
+                ) : null}
+                {job ? (
+                  <View testID="export.status.card" style={styles.status}>
+                    <Ionicons
+                      name={
+                        job.status === 'READY'
+                          ? 'checkmark-circle'
+                          : job.status === 'FAILED'
+                            ? 'alert-circle'
+                            : 'time-outline'
+                      }
+                      size={20}
+                      color={
+                        job.status === 'READY'
+                          ? colors.successDark
+                          : job.status === 'FAILED'
+                            ? colors.dangerDark
+                            : colors.warningDark
+                      }
+                    />
+                    <View style={styles.statusCopy}>
+                      <Text testID="export.status.text" style={styles.statusTitle}>
+                        {statusLabel(job.status)}
+                      </Text>
+                      {job.expiresAt ? (
+                        <Text style={styles.statusBody}>
+                          文件保留至 {new Date(job.expiresAt).toLocaleString('zh-CN')}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {busy ? <ActivityIndicator color={colors.brand} /> : null}
+                  </View>
+                ) : null}
+                {success ? (
+                  <View testID="export.ready.text">
+                    <SuccessText>{success}</SuccessText>
+                  </View>
+                ) : null}
+                {error ? <ErrorText>{error}</ErrorText> : null}
+              </Card>
+              <View style={styles.notice}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.brand} />
+                <Body>普通成员不能导出全家庭数据。文件 7 天后自动删除，下载链接 10 分钟失效。</Body>
               </View>
-            ) : null}
-            {success ? (
-              <View testID="export.ready.text">
-                <SuccessText>{success}</SuccessText>
-              </View>
-            ) : null}
-            {error ? <ErrorText>{error}</ErrorText> : null}
-          </Card>
-          <View style={styles.notice}>
-            <Ionicons name="lock-closed-outline" size={20} color={colors.brand} />
-            <Body>普通成员不能导出全家庭数据。文件 7 天后自动删除，下载链接 10 分钟失效。</Body>
-          </View>
+            </>
+          )}
         </ScrollView>
         <View
           testID="export.footer"
@@ -270,24 +320,26 @@ export default function ExportSettingsRoute() {
             { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
           ]}
         >
-          {readyJob ? (
-            <PrimaryButton
-              testID="export.share.button"
-              label={phase === 'sharing' ? dataExportButtonLabel(phase) : '分享导出文件'}
-              busy={phase === 'sharing'}
-              disabled={!canShareExport}
-              onPress={() => void shareReadyExport()}
-            />
-          ) : (
-            <PrimaryButton
-              testID="export.generate.button"
-              label={dataExportButtonLabel(phase)}
-              busy={phase === 'queued' || phase === 'processing'}
-              disabled={!canGenerateExport}
-              onPress={() => void start()}
-            />
-          )}
-          {readyJob ? (
+          {showExportActions ? (
+            readyExportAvailable ? (
+              <PrimaryButton
+                testID="export.share.button"
+                label={phase === 'sharing' ? dataExportButtonLabel(phase) : '分享导出文件'}
+                busy={phase === 'sharing'}
+                disabled={!canShareExport}
+                onPress={() => void shareReadyExport()}
+              />
+            ) : (
+              <PrimaryButton
+                testID="export.generate.button"
+                label={dataExportButtonLabel(phase)}
+                busy={phase === 'queued' || phase === 'processing'}
+                disabled={!canGenerateExport}
+                onPress={() => void start()}
+              />
+            )
+          ) : null}
+          {readyExportAvailable ? (
             <TextButton
               testID="export.generate.button"
               label={busy ? '处理中，请等待' : '重新生成导出文件'}
@@ -398,6 +450,13 @@ const styles = StyleSheet.create({
   statusCopy: { flex: 1, gap: spacing.xs },
   statusTitle: { ...typography.h3, color: colors.ink },
   statusBody: { ...typography.caption, color: colors.textSecondary },
+  inlineState: {
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  inlineStateText: { ...typography.caption, color: colors.textSecondary },
   notice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
