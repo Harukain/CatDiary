@@ -53,7 +53,7 @@ import {
 export default function NotificationSettingsRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [preference, setPreference] = useState<NotificationPreference>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<NotificationPreferenceKey | ''>('');
@@ -66,9 +66,12 @@ export default function NotificationSettingsRoute() {
   const [success, setSuccess] = useState('');
   const devicePushRegistering = devicePushStatus === 'registering';
   const devicePushTesting = devicePushTestStatus === 'sending';
+  const contextUnavailable = !restoring && (!session || !activeFamily);
   const returnLocked =
     Boolean(saving) || devicePushRegistering || devicePushTesting || openingSystemSettings;
+  const canOpenFeishuSettings = !returnLocked && !contextUnavailable && !restoring;
   const editingDisabled =
+    restoring ||
     !canEditNotificationPreference({ loading, savingKey: saving }) ||
     devicePushRegistering ||
     devicePushTesting ||
@@ -92,8 +95,12 @@ export default function NotificationSettingsRoute() {
       })
     : '';
   const load = useCallback(async () => {
+    if (restoring) return;
     if (!session || !activeFamily) {
+      setPreference(undefined);
       setLoading(false);
+      setError('');
+      setSuccess('');
       return;
     }
     setLoading(true);
@@ -106,7 +113,7 @@ export default function NotificationSettingsRoute() {
     } finally {
       setLoading(false);
     }
-  }, [activeFamily, session]);
+  }, [activeFamily, restoring, session]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -156,7 +163,7 @@ export default function NotificationSettingsRoute() {
     }
   }
   async function registerCurrentDevicePush(showSuccess = true) {
-    if (!session || devicePushStatus === 'registering') return false;
+    if (!session || returnLocked) return false;
     setDevicePushStatus('registering');
     setDevicePushToken('');
     setDevicePushError('');
@@ -176,7 +183,7 @@ export default function NotificationSettingsRoute() {
     }
   }
   async function sendCurrentDevicePushTest() {
-    if (!session || !activeFamily || !preference || !canTestDevicePush) return;
+    if (!session || !activeFamily || !preference || !canTestDevicePush || returnLocked) return;
     setDevicePushTestStatus('sending');
     setDevicePushError('');
     setError('');
@@ -244,11 +251,22 @@ export default function NotificationSettingsRoute() {
             <Text style={styles.title}>由你决定何时提醒</Text>
             <Text style={styles.subtitle}>设置仅影响你本人，不会停止家庭任务生成。</Text>
           </View>
-          {loading ? (
+          {restoring || loading ? (
             <View style={styles.loading}>
               <ActivityIndicator color={colors.brand} />
               <Text style={styles.loadingText}>正在加载通知设置…</Text>
             </View>
+          ) : contextUnavailable ? (
+            <Card testID="notifications.context-unavailable.card">
+              <Title>需要登录并选择家庭</Title>
+              <ErrorText>通知偏好属于某个家庭，请先登录并选择家庭后再配置。</ErrorText>
+              <TextButton
+                label={session ? '去我的页面检查家庭' : '去登录'}
+                onPress={() =>
+                  session ? router.push('/(tabs)/me') : router.replace('/(auth)/login')
+                }
+              />
+            </Card>
           ) : preference ? (
             <Card>
               <Title>{activeFamily?.name}</Title>
@@ -351,28 +369,36 @@ export default function NotificationSettingsRoute() {
               ) : null}
             </Card>
           ) : null}
-          <Card>
-            <Title>家庭通知渠道</Title>
-            <Pressable
-              testID="notifications.feishu.button"
-              accessibilityRole="button"
-              accessibilityLabel="飞书通知"
-              accessibilityHint="配置家庭级飞书机器人通知"
-              onPress={() => router.push('/settings/feishu' as Href)}
-              style={({ pressed }) => [styles.channelRow, pressed && styles.pressed]}
-            >
-              <View style={styles.channelIcon}>
-                <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.brand} />
-              </View>
-              <View style={styles.channelBody}>
-                <Text style={styles.channelTitle}>飞书群机器人</Text>
-                <Text style={styles.channelDetail}>
-                  管理员配置 Webhook 后，家庭任务可同步到飞书群。
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-            </Pressable>
-          </Card>
+          {!contextUnavailable ? (
+            <Card>
+              <Title>家庭通知渠道</Title>
+              <Pressable
+                testID="notifications.feishu.button"
+                accessibilityRole="button"
+                accessibilityLabel="飞书通知"
+                accessibilityHint="配置家庭级飞书机器人通知"
+                accessibilityState={{ disabled: !canOpenFeishuSettings }}
+                disabled={!canOpenFeishuSettings}
+                onPress={() => router.push('/settings/feishu' as Href)}
+                style={({ pressed }) => [
+                  styles.channelRow,
+                  !canOpenFeishuSettings && styles.channelRowDisabled,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.channelIcon}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.brand} />
+                </View>
+                <View style={styles.channelBody}>
+                  <Text style={styles.channelTitle}>飞书群机器人</Text>
+                  <Text style={styles.channelDetail}>
+                    管理员配置 Webhook 后，家庭任务可同步到飞书群。
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+              </Pressable>
+            </Card>
+          ) : null}
           <View style={styles.notice}>
             <Ionicons name="information-circle-outline" size={20} color={colors.brand} />
             <Body>关闭通知不会删除任务；你仍然可以在“任务”页面查看和完成它们。</Body>
@@ -390,13 +416,13 @@ export default function NotificationSettingsRoute() {
               testID="notifications.register-device.button"
               label={devicePushRegistrationActionLabel(devicePushStatus)}
               busy={devicePushRegistering}
-              disabled={devicePushTesting || Boolean(saving)}
+              disabled={returnLocked}
               onPress={() => void registerCurrentDevicePush()}
             />
             <TextButton
               testID="notifications.test-push.button"
               label={devicePushTestActionLabel(devicePushTestStatus)}
-              disabled={!canTestDevicePush}
+              disabled={!canTestDevicePush || returnLocked}
               onPress={() => void sendCurrentDevicePushTest()}
             />
             <Text style={styles.devicePushTestHint}>{devicePushTestHelp}</Text>
@@ -515,6 +541,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  channelRowDisabled: { opacity: 0.5 },
   channelIcon: {
     width: 44,
     height: 44,

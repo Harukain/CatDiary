@@ -16,8 +16,8 @@ describe('notification settings bottom actions', () => {
   });
 
   it('uses explicit enabled states for every device-push action', () => {
-    expect(notificationSettingsSource).toContain('disabled={devicePushTesting || Boolean(saving)}');
-    expect(notificationSettingsSource).toContain('disabled={!canTestDevicePush}');
+    expect(notificationSettingsSource).toContain('disabled={returnLocked}');
+    expect(notificationSettingsSource).toContain('disabled={!canTestDevicePush || returnLocked}');
     expect(notificationSettingsSource).toContain('disabled={returnLocked}');
     expect(notificationSettingsSource).toContain('const returnLocked =');
     expect(notificationSettingsSource).toContain(
@@ -38,6 +38,26 @@ describe('notification settings bottom actions', () => {
     expect(notificationSettingsSource).toContain("openingSystemSettings ? '正在打开系统设置'");
     expect(notificationSettingsSource).toContain(
       '请等待当前保存、登记、测试发送或系统设置打开操作完成',
+    );
+  });
+
+  it('does not expose cross-channel navigation while notification state is unsafe', () => {
+    expect(notificationSettingsSource).toContain(
+      'const { restoring, session, activeFamily } = useSession();',
+    );
+    expect(notificationSettingsSource).toContain(
+      'const contextUnavailable = !restoring && (!session || !activeFamily);',
+    );
+    expect(notificationSettingsSource).toContain(
+      'const canOpenFeishuSettings = !returnLocked && !contextUnavailable && !restoring;',
+    );
+    expect(notificationSettingsSource).toContain('testID="notifications.context-unavailable.card"');
+    expect(notificationSettingsSource).toContain(
+      'accessibilityState={{ disabled: !canOpenFeishuSettings }}',
+    );
+    expect(notificationSettingsSource).toContain('disabled={!canOpenFeishuSettings}');
+    expect(notificationSettingsSource).toContain(
+      '!canOpenFeishuSettings && styles.channelRowDisabled',
     );
   });
 });
