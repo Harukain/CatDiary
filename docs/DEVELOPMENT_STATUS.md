@@ -179,6 +179,7 @@
 - Production 原生权限已最小化：iOS ATS 禁止任意 HTTP，SecureStore 不再生成未使用 Face ID 声明；Android 阻断录音和开发悬浮窗。最终 Info.plist/Manifest introspection 白名单已纳入移动配置测试。
 - 商店隐私工程基线已补齐：iOS App 级 Privacy Manifest 声明不追踪、App Functionality 数据用途，并聚合当前 Expo/RN Required Reason API；隔离目录真实 Prebuild 会校验最终 XML。Google Play Data safety 与双商店数据类型映射已形成待法务确认底稿。
 - 法律文档入口已闭环：Preview/Production 强制两个独立 HTTPS URL，登录前与“我的”均可访问用户协议和隐私政策；缺失、本地 HTTP、凭据、查询参数和 fragment 均会阻断构建。
+- App 登录前法律链接加固：登录页的用户协议与隐私政策链接会先检查系统是否可打开，打开失败时在登录页展示明确错误；打开期间禁用重复点击，且链接触控区域满足移动端最小点击要求，避免首次登录验收时法律链接静默无效。
 - App 法律入口交互加固：协议与隐私页的用户协议、隐私政策按钮会先检查系统是否可打开链接，打开失败时在页面内展示明确错误；打开期间锁定重复点击与返回，返回操作固定到底部安全区，避免发布验收时法律链接静默无效。
 - 法律文档源文件和门禁已补齐：新增隐私政策、用户协议草稿与 `pnpm legal:audit`/`pnpm legal:gate`，检查版本、生效日期、账号注销/删除渠道、权限用途、第三方处理者、联系方式、占位项、草稿声明和疑似密钥；自检 `pnpm test:legal-docs` 已纳入 `pnpm verify` 与 CI。最终法律/合规确认仍由产品所有者负责。
 - App typed runtime config：移动端业务代码不再直接读取 `process.env` 或分散读取 Expo 常量；API 地址、EAS Project ID、运行环境和法律链接统一经 typed runtime config 解析，并保留 iOS/Android 开发 fallback。

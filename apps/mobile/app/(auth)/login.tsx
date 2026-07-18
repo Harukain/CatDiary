@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { colors, typography } from '@cat-diary/design-tokens';
+import { colors, spacing, typography } from '@cat-diary/design-tokens';
 import { otpSchema, phoneSchema } from '@cat-diary/validation';
 import { authApi, AuthApiError } from '../../src/features/auth/auth-api';
 import { resolveLoginRedirect } from '../../src/features/auth/login-flow';
@@ -21,6 +21,7 @@ import {
   Body,
   BrandHeader,
   Card,
+  ErrorText,
   Field,
   PrimaryButton,
   Screen,
@@ -37,6 +38,8 @@ export default function LoginRoute() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [legalOpening, setLegalOpening] = useState<'terms' | 'privacy' | null>(null);
+  const [legalError, setLegalError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const phoneValid = useMemo(() => phoneSchema.safeParse(phone).success, [phone]);
   const codeValid = useMemo(() => otpSchema.safeParse(code).success, [code]);
@@ -45,6 +48,7 @@ export default function LoginRoute() {
   const canVerify = !restoring && !session && phoneValid && codeValid && !busy;
   const canChangePhone = !busy;
   const canResendCode = canSendCode && cooldown === 0;
+  const canOpenLegalLinks = !busy && !legalOpening;
 
   useEffect(() => {
     if (!cooldown) return;
@@ -65,10 +69,28 @@ export default function LoginRoute() {
   }
   if (session) return <Redirect href={redirectAfterLogin} />;
 
+  async function openLegalLink(kind: 'terms' | 'privacy', url: string | undefined) {
+    if (!url || !canOpenLegalLinks) return;
+    setLegalOpening(kind);
+    setLegalError('');
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) throw new Error('unsupported-url');
+      await Linking.openURL(url);
+    } catch {
+      setLegalError(
+        kind === 'terms' ? '用户协议打开失败，请稍后重试。' : '隐私政策打开失败，请稍后重试。',
+      );
+    } finally {
+      setLegalOpening(null);
+    }
+  }
+
   async function sendCode() {
     if (!canSendCode) return;
     setBusy(true);
     setError('');
+    setLegalError('');
     try {
       const result = await authApi.sendCode(phone);
       setCooldown(result.cooldownSeconds);
@@ -84,6 +106,7 @@ export default function LoginRoute() {
     if (!canVerify) return;
     setBusy(true);
     setError('');
+    setLegalError('');
     try {
       const deviceId = await getOrCreateDeviceId();
       const nextSession = await authApi.verifyCode(phone, code, deviceId);
@@ -137,20 +160,33 @@ export default function LoginRoute() {
           />
           <View style={styles.legal}>
             <Text style={styles.legalText}>继续即表示你已阅读并同意</Text>
+            {legalError ? <ErrorText testID="login.legal.error">{legalError}</ErrorText> : null}
             {legalLinks.terms && legalLinks.privacyPolicy ? (
-              <View style={styles.legalLinks}>
+              <View testID="login.legal.links" style={styles.legalLinks}>
                 <Pressable
+                  testID="login.terms.link"
                   accessibilityRole="link"
-                  onPress={() => void Linking.openURL(legalLinks.terms!)}
+                  accessibilityState={{ disabled: !canOpenLegalLinks }}
+                  disabled={!canOpenLegalLinks}
+                  onPress={() => void openLegalLink('terms', legalLinks.terms)}
+                  style={({ pressed }) => [styles.legalLinkButton, pressed && styles.legalPressed]}
                 >
-                  <Text style={styles.legalLink}>《用户协议》</Text>
+                  <Text style={[styles.legalLink, !canOpenLegalLinks && styles.legalLinkDisabled]}>
+                    《用户协议》
+                  </Text>
                 </Pressable>
                 <Text style={styles.legalText}>与</Text>
                 <Pressable
+                  testID="login.privacy.link"
                   accessibilityRole="link"
-                  onPress={() => void Linking.openURL(legalLinks.privacyPolicy!)}
+                  accessibilityState={{ disabled: !canOpenLegalLinks }}
+                  disabled={!canOpenLegalLinks}
+                  onPress={() => void openLegalLink('privacy', legalLinks.privacyPolicy)}
+                  style={({ pressed }) => [styles.legalLinkButton, pressed && styles.legalPressed]}
                 >
-                  <Text style={styles.legalLink}>《隐私政策》</Text>
+                  <Text style={[styles.legalLink, !canOpenLegalLinks && styles.legalLinkDisabled]}>
+                    《隐私政策》
+                  </Text>
                 </Pressable>
               </View>
             ) : (
@@ -191,8 +227,17 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   actions: { flexDirection: 'row', justifyContent: 'space-between' },
   dev: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
-  legal: { alignItems: 'center' },
-  legalLinks: { flexDirection: 'row', alignItems: 'center' },
+  legal: { alignItems: 'center', gap: spacing.xs },
+  legalLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    columnGap: spacing.xs,
+  },
   legalText: { ...typography.caption, color: colors.textSecondary },
   legalLink: { ...typography.caption, color: colors.brand, fontWeight: '600' },
+  legalLinkButton: { minHeight: 44, justifyContent: 'center' },
+  legalLinkDisabled: { color: colors.textTertiary },
+  legalPressed: { opacity: 0.72 },
 });

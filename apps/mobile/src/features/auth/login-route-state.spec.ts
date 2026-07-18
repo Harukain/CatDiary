@@ -39,4 +39,25 @@ describe('login route state guards', () => {
     expect(loginRouteSource).toContain("setPhone(value.replace(/\\D/g, ''));");
     expect(loginRouteSource).toContain("setCode('');");
   });
+
+  it('guards pre-login legal links with link support checks and failure feedback', () => {
+    expect(loginRouteSource).toContain(
+      "const [legalOpening, setLegalOpening] = useState<'terms' | 'privacy' | null>(null);",
+    );
+    expect(loginRouteSource).toContain("const [legalError, setLegalError] = useState('');");
+    expect(loginRouteSource).toContain('const canOpenLegalLinks = !busy && !legalOpening;');
+    expect(loginRouteSource).toContain(
+      "async function openLegalLink(kind: 'terms' | 'privacy', url: string | undefined)",
+    );
+    expect(loginRouteSource).toContain('Linking.canOpenURL(url)');
+    expect(loginRouteSource).toContain('await Linking.openURL(url);');
+    expect(loginRouteSource).toContain("kind === 'terms' ? '用户协议打开失败，请稍后重试。'");
+    expect(loginRouteSource).toContain('testID="login.legal.error"');
+    expect(loginRouteSource).toContain('testID="login.terms.link"');
+    expect(loginRouteSource).toContain('testID="login.privacy.link"');
+    expect(loginRouteSource).toContain('accessibilityState={{ disabled: !canOpenLegalLinks }}');
+    expect(loginRouteSource).toContain('disabled={!canOpenLegalLinks}');
+    expect(loginRouteSource).toContain('styles.legalLinkButton');
+    expect(loginRouteSource).not.toContain('onPress={() => void Linking.openURL');
+  });
 });
