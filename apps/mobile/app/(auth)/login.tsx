@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -8,10 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, typography } from '@cat-diary/design-tokens';
 import { otpSchema, phoneSchema } from '@cat-diary/validation';
 import { authApi, AuthApiError } from '../../src/features/auth/auth-api';
+import { resolveLoginRedirect } from '../../src/features/auth/login-flow';
 import { useSession } from '../../src/features/auth/session-provider';
 import { getOrCreateDeviceId } from '../../src/features/auth/session-store';
 import { legalLinks } from '../../src/features/legal/legal-links';
@@ -28,7 +30,7 @@ import {
 
 export default function LoginRoute() {
   const router = useRouter();
-  const { next } = useLocalSearchParams<{ next?: string }>();
+  const { next } = useLocalSearchParams<{ next?: string | string[] }>();
   const { restoring, session, signIn } = useSession();
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
@@ -38,16 +40,33 @@ export default function LoginRoute() {
   const [cooldown, setCooldown] = useState(0);
   const phoneValid = useMemo(() => phoneSchema.safeParse(phone).success, [phone]);
   const codeValid = useMemo(() => otpSchema.safeParse(code).success, [code]);
+  const redirectAfterLogin = resolveLoginRedirect(next);
+  const canSendCode = !restoring && !session && phoneValid && !busy;
+  const canVerify = !restoring && !session && phoneValid && codeValid && !busy;
+  const canChangePhone = !busy;
+  const canResendCode = canSendCode && cooldown === 0;
 
   useEffect(() => {
     if (!cooldown) return;
     const timer = setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
-  if (!restoring && session) return <Redirect href="/" />;
+  if (restoring) {
+    return (
+      <Screen>
+        <BrandHeader title="猫伴日记" subtitle="正在恢复登录状态" />
+        <Card testID="login.restoring.card" elevated>
+          <Title>正在确认账号</Title>
+          <Body>恢复完成后再进入登录流程，避免重复发送验证码或覆盖当前会话。</Body>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      </Screen>
+    );
+  }
+  if (session) return <Redirect href={redirectAfterLogin} />;
 
   async function sendCode() {
-    if (!phoneValid || busy) return;
+    if (!canSendCode) return;
     setBusy(true);
     setError('');
     try {
@@ -62,14 +81,14 @@ export default function LoginRoute() {
   }
 
   async function verify() {
-    if (!codeValid || busy) return;
+    if (!canVerify) return;
     setBusy(true);
     setError('');
     try {
       const deviceId = await getOrCreateDeviceId();
       const nextSession = await authApi.verifyCode(phone, code, deviceId);
       await signIn(nextSession);
-      router.replace(next?.startsWith('/family-invites/') ? (next as Href) : '/');
+      router.replace(redirectAfterLogin);
     } catch (cause) {
       setError(cause instanceof AuthApiError ? cause.message : '登录失败，请稍后重试');
     } finally {
@@ -103,15 +122,17 @@ export default function LoginRoute() {
             error={error}
             onChangeText={(value) => {
               setError('');
-              if (step === 'phone') setPhone(value.replace(/\D/g, ''));
-              else setCode(value.replace(/\D/g, ''));
+              if (step === 'phone') {
+                setPhone(value.replace(/\D/g, ''));
+                setCode('');
+              } else setCode(value.replace(/\D/g, ''));
             }}
           />
           <PrimaryButton
             testID={step === 'phone' ? 'login.send-code.button' : 'login.verify.button'}
             label={step === 'phone' ? '获取验证码' : '登录'}
             busy={busy}
-            disabled={step === 'phone' ? !phoneValid : !codeValid}
+            disabled={step === 'phone' ? !canSendCode : !canVerify}
             onPress={step === 'phone' ? sendCode : verify}
           />
           <View style={styles.legal}>
@@ -141,6 +162,7 @@ export default function LoginRoute() {
               <TextButton
                 testID="login.change-phone.button"
                 label="更换手机号"
+                disabled={!canChangePhone}
                 onPress={() => {
                   setStep('phone');
                   setCode('');
@@ -150,7 +172,7 @@ export default function LoginRoute() {
               <TextButton
                 testID="login.resend-code.button"
                 label={cooldown ? `${cooldown} 秒后重发` : '重新发送'}
-                disabled={cooldown > 0}
+                disabled={!canResendCode}
                 onPress={sendCode}
               />
             </View>
