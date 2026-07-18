@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,30 +20,81 @@ import {
 export default function HealthEventsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
+  const mountedRef = useRef(true);
   const [events, setEvents] = useState<HealthEventSummary[]>([]);
   const [status, setStatus] = useState<'ACTIVE' | 'RECOVERED'>('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
-    setLoading(true);
-    setError('');
-    try {
-      setEvents(await authApi.listHealthEvents(session.accessToken, activeFamily.id, status));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '健康事件加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeFamily, session, status]);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+      if (!session || !activeFamily) {
+        if (!shouldApply()) return;
+        setEvents([]);
+        setError('');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const nextEvents = await authApi.listHealthEvents(
+          session.accessToken,
+          activeFamily.id,
+          status,
+        );
+        if (!shouldApply()) return;
+        setEvents(nextEvents);
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setEvents([]);
+        setError(cause instanceof Error ? cause.message : '健康事件加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, restoring, session, status],
+  );
   useFocusEffect(
     useCallback(() => {
-      void load();
+      let mounted = true;
+      void load(() => mounted);
+      return () => {
+        mounted = false;
+      };
     }, [load]),
   );
-  const canRecordSymptom = !loading && !!session && !!activeFamily;
-  const canOpenTimeline = !loading;
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const loadingInitial = restoring || loading;
+  const interactionLocked = loading || contextUnavailable;
+  const canRecordSymptom = !interactionLocked && !!session && !!activeFamily;
+  const canOpenTimeline = !interactionLocked;
+  function openHealthEvent(eventId: string) {
+    if (interactionLocked) return;
+    router.push({ pathname: '/health-events/[id]', params: { id: eventId } });
+  }
+  function openRecordSymptom() {
+    if (!canRecordSymptom) return;
+    router.push({ pathname: '/records/new', params: { type: 'VOMIT' } });
+  }
+  function openTimeline() {
+    if (!canOpenTimeline) return;
+    router.push(recordTimelineRoute);
+  }
+  async function reload() {
+    if (!mountedRef.current) return;
+    await load(() => mountedRef.current);
+  }
   return (
     <Screen>
       <View style={styles.flex}>
@@ -81,31 +132,53 @@ export default function HealthEventsScreen() {
               active={status === 'ACTIVE'}
               label="观察中"
               value="ACTIVE"
-              disabled={loading}
+              disabled={interactionLocked}
               onPress={() => setStatus('ACTIVE')}
             />
             <Tab
               active={status === 'RECOVERED'}
               label="已恢复"
               value="RECOVERED"
-              disabled={loading}
+              disabled={interactionLocked}
               onPress={() => setStatus('RECOVERED')}
             />
           </View>
-          {loading ? (
-            <ActivityIndicator color={colors.brand} />
+          {loadingInitial ? (
+            <Card testID="health-events.loading.card">
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在整理健康事件…</Body>
+            </Card>
+          ) : contextUnavailable ? (
+            <Card testID="health-events.context-empty.card">
+              <Title>需要先完成家庭设置</Title>
+              <Body>登录并选择家庭后，才能查看健康事件或记录异常。</Body>
+              <TextButton label="去我的页面检查家庭" onPress={() => router.push('/(tabs)/me')} />
+            </Card>
           ) : error ? (
-            <ErrorText testID="health-events.error.text">{error}</ErrorText>
+            <Card testID="health-events.error.card">
+              <Title>健康事件加载失败</Title>
+              <ErrorText testID="health-events.error.text">{error}</ErrorText>
+              <TextButton
+                testID="health-events.reload.inline-button"
+                label="重新加载"
+                disabled={loading}
+                onPress={() => void reload()}
+              />
+            </Card>
           ) : events.length ? (
             events.map((event) => (
               <Pressable
                 key={event.id}
                 testID="health-events.item"
                 accessibilityRole="button"
-                onPress={() =>
-                  router.push({ pathname: '/health-events/[id]', params: { id: event.id } })
-                }
-                style={({ pressed }) => [styles.event, pressed && styles.pressed]}
+                accessibilityState={{ disabled: interactionLocked }}
+                disabled={interactionLocked}
+                onPress={() => openHealthEvent(event.id)}
+                style={({ pressed }) => [
+                  styles.event,
+                  interactionLocked && styles.disabled,
+                  pressed && !interactionLocked && styles.pressed,
+                ]}
               >
                 <View
                   style={[styles.statusDot, event.status === 'RECOVERED' && styles.recoveredDot]}
@@ -143,21 +216,21 @@ export default function HealthEventsScreen() {
               testID="health-events.retry.button"
               label="重新加载健康事件"
               disabled={loading}
-              onPress={() => void load()}
+              onPress={() => void reload()}
             />
           ) : (
             <PrimaryButton
               testID="health-events.record-symptom.button"
               label="记录一次异常"
               disabled={!canRecordSymptom}
-              onPress={() => router.push({ pathname: '/records/new', params: { type: 'VOMIT' } })}
+              onPress={openRecordSymptom}
             />
           )}
           <TextButton
             testID="health-events.timeline.button"
             label="查看记录时间线"
             disabled={!canOpenTimeline}
-            onPress={() => router.push(recordTimelineRoute)}
+            onPress={openTimeline}
           />
           <TextButton
             testID="health-events.return.button"
