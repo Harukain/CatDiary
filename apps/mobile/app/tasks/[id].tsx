@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import {
   authApi,
@@ -19,7 +20,15 @@ import {
   type TaskSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, TextButton, Title } from '../../src/shared/ui/primitives';
+import {
+  Body,
+  Card,
+  ErrorText,
+  PrimaryButton,
+  Screen,
+  TextButton,
+  Title,
+} from '../../src/shared/ui/primitives';
 import {
   enqueueOfflineOperation,
   isNetworkFailure,
@@ -39,8 +48,10 @@ import { resolveDraftExitDecision } from '../../src/shared/navigation/draft-exit
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { session, activeFamily } = useSession();
+  const insets = useSafeAreaInsets();
+  const { restoring, session, activeFamily } = useSession();
   const [task, setTask] = useState<TaskSummary>();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
@@ -48,20 +59,33 @@ export default function TaskDetailScreen() {
   const [completionError, setCompletionError] = useState('');
   const [generatedRecordId, setGeneratedRecordId] = useState('');
 
-  const load = useCallback(() => {
-    if (!id || !session || !activeFamily) return;
+  const contextUnavailable = !restoring && (!id || !session || !activeFamily);
+  const loadingInitial = restoring || (loading && !task);
+  const interactionDisabled = actionBusy || loadingInitial || contextUnavailable;
+
+  const load = useCallback(async () => {
+    if (restoring) return;
+    if (!id || !session || !activeFamily) {
+      setTask(undefined);
+      setLoading(false);
+      setError('');
+      return;
+    }
+    setLoading(true);
     setError('');
-    void authApi
-      .getTask(session.accessToken, activeFamily.id, id)
-      .then(setTask)
-      .catch((cause) =>
-        setError(cause instanceof AuthApiError ? cause.message : '任务详情加载失败'),
-      );
-  }, [activeFamily, id, session]);
+    try {
+      setTask(await authApi.getTask(session.accessToken, activeFamily.id, id));
+    } catch (cause) {
+      setError(cause instanceof AuthApiError ? cause.message : '任务详情加载失败');
+      setTask(undefined);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeFamily, id, restoring, session]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
@@ -89,14 +113,14 @@ export default function TaskDetailScreen() {
   }, [actionBusy, requestReturn]);
 
   function requestComplete() {
-    if (!task) return;
+    if (!task || interactionDisabled) return;
     setCompletionError('');
     setError('');
     setCompletionVisible(true);
   }
 
   async function complete(input: CompleteTaskInput) {
-    if (!task || !session || !activeFamily) return;
+    if (!task || !session || !activeFamily || actionBusy) return;
     setActionBusy(true);
     setError('');
     setCompletionError('');
@@ -113,7 +137,7 @@ export default function TaskDetailScreen() {
       setGeneratedRecordId(recordId ?? '');
       setNotice(recordId ? '完成结果已保存，已生成对应记录。' : '完成结果已保存。');
       setCompletionVisible(false);
-      load();
+      void load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         try {
@@ -139,7 +163,7 @@ export default function TaskDetailScreen() {
   }
 
   function requestSkip() {
-    if (!task) return;
+    if (!task || interactionDisabled) return;
     Alert.alert('跳过这次任务', '只会跳过本次任务，不会暂停长期计划。', [
       { text: '取消', style: 'cancel' },
       { text: '确认跳过', onPress: () => void skip() },
@@ -147,7 +171,7 @@ export default function TaskDetailScreen() {
   }
 
   async function skip() {
-    if (!task || !session || !activeFamily) return;
+    if (!task || !session || !activeFamily || actionBusy) return;
     setActionBusy(true);
     setError('');
     setNotice('');
@@ -155,7 +179,7 @@ export default function TaskDetailScreen() {
     const operation = authApi.createSkipOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
-      load();
+      void load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
@@ -169,7 +193,7 @@ export default function TaskDetailScreen() {
   }
 
   async function undo() {
-    if (!task || !session || !activeFamily) return;
+    if (!task || !session || !activeFamily || actionBusy) return;
     setActionBusy(true);
     setError('');
     setNotice('');
@@ -177,7 +201,7 @@ export default function TaskDetailScreen() {
     const operation = authApi.createUndoOperation(activeFamily.id, task);
     try {
       await authApi.sendTaskOperation(session.accessToken, operation);
-      load();
+      void load();
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         await enqueueOfflineOperation(operation);
@@ -190,142 +214,210 @@ export default function TaskDetailScreen() {
     }
   }
 
-  if (!task && !error)
-    return (
-      <Screen>
-        <ActivityIndicator color={colors.brand} />
-      </Screen>
-    );
-  if (!task)
-    return (
-      <Screen>
-        <ErrorText>{error}</ErrorText>
-        <TextButton label="返回任务列表" onPress={() => router.replace('/(tabs)/tasks')} />
-      </Screen>
-    );
-
-  const linkedRecordId =
-    generatedRecordId ||
-    (task.status === 'COMPLETED' && typeof task.record?.id === 'string' ? task.record.id : '');
+  const linkedRecordId = task
+    ? generatedRecordId ||
+      (task.status === 'COMPLETED' && typeof task.record?.id === 'string' ? task.record.id : '')
+    : '';
+  const returnLabel = task ? '返回上一页' : '返回任务列表';
+  const returnAction = task ? requestReturn : () => router.replace('/(tabs)/tasks');
 
   return (
     <Screen>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="返回"
-          accessibilityHint={actionBusy ? '任务操作处理中，点击会提示继续等待' : '返回上一页'}
-          onPress={requestReturn}
-          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
-        </Pressable>
-        <Text style={styles.navTitle}>任务详情</Text>
-        <View style={styles.navButton} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.heading}>
-          <Text style={styles.eyebrow}>照顾任务 · {typeLabel(task.type)}</Text>
-          <Text style={styles.title}>{task.title}</Text>
-          <View style={[styles.badge, statusStyle(task.status)]}>
-            <Text style={styles.badgeText}>{statusLabel(task.status)}</Text>
-          </View>
+      <View style={styles.flex}>
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            accessibilityHint={actionBusy ? '任务操作处理中，点击会提示继续等待' : returnLabel}
+            accessibilityState={{ disabled: actionBusy }}
+            disabled={actionBusy}
+            onPress={requestReturn}
+            style={({ pressed }) => [
+              styles.navButton,
+              actionBusy && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text style={styles.navTitle}>任务详情</Text>
+          <View style={styles.navButton} />
         </View>
-        <Card>
-          <Title>任务信息</Title>
-          <Info label="猫咪" value={task.pet?.name ?? '家庭公共任务'} />
-          <Info
-            label="计划时间"
-            value={new Date(task.scheduledAt).toLocaleString('zh-CN', { hour12: false })}
-          />
-          <Info label="负责人" value={task.assignee?.displayName ?? '家庭成员共同负责'} />
-          {task.detail ? <Info label="说明" value={task.detail} /> : null}
-          {task.completedAt ? (
-            <Info
-              label="完成时间"
-              value={new Date(task.completedAt).toLocaleString('zh-CN', { hour12: false })}
-            />
-          ) : null}
-          {formatTaskCompletionResult(task.result) ? (
-            <Info label="执行结果" value={formatTaskCompletionResult(task.result)} />
-          ) : null}
-          {task.note ? <Info label="备注" value={task.note} /> : null}
-        </Card>
-        <Card>
-          <Title>{task.status === 'PENDING' ? '处理任务' : '任务结果'}</Title>
-          <Body>
-            {task.status === 'PENDING'
-              ? isMedicalTask(task)
-                ? '医疗任务完成前需要再次确认实际执行情况。'
-                : '完成会记录实际时间与执行人；跳过只影响本次任务。'
-              : canUndo(task)
-                ? '如需更正结果，可以撤销后重新处理本次任务。'
-                : '该任务已取消，不能再继续处理。'}
-          </Body>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-          {linkedRecordId ? (
-            <Pressable
-              testID="task-detail.view-record.button"
-              accessibilityRole="button"
-              accessibilityLabel={`查看${task.title}生成的记录`}
-              onPress={() =>
-                router.push({ pathname: '/records/[id]', params: { id: linkedRecordId } })
-              }
-              style={({ pressed }) => [styles.recordLink, pressed && styles.pressed]}
-            >
-              <View style={styles.recordLinkCopy}>
-                <Text style={styles.recordLinkTitle}>查看对应记录</Text>
-                <Text style={styles.recordLinkBody}>这里保存了实际完成时间、执行结果和备注。</Text>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {loadingInitial ? (
+            <View testID="task-detail.loading" style={styles.stateCard}>
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在读取任务详情。</Body>
+            </View>
+          ) : contextUnavailable ? (
+            <Card testID="task-detail.context-empty">
+              <Title>缺少任务上下文</Title>
+              <Body>请从任务列表重新进入详情页，确保当前家庭和任务信息有效。</Body>
+            </Card>
+          ) : !task ? (
+            <Card testID="task-detail.error.card">
+              <ErrorText testID="task-detail.error.text">{error || '任务详情加载失败'}</ErrorText>
+              <Body>可以重新加载任务详情；如果任务已被取消或删除，请返回任务列表确认。</Body>
+            </Card>
+          ) : (
+            <>
+              <View style={styles.heading}>
+                <Text style={styles.eyebrow}>照顾任务 · {typeLabel(task.type)}</Text>
+                <Text style={styles.title}>{task.title}</Text>
+                <View style={[styles.badge, statusStyle(task.status)]}>
+                  <Text style={styles.badgeText}>{statusLabel(task.status)}</Text>
+                </View>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.successDark} />
-            </Pressable>
-          ) : null}
-          {actionBusy ? (
-            <ActivityIndicator color={colors.brand} />
-          ) : task.status === 'PENDING' ? (
-            <View style={styles.actions}>
+              <Card>
+                <Title>任务信息</Title>
+                <Info label="猫咪" value={task.pet?.name ?? '家庭公共任务'} />
+                <Info
+                  label="计划时间"
+                  value={new Date(task.scheduledAt).toLocaleString('zh-CN', { hour12: false })}
+                />
+                <Info label="负责人" value={task.assignee?.displayName ?? '家庭成员共同负责'} />
+                {task.detail ? <Info label="说明" value={task.detail} /> : null}
+                {task.completedAt ? (
+                  <Info
+                    label="完成时间"
+                    value={new Date(task.completedAt).toLocaleString('zh-CN', { hour12: false })}
+                  />
+                ) : null}
+                {formatTaskCompletionResult(task.result) ? (
+                  <Info label="执行结果" value={formatTaskCompletionResult(task.result)} />
+                ) : null}
+                {task.note ? <Info label="备注" value={task.note} /> : null}
+              </Card>
+              <Card>
+                <Title>{task.status === 'PENDING' ? '处理任务' : '任务结果'}</Title>
+                <Body>
+                  {task.status === 'PENDING'
+                    ? isMedicalTask(task)
+                      ? '医疗任务完成前需要再次确认实际执行情况。底部按钮会打开完成确认面板。'
+                      : '完成会记录实际时间与执行人；跳过只影响本次任务。'
+                    : canUndo(task)
+                      ? '如需更正结果，可以撤销后重新处理本次任务。'
+                      : '该任务已取消，不能再继续处理。'}
+                </Body>
+                {error ? (
+                  <ErrorText testID="task-detail.action-error.text">{error}</ErrorText>
+                ) : null}
+                {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+                {linkedRecordId ? (
+                  <Pressable
+                    testID="task-detail.view-record.button"
+                    accessibilityRole="button"
+                    accessibilityLabel={`查看${task.title}生成的记录`}
+                    disabled={actionBusy}
+                    onPress={() =>
+                      router.push({ pathname: '/records/[id]', params: { id: linkedRecordId } })
+                    }
+                    style={({ pressed }) => [
+                      styles.recordLink,
+                      actionBusy && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.recordLinkCopy}>
+                      <Text style={styles.recordLinkTitle}>查看对应记录</Text>
+                      <Text style={styles.recordLinkBody}>
+                        这里保存了实际完成时间、执行结果和备注。
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.successDark} />
+                  </Pressable>
+                ) : null}
+                {actionBusy ? <ActivityIndicator color={colors.brand} /> : null}
+                {!actionBusy && task.status === 'CANCELLED' ? (
+                  <Text style={styles.inactiveHint}>无需进行操作</Text>
+                ) : null}
+              </Card>
+            </>
+          )}
+        </ScrollView>
+        <View
+          testID="task-detail.footer"
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) },
+          ]}
+        >
+          {task?.status === 'PENDING' ? (
+            <View style={styles.footerActions}>
               <Pressable
+                testID="task-detail.skip.button"
                 accessibilityRole="button"
+                accessibilityLabel="跳过本次任务"
+                accessibilityState={{ disabled: interactionDisabled }}
+                disabled={interactionDisabled}
                 onPress={requestSkip}
-                style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.secondary,
+                  interactionDisabled && styles.disabled,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={styles.secondaryText}>跳过本次</Text>
               </Pressable>
               <Pressable
+                testID="task-detail.complete.button"
                 accessibilityRole="button"
+                accessibilityLabel="完成任务"
+                accessibilityState={{ disabled: interactionDisabled }}
+                disabled={interactionDisabled}
                 onPress={requestComplete}
-                style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.primary,
+                  interactionDisabled && styles.disabled,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={styles.primaryText}>完成任务</Text>
               </Pressable>
             </View>
-          ) : canUndo(task) ? (
-            <Pressable
-              accessibilityRole="button"
+          ) : task && canUndo(task) ? (
+            <PrimaryButton
+              testID="task-detail.undo.button"
+              label="撤销本次结果"
+              busy={actionBusy}
+              disabled={loadingInitial}
               onPress={() => void undo()}
-              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-            >
-              <Text style={styles.secondaryText}>撤销本次结果</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.inactiveHint}>无需进行操作</Text>
-          )}
-        </Card>
-        <TextButton label={actionBusy ? '处理中，请等待' : '返回'} onPress={requestReturn} />
-      </ScrollView>
-      <TaskCompletionSheet
-        task={task}
-        visible={completionVisible}
-        busy={actionBusy}
-        submissionError={completionError}
-        onCancel={() => {
-          setCompletionError('');
-          setCompletionVisible(false);
-        }}
-        onSubmit={(input) => void complete(input)}
-      />
+            />
+          ) : !task && error && !contextUnavailable ? (
+            <PrimaryButton
+              testID="task-detail.reload.button"
+              label="重新加载任务"
+              busy={loading}
+              onPress={() => void load()}
+            />
+          ) : null}
+          <TextButton
+            testID="task-detail.return.button"
+            label={actionBusy ? '处理中，请等待' : returnLabel}
+            disabled={actionBusy}
+            onPress={returnAction}
+          />
+        </View>
+      </View>
+      {task ? (
+        <TaskCompletionSheet
+          task={task}
+          visible={completionVisible}
+          busy={actionBusy}
+          submissionError={completionError}
+          onCancel={() => {
+            setCompletionError('');
+            setCompletionVisible(false);
+          }}
+          onSubmit={(input) => void complete(input)}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -363,6 +455,7 @@ function canUndo(task: TaskSummary) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   nav: {
     minHeight: 50,
     flexDirection: 'row',
@@ -371,7 +464,15 @@ const styles = StyleSheet.create({
   },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navTitle: { ...typography.h2, color: colors.ink },
-  content: { gap: spacing.xxl, paddingBottom: spacing.xxxl },
+  scroll: { flex: 1 },
+  content: { gap: spacing.xxl, paddingBottom: spacing.xl },
+  stateCard: {
+    padding: spacing.xl,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   heading: { gap: spacing.sm, alignItems: 'flex-start' },
   eyebrow: { ...typography.secondary, color: colors.brand, fontWeight: '600' },
   title: { ...typography.h1, color: colors.ink },
@@ -383,7 +484,7 @@ const styles = StyleSheet.create({
   info: { gap: spacing.xs, paddingTop: spacing.md },
   label: { ...typography.secondary, color: colors.textSecondary },
   value: { ...typography.body, color: colors.ink },
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  footerActions: { flexDirection: 'row', gap: spacing.sm },
   primary: {
     flex: 1,
     minHeight: 48,
@@ -418,5 +519,14 @@ const styles = StyleSheet.create({
   recordLinkTitle: { ...typography.h3, color: colors.successDark },
   recordLinkBody: { ...typography.caption, color: colors.successDark },
   inactiveHint: { ...typography.caption, color: colors.textTertiary },
+  footer: {
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.page,
+    gap: spacing.xs,
+  },
+  disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
 });
