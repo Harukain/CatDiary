@@ -25,11 +25,14 @@ export default function HomeTab() {
   const { restoring, session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskSummary[]>([]);
+  const [enabledPlanCount, setEnabledPlanCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const contextUnavailable = !restoring && (!session || !activeFamily);
   const interactionLocked = loading || contextUnavailable;
+  const showFirstPlanPrompt =
+    !loading && !contextUnavailable && !error && pets.length > 0 && enabledPlanCount === 0;
 
   const load = useCallback(
     async (shouldApply: () => boolean = () => true) => {
@@ -38,6 +41,7 @@ export default function HomeTab() {
         if (!shouldApply()) return;
         setPets([]);
         setTodayTasks([]);
+        setEnabledPlanCount(0);
         setLoading(false);
         setError('');
         return;
@@ -45,17 +49,20 @@ export default function HomeTab() {
       setLoading(true);
       setError('');
       try {
-        const [nextPets, nextTasks] = await Promise.all([
+        const [nextPets, nextTasks, nextPlans] = await Promise.all([
           authApi.listPets(session.accessToken, activeFamily.id),
           authApi.listTasks(session.accessToken, activeFamily.id, 'today'),
+          authApi.listPlans(session.accessToken, activeFamily.id, true),
         ]);
         if (!shouldApply()) return;
         setPets(nextPets);
         setTodayTasks(nextTasks.items);
+        setEnabledPlanCount(nextPlans.length);
       } catch {
         if (!shouldApply()) return;
         setPets([]);
         setTodayTasks([]);
+        setEnabledPlanCount(0);
         setError('首页数据加载失败');
       } finally {
         if (shouldApply()) setLoading(false);
@@ -150,6 +157,29 @@ export default function HomeTab() {
             </View>
           ) : null}
         </View>
+        {showFirstPlanPrompt ? (
+          <View testID="home.first-plan-prompt" style={styles.firstPlanPrompt}>
+            <View style={styles.firstPlanIcon}>
+              <Ionicons name="alarm-outline" size={20} color={colors.brand} />
+            </View>
+            <View style={styles.firstPlanText}>
+              <Text style={styles.firstPlanTitle}>先创建第一个照顾提醒</Text>
+              <Text style={styles.firstPlanBody}>
+                建议先从铲屎、疫苗、驱虫或用药开始。到点后会生成任务，完成时自动留下记录。
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="创建第一个照顾计划"
+              onPress={() => router.push('/plans/new')}
+              testID="home.first-plan-prompt.create"
+              style={({ pressed }) => [styles.firstPlanAction, pressed && styles.pressed]}
+            >
+              <Text style={styles.firstPlanActionText}>去创建</Text>
+              <Ionicons name="arrow-forward" size={15} color={colors.surface} />
+            </Pressable>
+          </View>
+        ) : null}
         <View style={styles.quickSection}>
           <View style={styles.profileHeader}>
             <Title>快捷记录</Title>
@@ -360,6 +390,38 @@ const styles = StyleSheet.create({
   taskPreviewTitle: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
   taskPreviewMeta: { ...typography.caption, color: colors.warningDark, marginTop: 1 },
   moreTasks: { ...typography.caption, color: colors.warningDark, paddingLeft: spacing.md },
+  firstPlanPrompt: {
+    minHeight: 112,
+    borderRadius: radii.banner,
+    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  firstPlanIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  firstPlanText: { gap: spacing.xs },
+  firstPlanTitle: { ...typography.h2, color: colors.ink },
+  firstPlanBody: { ...typography.secondary, color: colors.textSecondary },
+  firstPlanAction: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    backgroundColor: colors.brand,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  firstPlanActionText: { ...typography.secondary, color: colors.surface, fontWeight: '600' },
   quickSection: { gap: spacing.md },
   quickHint: { ...typography.caption, color: colors.textSecondary },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

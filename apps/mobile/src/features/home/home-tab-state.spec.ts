@@ -10,6 +10,7 @@ describe('home tab state handling', () => {
     expect(homeTabSource).toContain('if (restoring) return;');
     expect(homeTabSource).toContain('setPets([]);');
     expect(homeTabSource).toContain('setTodayTasks([]);');
+    expect(homeTabSource).toContain('setEnabledPlanCount(0);');
     expect(homeTabSource).toContain('setLoading(false);');
     expect(homeTabSource).toContain('testID="home.context-empty.card"');
   });
@@ -40,5 +41,19 @@ describe('home tab state handling', () => {
       homeTabSource.match(/if \(!shouldApply\(\)\) return;/g)?.length ?? 0,
     ).toBeGreaterThanOrEqual(3);
     expect(homeTabSource).toContain('if (shouldApply()) setLoading(false);');
+  });
+
+  it('prompts new families to create the first enabled care plan', () => {
+    expect(homeTabSource).toContain('const [enabledPlanCount, setEnabledPlanCount] = useState(0);');
+    expect(homeTabSource).toContain(
+      'const showFirstPlanPrompt =\n    !loading && !contextUnavailable && !error && pets.length > 0 && enabledPlanCount === 0;',
+    );
+    expect(homeTabSource).toContain(
+      'authApi.listPlans(session.accessToken, activeFamily.id, true)',
+    );
+    expect(homeTabSource).toContain('setEnabledPlanCount(nextPlans.length);');
+    expect(homeTabSource).toContain('testID="home.first-plan-prompt"');
+    expect(homeTabSource).toContain('testID="home.first-plan-prompt.create"');
+    expect(homeTabSource).toContain("router.push('/plans/new')");
   });
 });
