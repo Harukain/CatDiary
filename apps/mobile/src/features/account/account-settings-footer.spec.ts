@@ -29,4 +29,20 @@ describe('account settings bottom actions', () => {
     expect(accountSettingsSource).toContain('disabled={busy || !deletionCodeReady}');
     expect(accountSettingsSource).toContain("Alert.alert('账号操作正在处理'");
   });
+
+  it('has explicit session restoration, missing-session, and load-error states', () => {
+    expect(accountSettingsSource).toContain(
+      'const { restoring, session, signOut, signOutAll } = useSession();',
+    );
+    expect(accountSettingsSource).toContain('const [loading, setLoading] = useState(true);');
+    expect(accountSettingsSource).toContain('const contextUnavailable = !restoring && !session;');
+    expect(accountSettingsSource).toContain('if (restoring) return;');
+    expect(accountSettingsSource).toContain('testID="account.loading.card"');
+    expect(accountSettingsSource).toContain('testID="account.context-unavailable.card"');
+    expect(accountSettingsSource).toContain('testID="account.load-error.card"');
+    expect(accountSettingsSource).toContain('label="重新加载"');
+    expect(accountSettingsSource).toContain(
+      'error && status ? <ErrorText>{error}</ErrorText> : null',
+    );
+  });
 });

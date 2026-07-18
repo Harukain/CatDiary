@@ -40,8 +40,9 @@ import {
 export default function AccountSettingsRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, signOut, signOutAll } = useSession();
+  const { restoring, session, signOut, signOutAll } = useSession();
   const [status, setStatus] = useState<AccountDeletionStatus>();
+  const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
   const [maskedPhone, setMaskedPhone] = useState('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -53,13 +54,33 @@ export default function AccountSettingsRoute() {
     () => isAccountDeletionDraftDirty({ code, maskedPhone }),
     [code, maskedPhone],
   );
+  const contextUnavailable = !restoring && !session;
   useEffect(() => {
-    if (session)
-      void authApi
-        .getAccountDeletionStatus(session.accessToken)
-        .then(setStatus)
-        .catch((cause) => setError(cause instanceof Error ? cause.message : '账号状态加载失败'));
-  }, [session]);
+    if (restoring) return;
+    if (!session) {
+      setStatus(undefined);
+      setLoading(false);
+      setError('');
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError('');
+    void authApi
+      .getAccountDeletionStatus(session.accessToken)
+      .then((next) => {
+        if (active) setStatus(next);
+      })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : '账号状态加载失败');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [restoring, session]);
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
     const timer = setInterval(() => {
@@ -227,8 +248,38 @@ export default function AccountSettingsRoute() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {!status && !error ? (
-            <ActivityIndicator color={colors.brand} />
+          {restoring || loading ? (
+            <View testID="account.loading.card" style={styles.inlineState}>
+              <ActivityIndicator color={colors.brand} />
+              <Text style={styles.loadingText}>正在加载账号状态…</Text>
+            </View>
+          ) : contextUnavailable ? (
+            <Card testID="account.context-unavailable.card">
+              <Title>需要登录</Title>
+              <ErrorText>账号与注销操作需要登录后才能查看。</ErrorText>
+              <TextButton label="去登录" onPress={() => router.replace('/(auth)/login')} />
+            </Card>
+          ) : !status && error ? (
+            <Card testID="account.load-error.card">
+              <Title>账号状态加载失败</Title>
+              <ErrorText>{error}</ErrorText>
+              <TextButton
+                label="重新加载"
+                disabled={busy}
+                onPress={() => {
+                  if (!session) return;
+                  setLoading(true);
+                  setError('');
+                  void authApi
+                    .getAccountDeletionStatus(session.accessToken)
+                    .then(setStatus)
+                    .catch((cause) =>
+                      setError(cause instanceof Error ? cause.message : '账号状态加载失败'),
+                    )
+                    .finally(() => setLoading(false));
+                }}
+              />
+            </Card>
           ) : status?.status === 'PENDING_DELETION' ? (
             <>
               <View style={styles.pendingHero}>
@@ -325,7 +376,7 @@ export default function AccountSettingsRoute() {
               </View>
             </>
           ) : null}
-          {error ? <ErrorText>{error}</ErrorText> : null}
+          {error && status ? <ErrorText>{error}</ErrorText> : null}
         </ScrollView>
         {status?.status === 'PENDING_DELETION' && !keyboardVisible ? (
           <View
@@ -392,6 +443,8 @@ const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: spacing.xl },
   title: { ...typography.h1, color: colors.ink },
   subtitle: { ...typography.secondary, color: colors.textSecondary, marginTop: spacing.xs },
+  inlineState: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  loadingText: { ...typography.caption, color: colors.textSecondary },
   codeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   codeField: { flex: 1 },
   codeButton: {
