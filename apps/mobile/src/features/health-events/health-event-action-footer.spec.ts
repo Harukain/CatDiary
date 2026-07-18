@@ -32,4 +32,57 @@ describe('health event bottom actions', () => {
       'paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm)',
     );
   });
+
+  it('shows explicit restoration, missing context, and load failure states on health event detail', () => {
+    expect(healthEventDetailSource).toContain(
+      'const { restoring, session, activeFamily } = useSession();',
+    );
+    expect(healthEventDetailSource).toContain('const [loading, setLoading] = useState(true);');
+    expect(healthEventDetailSource).toContain(
+      'const contextUnavailable = !restoring && (!session || !activeFamily || !eventId);',
+    );
+    expect(healthEventDetailSource).toContain(
+      'const loadingInitial = restoring || (loading && !event);',
+    );
+    expect(healthEventDetailSource).toContain('testID="health-event-detail.loading.card"');
+    expect(healthEventDetailSource).toContain('testID="health-event-detail.context-empty.card"');
+    expect(healthEventDetailSource).toContain('testID="health-event-detail.error.card"');
+    expect(healthEventDetailSource).toContain('testID="health-event-detail.reload.button"');
+    expect(healthEventDetailSource).toContain('testID="health-event-detail.load-error"');
+  });
+
+  it('guards async health event loading against stale focus effects and array route params', () => {
+    expect(healthEventDetailSource).toContain('const eventId = Array.isArray(id) ? id[0] : id;');
+    expect(healthEventDetailSource).toContain('void load(() => mounted);');
+    expect(healthEventDetailSource).toContain('mounted = false;');
+    expect(healthEventDetailSource).toContain('if (shouldApply()) setLoading(false);');
+    expect(healthEventDetailSource).toContain(
+      'setEvent((current) => (current?.id === eventId ? current : null));',
+    );
+    expect(
+      (healthEventDetailSource.match(/if \(!shouldApply\(\)\) return;/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('locks health event editing, linked records, and recovery actions together', () => {
+    expect(healthEventDetailSource).toContain(
+      'const interactionLocked = busy || loading || contextUnavailable;',
+    );
+    expect(healthEventDetailSource).toContain(
+      'const canSave = canEdit && !interactionLocked && isDirty && Boolean(title.trim());',
+    );
+    expect(healthEventDetailSource).toContain(
+      "const canRecover = canEdit && !interactionLocked && event?.status === 'ACTIVE';",
+    );
+    expect(healthEventDetailSource).toContain('if (!event || interactionLocked) return;');
+    expect(healthEventDetailSource).toContain('editable={canEdit && !interactionLocked}');
+    expect(
+      (healthEventDetailSource.match(/disabled={interactionLocked}/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(5);
+    expect(healthEventDetailSource).toContain('interactionLocked && styles.disabled');
+  });
+
+  it('keeps recovered health event copy single and unambiguous', () => {
+    expect((healthEventDetailSource.match(/恢复于/g) ?? []).length).toBe(1);
+  });
 });

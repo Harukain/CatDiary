@@ -26,44 +26,81 @@ import {
   type HealthEventDraft,
 } from '../../src/features/health-events/health-event-form';
 import {
+  Body,
   Card,
   ErrorText,
   Field,
   PrimaryButton,
   Screen,
   TextButton,
+  Title,
 } from '../../src/shared/ui/primitives';
 
 export default function HealthEventDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const eventId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
-  const [event, setEvent] = useState<HealthEventSummary>();
+  const { restoring, session, activeFamily } = useSession();
+  const [event, setEvent] = useState<HealthEventSummary | null>(null);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [initialDraft, setInitialDraft] = useState<HealthEventDraft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const load = useCallback(async () => {
-    if (!session || !activeFamily || !id) return;
-    setError('');
-    try {
-      const next = await authApi.getHealthEvent(session.accessToken, activeFamily.id, id);
-      setEvent(next);
-      setTitle(next.title);
-      setSummary(next.summary ?? '');
-      setInitialDraft({ title: next.title, summary: next.summary ?? '' });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '加载失败');
-    }
-  }, [activeFamily, id, session]);
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setLoading(true);
+        return;
+      }
+      if (!session || !activeFamily || !eventId) {
+        if (!shouldApply()) return;
+        setEvent(null);
+        setTitle('');
+        setSummary('');
+        setInitialDraft(null);
+        setError('');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      setEvent((current) => (current?.id === eventId ? current : null));
+      try {
+        const next = await authApi.getHealthEvent(session.accessToken, activeFamily.id, eventId);
+        if (!shouldApply()) return;
+        setEvent(next);
+        setTitle(next.title);
+        setSummary(next.summary ?? '');
+        setInitialDraft({ title: next.title, summary: next.summary ?? '' });
+      } catch (cause) {
+        if (!shouldApply()) return;
+        setEvent(null);
+        setTitle('');
+        setSummary('');
+        setInitialDraft(null);
+        setError(cause instanceof Error ? cause.message : '健康事件加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, eventId, restoring, session],
+  );
   useFocusEffect(
     useCallback(() => {
-      void load();
+      let mounted = true;
+      void load(() => mounted);
+      return () => {
+        mounted = false;
+      };
     }, [load]),
   );
+  const contextUnavailable = !restoring && (!session || !activeFamily || !eventId);
+  const loadingInitial = restoring || (loading && !event);
+  const interactionLocked = busy || loading || contextUnavailable;
   const canEdit =
     !!event &&
     (event.createdById === session?.user.id ||
@@ -81,8 +118,8 @@ export default function HealthEventDetailScreen() {
       ),
     [initialDraft, summary, title],
   );
-  const canSave = canEdit && !busy && isDirty && Boolean(title.trim());
-  const canRecover = canEdit && !busy && event?.status === 'ACTIVE';
+  const canSave = canEdit && !interactionLocked && isDirty && Boolean(title.trim());
+  const canRecover = canEdit && !interactionLocked && event?.status === 'ACTIVE';
   const requestGuardedNavigation = useCallback(
     (target: HealthEventDetailNavigationTarget, action: () => void) => {
       const decision = resolveHealthEventDetailNavigationDecision({ busy, isDirty });
@@ -128,24 +165,25 @@ export default function HealthEventDetailScreen() {
     };
   }, []);
   const requestLinkRecord = useCallback(() => {
-    if (!event) return;
+    if (!event || interactionLocked) return;
     requestGuardedNavigation('linkRecord', () =>
       router.push({
         pathname: '/health-events/link-record',
         params: { eventId: event.id },
       }),
     );
-  }, [event, requestGuardedNavigation, router]);
+  }, [event, interactionLocked, requestGuardedNavigation, router]);
   const requestViewRecord = useCallback(
     (recordId: string) => {
+      if (interactionLocked) return;
       requestGuardedNavigation('viewRecord', () =>
         router.push({ pathname: '/records/[id]', params: { id: recordId } }),
       );
     },
-    [requestGuardedNavigation, router],
+    [interactionLocked, requestGuardedNavigation, router],
   );
   async function save() {
-    if (!event || !session || !activeFamily || !canEdit || busy || !isDirty) return;
+    if (!event || !session || !activeFamily || !canSave) return;
     setBusy(true);
     setError('');
     try {
@@ -166,8 +204,9 @@ export default function HealthEventDetailScreen() {
     }
   }
   async function recover() {
-    if (!event || !session || !activeFamily || !canEdit || busy) return;
+    if (!event || !session || !activeFamily || !canRecover) return;
     setBusy(true);
+    setError('');
     try {
       const next = await authApi.recoverHealthEvent(
         session.accessToken,
@@ -184,7 +223,7 @@ export default function HealthEventDetailScreen() {
     }
   }
   function unlink(recordId: string, recordTitle: string) {
-    if (!event || !session || !activeFamily || busy) return;
+    if (!event || !session || !activeFamily || !canEdit || interactionLocked) return;
     Alert.alert('解除记录关联？', `“${recordTitle}”不会被删除，只会从当前健康事件中移除。`, [
       { text: '取消', style: 'cancel' },
       {
@@ -192,6 +231,7 @@ export default function HealthEventDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
+          setError('');
           try {
             await authApi.removeHealthEventRecord(
               session.accessToken,
@@ -209,17 +249,52 @@ export default function HealthEventDetailScreen() {
       },
     ]);
   }
-  if (!event && !error)
+  if (loadingInitial)
     return (
       <Screen>
-        <ActivityIndicator color={colors.brand} />
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Card testID="health-event-detail.loading.card">
+          <ActivityIndicator color={colors.brand} />
+          <Body>正在加载健康事件…</Body>
+        </Card>
+      </Screen>
+    );
+  if (contextUnavailable)
+    return (
+      <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Card testID="health-event-detail.context-empty.card">
+          <Title>需要先选择家庭和健康事件</Title>
+          <Body>当前没有可用的登录、家庭或健康事件参数，先回到健康事件列表重新进入。</Body>
+          <TextButton
+            label="返回健康事件"
+            testID="health-event-detail.context-empty.back"
+            onPress={() => router.replace('/health-events')}
+          />
+        </Card>
       </Screen>
     );
   if (!event)
     return (
       <Screen>
-        <ErrorText>{error}</ErrorText>
-        <TextButton label="返回" onPress={() => router.back()} />
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Card testID="health-event-detail.error.card">
+          <Title>健康事件加载失败</Title>
+          <ErrorText testID="health-event-detail.load-error">
+            {error || '健康事件加载失败'}
+          </ErrorText>
+          <TextButton
+            label="重新加载"
+            disabled={loading}
+            testID="health-event-detail.reload.button"
+            onPress={() => void load()}
+          />
+          <TextButton
+            label="返回健康事件"
+            testID="health-event-detail.error.back"
+            onPress={() => router.replace('/health-events')}
+          />
+        </Card>
       </Screen>
     );
   return (
@@ -238,12 +313,13 @@ export default function HealthEventDetailScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="返回健康事件列表"
-              disabled={busy}
+              disabled={interactionLocked}
+              accessibilityState={{ disabled: interactionLocked }}
               onPress={requestReturn}
               style={({ pressed }) => [
                 styles.navButton,
-                busy && styles.navButtonDisabled,
-                pressed && styles.pressed,
+                interactionLocked && styles.disabled,
+                pressed && !interactionLocked && styles.pressed,
               ]}
             >
               <Ionicons name="chevron-back" size={22} color={colors.ink} />
@@ -264,14 +340,14 @@ export default function HealthEventDetailScreen() {
           <Card>
             <Field
               label="事件标题"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={title}
               onChangeText={setTitle}
               maxLength={100}
             />
             <Field
               label="情况摘要"
-              editable={canEdit && !busy}
+              editable={canEdit && !interactionLocked}
               value={summary}
               onChangeText={setSummary}
               maxLength={1000}
@@ -296,7 +372,7 @@ export default function HealthEventDetailScreen() {
               />
               <TextButton
                 label="返回健康事件"
-                disabled={busy}
+                disabled={interactionLocked}
                 testID="health-event-detail.return.inline-button"
                 onPress={requestReturn}
               />
@@ -309,8 +385,10 @@ export default function HealthEventDetailScreen() {
                 <Pressable
                   testID="health-event-detail.link-record.button"
                   onPress={requestLinkRecord}
-                  disabled={busy}
-                  style={styles.linkButton}
+                  disabled={interactionLocked}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: interactionLocked }}
+                  style={[styles.linkButton, interactionLocked && styles.disabled]}
                 >
                   <Ionicons name="add" size={17} color={colors.brand} />
                   <Text style={styles.linkButtonText}>继续关联</Text>
@@ -325,7 +403,9 @@ export default function HealthEventDetailScreen() {
                       testID="health-event-detail.record.item"
                       accessibilityRole="button"
                       accessibilityLabel={`查看关联记录：${record.title}`}
-                      style={styles.recordMain}
+                      accessibilityState={{ disabled: interactionLocked }}
+                      disabled={interactionLocked}
+                      style={[styles.recordMain, interactionLocked && styles.disabled]}
                       onPress={() => requestViewRecord(record.id)}
                     >
                       <Text style={styles.relation}>{relationLabel(relationType)}</Text>
@@ -336,9 +416,12 @@ export default function HealthEventDetailScreen() {
                     </Pressable>
                     {canEdit ? (
                       <Pressable
+                        accessibilityRole="button"
                         accessibilityLabel="解除关联"
+                        accessibilityState={{ disabled: interactionLocked }}
+                        disabled={interactionLocked}
                         onPress={() => unlink(record.id, record.title)}
-                        style={styles.unlink}
+                        style={[styles.unlink, interactionLocked && styles.disabled]}
                       >
                         <Ionicons name="close" size={17} color={colors.dangerDark} />
                       </Pressable>
@@ -367,7 +450,7 @@ export default function HealthEventDetailScreen() {
           {!canEdit ? (
             <TextButton
               label="返回健康事件"
-              disabled={busy}
+              disabled={interactionLocked}
               testID="health-event-detail.return.button"
               onPress={requestReturn}
             />
@@ -399,7 +482,7 @@ export default function HealthEventDetailScreen() {
             ) : null}
             <TextButton
               label="返回健康事件"
-              disabled={busy}
+              disabled={interactionLocked}
               testID="health-event-detail.return.button"
               onPress={requestReturn}
             />
@@ -417,7 +500,6 @@ const styles = StyleSheet.create({
   content: { gap: spacing.xl, paddingBottom: 148 },
   nav: { minHeight: 54, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  navButtonDisabled: { opacity: 0.45 },
   navCopy: { flex: 1 },
   status: { ...typography.caption, color: colors.dangerDark, fontWeight: '700' },
   recovered: { color: colors.successDark },
@@ -488,5 +570,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     gap: spacing.xs,
   },
+  disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
 });
