@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '@cat-diary/design-tokens';
 import { authApi, type PetSummary, type RecordSummary } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, Title } from '../../src/shared/ui/primitives';
+import { Body, Card, ErrorText, Screen, TextButton, Title } from '../../src/shared/ui/primitives';
 import {
   cacheRecords,
   flushOfflineOperations,
@@ -29,7 +29,7 @@ export default function RecordsTab() {
   const router = useRouter();
   const params = useLocalSearchParams<{ notice?: string }>();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [records, setRecords] = useState<RecordSummary[]>([]);
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [petId, setPetId] = useState<string>();
@@ -40,48 +40,72 @@ export default function RecordsTab() {
   const effectiveRouteNotice =
     routeNotice?.tone === 'warning' && syncNote.startsWith('已同步') ? null : routeNotice;
 
-  const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
-    setLoading(true);
-    setError('');
-    try {
-      const pending = await getOfflineOperationCount();
-      if (pending) {
-        const result = await flushOfflineOperations(
-          session.accessToken,
-          authApi.sendOfflineOperation,
-        );
-        setSyncNote(
-          result.conflicts
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const interactionLocked = loading || contextUnavailable;
+
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) return;
+      if (!session || !activeFamily) {
+        if (!shouldApply()) return;
+        setRecords([]);
+        setPets([]);
+        setLoading(false);
+        setError('');
+        setSyncNote('');
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        let nextSyncNote = '';
+        const pending = await getOfflineOperationCount();
+        if (pending) {
+          const result = await flushOfflineOperations(
+            session.accessToken,
+            authApi.sendOfflineOperation,
+          );
+          nextSyncNote = result.conflicts
             ? `${result.conflicts} 条记录需要处理冲突`
             : result.synced
               ? `已同步 ${result.synced} 条离线记录`
-              : `${pending} 条记录等待同步`,
-        );
+              : `${pending} 条记录等待同步`;
+        }
+        const conflicts = await getOfflineConflicts(activeFamily.id);
+        if (conflicts.length) nextSyncNote = `${conflicts.length} 条离线操作需要处理冲突`;
+        const [recordPage, nextPets] = await Promise.all([
+          authApi.listRecords(session.accessToken, activeFamily.id, petId),
+          authApi.listPets(session.accessToken, activeFamily.id),
+        ]);
+        if (!shouldApply()) return;
+        setRecords(recordPage.items);
+        setPets(nextPets);
+        setSyncNote(nextSyncNote);
+        await cacheRecords(activeFamily.id, recordPage.items);
+      } catch (cause) {
+        if (isNetworkFailure(cause)) {
+          const cached = await getCachedRecords(activeFamily.id, petId);
+          if (!shouldApply()) return;
+          setRecords(cached);
+          setSyncNote('当前离线，展示本机最近记录');
+        } else {
+          if (!shouldApply()) return;
+          setError(cause instanceof Error ? cause.message : '记录加载失败');
+        }
+      } finally {
+        if (shouldApply()) setLoading(false);
       }
-      const conflicts = await getOfflineConflicts(activeFamily.id);
-      if (conflicts.length) setSyncNote(`${conflicts.length} 条离线操作需要处理冲突`);
-      const [recordPage, nextPets] = await Promise.all([
-        authApi.listRecords(session.accessToken, activeFamily.id, petId),
-        authApi.listPets(session.accessToken, activeFamily.id),
-      ]);
-      setRecords(recordPage.items);
-      setPets(nextPets);
-      await cacheRecords(activeFamily.id, recordPage.items);
-    } catch (cause) {
-      if (isNetworkFailure(cause)) {
-        const cached = await getCachedRecords(activeFamily.id, petId);
-        setRecords(cached);
-        setSyncNote('当前离线，展示本机最近记录');
-      } else setError(cause instanceof Error ? cause.message : '记录加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeFamily, petId, session]);
+    },
+    [activeFamily, petId, restoring, session],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      let active = true;
+      void load(() => active);
+      return () => {
+        active = false;
+      };
     }, [load]),
   );
 
@@ -110,6 +134,7 @@ export default function RecordsTab() {
           <Filter
             testID="records.filter.all"
             active={!petId}
+            disabled={interactionLocked}
             label="全部猫咪"
             onPress={() => setPetId(undefined)}
           />
@@ -118,6 +143,7 @@ export default function RecordsTab() {
               key={pet.id}
               testID={`records.filter.pet.${pet.id}`}
               active={petId === pet.id}
+              disabled={interactionLocked}
               label={pet.name}
               onPress={() => setPetId(pet.id)}
             />
@@ -125,8 +151,14 @@ export default function RecordsTab() {
         </ScrollView>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: interactionLocked }}
+          disabled={interactionLocked}
           onPress={() => router.push('/health-events')}
-          style={styles.healthLink}
+          style={({ pressed }) => [
+            styles.healthLink,
+            interactionLocked && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
           <View>
             <Text style={styles.healthLinkTitle}>健康事件</Text>
@@ -136,8 +168,14 @@ export default function RecordsTab() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: interactionLocked }}
+          disabled={interactionLocked}
           onPress={() => router.push('/medical-records')}
-          style={styles.medicalLink}
+          style={({ pressed }) => [
+            styles.medicalLink,
+            interactionLocked && styles.disabled,
+            pressed && styles.pressed,
+          ]}
         >
           <View>
             <Text style={styles.healthLinkTitle}>医疗档案</Text>
@@ -182,9 +220,10 @@ export default function RecordsTab() {
         {syncNote ? (
           <Pressable
             testID="records.sync.note"
-            disabled={!syncNote.includes('冲突')}
+            disabled={!syncNote.includes('冲突') || interactionLocked}
+            accessibilityState={{ disabled: !syncNote.includes('冲突') || interactionLocked }}
             onPress={() => router.push('/sync-conflicts')}
-            style={styles.sync}
+            style={[styles.sync, interactionLocked && styles.disabled]}
           >
             <Ionicons name="cloud-done-outline" size={16} color={colors.warningDark} />
             <View testID={syncStatusTestId(syncNote)} style={styles.syncCopy}>
@@ -197,9 +236,26 @@ export default function RecordsTab() {
         ) : null}
         {!loading && records.length ? <Insights records={records} /> : null}
         {loading ? (
-          <ActivityIndicator color={colors.brand} />
+          <View testID="records.loading.card" style={styles.stateCard}>
+            <ActivityIndicator color={colors.brand} />
+            <Text style={styles.stateText}>正在整理记录时间线…</Text>
+          </View>
+        ) : contextUnavailable ? (
+          <Card testID="records.context-empty.card">
+            <Title>需要先完成家庭设置</Title>
+            <Body>登录并选择家庭后，才能查看记录时间线和离线同步状态。</Body>
+            <TextButton label="去我的页面检查家庭" onPress={() => router.push('/(tabs)/me')} />
+          </Card>
         ) : error ? (
-          <ErrorText>{error}</ErrorText>
+          <Card testID="records.error.card">
+            <Title>记录加载失败</Title>
+            <ErrorText testID="records.error.text">{error}</ErrorText>
+            <TextButton
+              testID="records.reload.button"
+              label="重新加载"
+              onPress={() => void load()}
+            />
+          </Card>
         ) : records.length ? (
           <View style={styles.timeline}>
             {records.map((record) => (
@@ -239,11 +295,13 @@ function syncStatusTestId(note: string) {
 
 function Filter({
   active,
+  disabled,
   label,
   onPress,
   testID,
 }: {
   active: boolean;
+  disabled?: boolean;
   label: string;
   onPress(): void;
   testID?: string;
@@ -252,12 +310,14 @@ function Filter({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
+      accessibilityState={{ selected: active, disabled: !!disabled }}
       accessibilityLabel={`筛选${label}记录`}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.filter,
         active && styles.filterActive,
+        disabled && styles.disabled,
         pressed && styles.pressed,
       ]}
     >
@@ -440,6 +500,16 @@ const styles = StyleSheet.create({
   },
   syncCopy: { flex: 1 },
   syncText: { ...typography.caption, color: colors.warningDark },
+  stateCard: {
+    minHeight: 120,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  stateText: { ...typography.caption, color: colors.textSecondary },
   insights: {
     borderRadius: radii.card,
     padding: spacing.lg,
@@ -521,4 +591,5 @@ const styles = StyleSheet.create({
   morePhotosText: { ...typography.h3, color: colors.brand },
   note: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   abnormal: { ...typography.caption, color: colors.dangerDark, fontWeight: '600' },
+  disabled: { opacity: 0.45 },
 });
