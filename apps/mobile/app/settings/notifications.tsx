@@ -61,14 +61,18 @@ export default function NotificationSettingsRoute() {
   const [devicePushTestStatus, setDevicePushTestStatus] = useState<DevicePushTestStatus>('idle');
   const [devicePushToken, setDevicePushToken] = useState('');
   const [devicePushError, setDevicePushError] = useState('');
+  const [openingSystemSettings, setOpeningSystemSettings] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const devicePushRegistering = devicePushStatus === 'registering';
   const devicePushTesting = devicePushTestStatus === 'sending';
+  const returnLocked =
+    Boolean(saving) || devicePushRegistering || devicePushTesting || openingSystemSettings;
   const editingDisabled =
     !canEditNotificationPreference({ loading, savingKey: saving }) ||
     devicePushRegistering ||
-    devicePushTesting;
+    devicePushTesting ||
+    openingSystemSettings;
   const devicePushRecovery = devicePushError
     ? devicePushRegistrationFailureRecovery(devicePushError)
     : null;
@@ -107,24 +111,24 @@ export default function NotificationSettingsRoute() {
     void load();
   }, [load]);
   const requestReturn = useCallback(() => {
-    if (!saving && !devicePushRegistering && !devicePushTesting) {
+    if (!returnLocked) {
       router.back();
       return;
     }
     Alert.alert(
       '通知设置正在处理',
-      '请等待当前保存、登记或测试发送完成，避免本机展示状态与服务器不一致。',
+      '请等待当前保存、登记、测试发送或系统设置打开操作完成，避免本机展示状态与服务器不一致。',
       [{ text: '继续等待', style: 'cancel' }],
     );
-  }, [devicePushRegistering, devicePushTesting, router, saving]);
+  }, [returnLocked, router]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!saving && !devicePushRegistering && !devicePushTesting) return false;
+      if (!returnLocked) return false;
       requestReturn();
       return true;
     });
     return () => subscription.remove();
-  }, [devicePushRegistering, devicePushTesting, requestReturn, saving]);
+  }, [requestReturn, returnLocked]);
   async function change(key: NotificationPreferenceKey, value: boolean) {
     if (!session || !activeFamily || !preference) return;
     if (editingDisabled) return;
@@ -198,12 +202,17 @@ export default function NotificationSettingsRoute() {
     }
   }
   async function openDevicePushSettings() {
+    if (openingSystemSettings) return;
+    setOpeningSystemSettings(true);
+    setError('');
     try {
       await Linking.openSettings();
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : '无法打开系统设置，请手动前往设置开启通知权限。',
       );
+    } finally {
+      setOpeningSystemSettings(false);
     }
   }
   return (
@@ -324,9 +333,12 @@ export default function NotificationSettingsRoute() {
                     <Text style={styles.devicePushRecoveryTitle}>{devicePushRecovery.title}</Text>
                     <Text style={styles.devicePushRecoveryText}>{devicePushRecovery.body}</Text>
                     <TextButton
-                      label={devicePushRecovery.actionLabel}
+                      testID="notifications.open-settings.button"
+                      label={
+                        openingSystemSettings ? '正在打开系统设置' : devicePushRecovery.actionLabel
+                      }
                       danger
-                      disabled={devicePushRegistering || devicePushTesting || Boolean(saving)}
+                      disabled={returnLocked}
                       onPress={() => void openDevicePushSettings()}
                     />
                   </View>
@@ -390,12 +402,8 @@ export default function NotificationSettingsRoute() {
             <Text style={styles.devicePushTestHint}>{devicePushTestHelp}</Text>
             <TextButton
               testID="notifications.return.button"
-              label={
-                saving || devicePushRegistering || devicePushTesting
-                  ? '处理中，请等待'
-                  : '返回上一页'
-              }
-              disabled={Boolean(saving) || devicePushRegistering || devicePushTesting}
+              label={returnLocked ? '处理中，请等待' : '返回上一页'}
+              disabled={returnLocked}
               onPress={requestReturn}
             />
           </View>
