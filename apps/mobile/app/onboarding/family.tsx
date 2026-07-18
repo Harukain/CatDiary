@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { ActivityIndicator } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
+import { colors } from '@cat-diary/design-tokens';
 import { authApi, AuthApiError } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
 import {
@@ -14,18 +16,33 @@ import {
 
 export default function CreateFamilyRoute() {
   const router = useRouter();
-  const { session, addFamily } = useSession();
+  const { restoring, session, addFamily } = useSession();
   const [name, setName] = useState('我的猫咪家庭');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const trimmedName = name.trim();
+  const nameTooLong = trimmedName.length > 40;
+  const canSubmit = !!session && !!trimmedName && !nameTooLong && !busy;
+  if (restoring) {
+    return (
+      <Screen>
+        <BrandHeader title="创建家庭" subtitle="正在恢复登录状态" />
+        <Card testID="onboarding.family.restoring.card">
+          <Title>正在确认账号</Title>
+          <Body>恢复完成后再创建家庭，避免把家庭建到错误账号下。</Body>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      </Screen>
+    );
+  }
   if (!session) return <Redirect href="/(auth)/login" />;
 
   async function submit() {
-    if (!name.trim() || busy) return;
+    if (!session || !canSubmit) return;
     setBusy(true);
     setError('');
     try {
-      const family = await authApi.createFamily(session!.accessToken, name.trim());
+      const family = await authApi.createFamily(session.accessToken, trimmedName);
       addFamily(family);
       router.replace('/onboarding/pet');
     } catch (cause) {
@@ -49,6 +66,7 @@ export default function CreateFamilyRoute() {
           autoFocus
           placeholder="例如：团子和年糕的家"
           error={error}
+          editable={!busy}
           onChangeText={(value) => {
             setName(value);
             setError('');
@@ -58,7 +76,7 @@ export default function CreateFamilyRoute() {
           testID="onboarding.family.submit.button"
           label="创建家庭"
           busy={busy}
-          disabled={!name.trim() || name.trim().length > 40}
+          disabled={!canSubmit}
           onPress={submit}
         />
       </Card>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler } from 'react-native';
 import { Redirect, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors } from '@cat-diary/design-tokens';
@@ -25,7 +25,8 @@ import {
 export default function CreateFirstPetRoute() {
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
+  const mountedRef = useRef(true);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -37,25 +38,66 @@ export default function CreateFirstPetRoute() {
   const maxPetsReached = typeof petCount === 'number' && petCount >= 5;
   const cancelLabel = returnTarget === 'pets' ? '返回猫咪档案' : '稍后添加';
   const canManage = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+  const trimmedName = name.trim();
+  const nameTooLong = trimmedName.length > 30;
+  const canSubmit =
+    !!session &&
+    !!activeFamily &&
+    !!trimmedName &&
+    !nameTooLong &&
+    !busy &&
+    !countLoading &&
+    !maxPetsReached &&
+    !countError;
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
   const goToExitTarget = useCallback(() => {
     router.replace(returnTarget === 'pets' ? '/pets' : '/(tabs)');
   }, [returnTarget, router]);
-  const loadPetCount = useCallback(() => {
-    if (!session || !activeFamily) return;
-    setCountLoading(true);
-    setCountError('');
-    void authApi
-      .listPets(session.accessToken, activeFamily.id)
-      .then((pets) => setPetCount(pets.length))
-      .catch(() => {
+  const loadPetCount = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) {
+        if (shouldApply()) setCountLoading(true);
+        return;
+      }
+      if (!session || !activeFamily) {
+        if (!shouldApply()) return;
+        setPetCount(null);
+        setCountError('');
+        setCountLoading(false);
+        return;
+      }
+      setCountLoading(true);
+      setCountError('');
+      try {
+        const pets = await authApi.listPets(session.accessToken, activeFamily.id);
+        if (!shouldApply()) return;
+        setPetCount(pets.length);
+      } catch {
+        if (!shouldApply()) return;
         setCountError('猫咪数量确认失败，请重试后再添加。');
         setPetCount(null);
-      })
-      .finally(() => setCountLoading(false));
-  }, [activeFamily, session]);
+      } finally {
+        if (shouldApply()) setCountLoading(false);
+      }
+    },
+    [activeFamily, restoring, session],
+  );
   useEffect(() => {
-    loadPetCount();
+    let mounted = true;
+    void loadPetCount(() => mounted);
+    return () => {
+      mounted = false;
+    };
   }, [loadPetCount]);
+  async function reloadPetCount() {
+    if (!mountedRef.current) return;
+    await loadPetCount(() => mountedRef.current);
+  }
   const requestExit = useCallback(() => {
     const decision = resolveDraftExitDecision({ busy, isDirty });
     if (decision === 'wait') {
@@ -81,6 +123,19 @@ export default function CreateFirstPetRoute() {
     return () => subscription.remove();
   }, [requestExit]);
 
+  if (restoring) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <BrandHeader title="添加猫咪" subtitle="正在恢复登录状态" />
+        <Card testID="onboarding.pet.restoring.card">
+          <Title>正在确认家庭</Title>
+          <Body>恢复完成后再创建猫咪档案，避免把档案保存到错误家庭。</Body>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      </Screen>
+    );
+  }
   if (!session) return <Redirect href="/(auth)/login" />;
   if (!activeFamily) return <Redirect href="/onboarding/family" />;
 
@@ -99,15 +154,15 @@ export default function CreateFirstPetRoute() {
   }
 
   async function submit() {
-    if (!name.trim() || busy || countLoading || maxPetsReached || countError) return;
+    if (!session || !activeFamily) {
+      setError('登录或家庭状态已失效，请重新进入后再试');
+      return;
+    }
+    if (!canSubmit) return;
     setBusy(true);
     setError('');
     try {
-      const createdPet = await authApi.createPet(
-        session!.accessToken,
-        activeFamily!.id,
-        name.trim(),
-      );
+      const createdPet = await authApi.createPet(session.accessToken, activeFamily.id, trimmedName);
       if (shouldOpenCreatedPetProfile(returnTarget)) {
         router.replace({ pathname: '/pets/[id]', params: { id: createdPet.id } });
       } else {
@@ -137,7 +192,12 @@ export default function CreateFirstPetRoute() {
             <Title>暂时无法添加猫咪</Title>
             <Body>需要先确认当前家庭还没有达到 5 只猫咪上限。</Body>
             <ErrorText>{countError}</ErrorText>
-            <PrimaryButton label="重新确认" onPress={loadPetCount} />
+            <PrimaryButton
+              testID="onboarding.pet.count.retry.button"
+              label="重新确认"
+              disabled={countLoading || busy}
+              onPress={() => void reloadPetCount()}
+            />
             <TextButton label={cancelLabel} onPress={requestExit} />
           </>
         ) : maxPetsReached ? (
@@ -168,7 +228,7 @@ export default function CreateFirstPetRoute() {
               testID="onboarding.pet.submit.button"
               label="创建猫咪档案"
               busy={busy}
-              disabled={!name.trim() || name.trim().length > 30}
+              disabled={!canSubmit}
               onPress={submit}
             />
             <TextButton label={busy ? '创建中，请等待' : cancelLabel} onPress={requestExit} />
