@@ -49,7 +49,7 @@ const filters: Array<{ label: string; value?: NotificationStatus }> = [
 export default function NotificationLogsRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [status, setStatus] = useState<NotificationStatus>();
   const [items, setItems] = useState<NotificationLogSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -61,12 +61,17 @@ export default function NotificationLogsRoute() {
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
   const stats = useMemo(() => notificationLogPageStats(items), [items]);
   const emptyCopy = notificationLogEmptyCopy(status);
+  const contextUnavailable = !restoring && (!session || !activeFamily);
 
   const load = useCallback(
     async (cursor?: string, append = false) => {
+      if (restoring) return;
       if (!session || !activeFamily) {
         setItems([]);
         setNextCursor(null);
+        setLastLoadedAt(null);
+        setError('');
+        setSuccess('');
         setLoading(false);
         setLoadingMore(false);
         return;
@@ -94,7 +99,7 @@ export default function NotificationLogsRoute() {
         setLoadingMore(false);
       }
     },
-    [activeFamily, session, status],
+    [activeFamily, restoring, session, status],
   );
 
   useFocusEffect(
@@ -104,8 +109,9 @@ export default function NotificationLogsRoute() {
   );
 
   const canRetry = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
-  const refreshingDisabled = !session || !activeFamily || loadingMore || !!retryingId;
-  const interactionDisabled = loading || loadingMore || !!retryingId;
+  const refreshingDisabled = restoring || contextUnavailable || loadingMore || !!retryingId;
+  const interactionDisabled =
+    restoring || contextUnavailable || loading || loadingMore || !!retryingId;
   function requestRetry(item: NotificationLogSummary) {
     Alert.alert('重新发送提醒？', `将再次尝试发送「${item.task?.title ?? '已删除任务'}」的提醒。`, [
       { text: '取消', style: 'cancel' },
@@ -165,161 +171,190 @@ export default function NotificationLogsRoute() {
             <Text style={styles.title}>提醒状态</Text>
             <Text style={styles.subtitle}>查看最近的发送结果；失败项仅管理员可重试。</Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
-            {filters.map((filter) => (
-              <Pressable
-                key={filter.label}
-                testID={`notification-logs.filter.${filter.value ?? 'ALL'}`}
-                accessibilityRole="button"
-                accessibilityState={{
-                  selected: status === filter.value,
-                  disabled: interactionDisabled,
-                }}
-                disabled={interactionDisabled}
-                onPress={() => {
-                  setStatus(filter.value);
-                  setSuccess('');
-                }}
-                style={[
-                  styles.filter,
-                  status === filter.value && styles.filterActive,
-                  interactionDisabled && styles.disabled,
-                ]}
-              >
-                <Text
-                  style={[styles.filterText, status === filter.value && styles.filterTextActive]}
-                >
-                  {filter.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          <Card testID="notification-logs.summary.card">
-            <View style={styles.summaryTop}>
-              <View style={styles.summaryCopy}>
-                <Title>
-                  {status ? `${notificationLogStatusCopy(status).label}记录` : '本页概览'}
-                </Title>
-                <Body>
-                  {lastLoadedAt
-                    ? `已加载 ${stats.total} 条，最近刷新 ${formatDate(lastLoadedAt.toISOString())}`
-                    : '正在读取最近的提醒发送状态。'}
-                </Body>
-              </View>
+          {restoring || loading ? (
+            <View testID="notification-logs.loading.card" style={styles.inlineState}>
+              <ActivityIndicator
+                testID="notification-logs.loading.indicator"
+                color={colors.brand}
+              />
+              <Text style={styles.loadingText}>正在加载提醒发送记录…</Text>
             </View>
-            <View style={styles.stats}>
-              <StatChip
-                testID="notification-logs.stat.failed"
-                label="失败"
-                value={stats.failed}
-                tone="danger"
+          ) : contextUnavailable ? (
+            <Card testID="notification-logs.context-unavailable.card">
+              <Title>需要登录并选择家庭</Title>
+              <ErrorText>提醒发送记录属于家庭通知，请先登录并选择家庭后再查看。</ErrorText>
+              <TextButton
+                label={session ? '去我的页面检查家庭' : '去登录'}
+                onPress={() =>
+                  session ? router.push('/(tabs)/me') : router.replace('/(auth)/login')
+                }
               />
-              <StatChip
-                testID="notification-logs.stat.queued"
-                label="队列"
-                value={stats.queued}
-                tone="warning"
-              />
-              <StatChip
-                testID="notification-logs.stat.sent"
-                label="已发送"
-                value={stats.sent}
-                tone="brand"
-              />
-              <StatChip
-                testID="notification-logs.stat.delivered"
-                label="送达"
-                value={stats.delivered}
-                tone="success"
-              />
-            </View>
-            {status ? (
-              <Text style={styles.statusHelp}>{notificationLogStatusCopy(status).description}</Text>
-            ) : null}
-          </Card>
-          {error ? <ErrorText testID="notification-logs.error.text">{error}</ErrorText> : null}
-          {success ? (
-            <SuccessText testID="notification-logs.success.text">{success}</SuccessText>
-          ) : null}
-          {loading ? (
-            <ActivityIndicator testID="notification-logs.loading.indicator" color={colors.brand} />
-          ) : items.length ? (
-            <View testID="notification-logs.list" style={styles.list}>
-              {items.map((item) => (
-                <Card key={item.id} testID="notification-logs.item">
-                  <View style={styles.itemTop}>
-                    <View style={styles.itemHeading}>
-                      <Text testID="notification-logs.item.title" style={styles.itemTitle}>
-                        {item.task?.title ?? '原任务已删除'}
-                      </Text>
-                      <Text testID="notification-logs.item.meta" style={styles.itemMeta}>
-                        {notificationLogChannelLabel(item.channel)} · 计划{' '}
-                        {formatDate(item.scheduledAt)}
-                        {item.attempt ? ` · 第 ${item.attempt} 次` : ''}
-                      </Text>
-                    </View>
-                    <StatusBadge testID="notification-logs.item.status" status={item.status} />
-                  </View>
-                  <Text
-                    testID="notification-logs.item.status-description"
-                    style={styles.statusDescription}
-                  >
-                    {notificationLogStatusCopy(item.status).description}
-                  </Text>
-                  {item.status === 'FAILED' ? (
-                    <View testID="notification-logs.failure.card" style={styles.failure}>
-                      <Text testID="notification-logs.failure.reason" style={styles.failureText}>
-                        {item.errorMessageSafe || '发送失败，请检查通知渠道后重试。'}
-                      </Text>
-                      {canRetry ? (
-                        retryingId === item.id ? (
-                          <ActivityIndicator
-                            testID="notification-logs.retry.loading"
-                            color={colors.dangerDark}
-                          />
-                        ) : (
-                          <Pressable
-                            testID="notification-logs.retry.button"
-                            accessibilityRole="button"
-                            onPress={() => requestRetry(item)}
-                            style={({ pressed }) => [styles.retry, pressed && styles.pressed]}
-                          >
-                            <Text style={styles.retryText}>重新发送</Text>
-                          </Pressable>
-                        )
-                      ) : null}
-                    </View>
-                  ) : null}
-                  {item.status === 'DELIVERED' && item.sentAt ? (
-                    <Text style={styles.delivered}>送达于 {formatDate(item.sentAt)}</Text>
-                  ) : null}
-                </Card>
-              ))}
-              {nextCursor ? (
-                <Pressable
-                  testID="notification-logs.load-more.button"
-                  accessibilityRole="button"
-                  disabled={loadingMore}
-                  onPress={() => void load(nextCursor, true)}
-                  style={styles.more}
-                >
-                  {loadingMore ? (
-                    <ActivityIndicator color={colors.brand} />
-                  ) : (
-                    <Text style={styles.moreText}>加载更多</Text>
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
-          ) : (
-            <Card testID="notification-logs.empty.card">
-              <Title testID="notification-logs.empty.title">{emptyCopy.title}</Title>
-              <Body testID="notification-logs.empty.body">{emptyCopy.body}</Body>
             </Card>
+          ) : (
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filters}
+              >
+                {filters.map((filter) => (
+                  <Pressable
+                    key={filter.label}
+                    testID={`notification-logs.filter.${filter.value ?? 'ALL'}`}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: status === filter.value,
+                      disabled: interactionDisabled,
+                    }}
+                    disabled={interactionDisabled}
+                    onPress={() => {
+                      setStatus(filter.value);
+                      setSuccess('');
+                    }}
+                    style={[
+                      styles.filter,
+                      status === filter.value && styles.filterActive,
+                      interactionDisabled && styles.disabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        status === filter.value && styles.filterTextActive,
+                      ]}
+                    >
+                      {filter.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Card testID="notification-logs.summary.card">
+                <View style={styles.summaryTop}>
+                  <View style={styles.summaryCopy}>
+                    <Title>
+                      {status ? `${notificationLogStatusCopy(status).label}记录` : '本页概览'}
+                    </Title>
+                    <Body>
+                      {lastLoadedAt
+                        ? `已加载 ${stats.total} 条，最近刷新 ${formatDate(lastLoadedAt.toISOString())}`
+                        : '正在读取最近的提醒发送状态。'}
+                    </Body>
+                  </View>
+                </View>
+                <View style={styles.stats}>
+                  <StatChip
+                    testID="notification-logs.stat.failed"
+                    label="失败"
+                    value={stats.failed}
+                    tone="danger"
+                  />
+                  <StatChip
+                    testID="notification-logs.stat.queued"
+                    label="队列"
+                    value={stats.queued}
+                    tone="warning"
+                  />
+                  <StatChip
+                    testID="notification-logs.stat.sent"
+                    label="已发送"
+                    value={stats.sent}
+                    tone="brand"
+                  />
+                  <StatChip
+                    testID="notification-logs.stat.delivered"
+                    label="送达"
+                    value={stats.delivered}
+                    tone="success"
+                  />
+                </View>
+                {status ? (
+                  <Text style={styles.statusHelp}>
+                    {notificationLogStatusCopy(status).description}
+                  </Text>
+                ) : null}
+              </Card>
+              {error ? <ErrorText testID="notification-logs.error.text">{error}</ErrorText> : null}
+              {success ? (
+                <SuccessText testID="notification-logs.success.text">{success}</SuccessText>
+              ) : null}
+              {items.length ? (
+                <View testID="notification-logs.list" style={styles.list}>
+                  {items.map((item) => (
+                    <Card key={item.id} testID="notification-logs.item">
+                      <View style={styles.itemTop}>
+                        <View style={styles.itemHeading}>
+                          <Text testID="notification-logs.item.title" style={styles.itemTitle}>
+                            {item.task?.title ?? '原任务已删除'}
+                          </Text>
+                          <Text testID="notification-logs.item.meta" style={styles.itemMeta}>
+                            {notificationLogChannelLabel(item.channel)} · 计划{' '}
+                            {formatDate(item.scheduledAt)}
+                            {item.attempt ? ` · 第 ${item.attempt} 次` : ''}
+                          </Text>
+                        </View>
+                        <StatusBadge testID="notification-logs.item.status" status={item.status} />
+                      </View>
+                      <Text
+                        testID="notification-logs.item.status-description"
+                        style={styles.statusDescription}
+                      >
+                        {notificationLogStatusCopy(item.status).description}
+                      </Text>
+                      {item.status === 'FAILED' ? (
+                        <View testID="notification-logs.failure.card" style={styles.failure}>
+                          <Text
+                            testID="notification-logs.failure.reason"
+                            style={styles.failureText}
+                          >
+                            {item.errorMessageSafe || '发送失败，请检查通知渠道后重试。'}
+                          </Text>
+                          {canRetry ? (
+                            retryingId === item.id ? (
+                              <ActivityIndicator
+                                testID="notification-logs.retry.loading"
+                                color={colors.dangerDark}
+                              />
+                            ) : (
+                              <Pressable
+                                testID="notification-logs.retry.button"
+                                accessibilityRole="button"
+                                onPress={() => requestRetry(item)}
+                                style={({ pressed }) => [styles.retry, pressed && styles.pressed]}
+                              >
+                                <Text style={styles.retryText}>重新发送</Text>
+                              </Pressable>
+                            )
+                          ) : null}
+                        </View>
+                      ) : null}
+                      {item.status === 'DELIVERED' && item.sentAt ? (
+                        <Text style={styles.delivered}>送达于 {formatDate(item.sentAt)}</Text>
+                      ) : null}
+                    </Card>
+                  ))}
+                  {nextCursor ? (
+                    <Pressable
+                      testID="notification-logs.load-more.button"
+                      accessibilityRole="button"
+                      disabled={loadingMore}
+                      onPress={() => void load(nextCursor, true)}
+                      style={styles.more}
+                    >
+                      {loadingMore ? (
+                        <ActivityIndicator color={colors.brand} />
+                      ) : (
+                        <Text style={styles.moreText}>加载更多</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <Card testID="notification-logs.empty.card">
+                  <Title testID="notification-logs.empty.title">{emptyCopy.title}</Title>
+                  <Body testID="notification-logs.empty.body">{emptyCopy.body}</Body>
+                </Card>
+              )}
+            </>
           )}
         </ScrollView>
         <View
@@ -450,6 +485,13 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   statusHelp: { ...typography.caption, color: colors.textSecondary },
+  inlineState: {
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  loadingText: { ...typography.caption, color: colors.textSecondary },
   list: { gap: spacing.md },
   itemTop: {
     flexDirection: 'row',

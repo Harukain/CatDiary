@@ -14,11 +14,23 @@ describe('notification log mobile layout', () => {
   });
 
   it('does not leave the page loading when session context is missing', () => {
+    expect(notificationLogsSource).toContain(
+      'const { restoring, session, activeFamily } = useSession();',
+    );
+    expect(notificationLogsSource).toContain(
+      'const contextUnavailable = !restoring && (!session || !activeFamily);',
+    );
+    expect(notificationLogsSource).toContain('if (restoring) return;');
     expect(notificationLogsSource).toContain('if (!session || !activeFamily) {');
     expect(notificationLogsSource).toContain('setItems([]);');
     expect(notificationLogsSource).toContain('setNextCursor(null);');
+    expect(notificationLogsSource).toContain('setLastLoadedAt(null);');
+    expect(notificationLogsSource).toContain("setError('');");
+    expect(notificationLogsSource).toContain("setSuccess('');");
     expect(notificationLogsSource).toContain('setLoading(false);');
     expect(notificationLogsSource).toContain('setLoadingMore(false);');
+    expect(notificationLogsSource).toContain('testID="notification-logs.loading.card"');
+    expect(notificationLogsSource).toContain('testID="notification-logs.context-unavailable.card"');
     expect(notificationLogsSource).toContain(`return;
       }
       if (append)`);
@@ -26,7 +38,10 @@ describe('notification log mobile layout', () => {
 
   it('locks filter changes while refresh, pagination, or retry is in progress', () => {
     expect(notificationLogsSource).toContain(
-      'const interactionDisabled = loading || loadingMore || !!retryingId;',
+      'const refreshingDisabled = restoring || contextUnavailable || loadingMore || !!retryingId;',
+    );
+    expect(notificationLogsSource).toMatch(
+      /const interactionDisabled\s*=\s*restoring \|\| contextUnavailable \|\| loading \|\| loadingMore \|\| !!retryingId;/,
     );
     expect(notificationLogsSource).toContain('disabled={interactionDisabled}');
     expect(notificationLogsSource).toContain('disabled: interactionDisabled');
