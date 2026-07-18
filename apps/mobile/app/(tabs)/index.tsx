@@ -14,6 +14,7 @@ import {
   ErrorText,
   PrimaryButton,
   Screen,
+  TextButton,
   Title,
 } from '../../src/shared/ui/primitives';
 import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
@@ -21,32 +22,56 @@ import { bottomTabScrollPadding } from '../../src/shared/ui/bottom-tab-layout';
 export default function HomeTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [pets, setPets] = useState<PetSummary[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  useFocusEffect(
-    useCallback(() => {
-      if (!session || !activeFamily) return;
-      let active = true;
+
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const interactionLocked = loading || contextUnavailable;
+
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
+      if (restoring) return;
+      if (!session || !activeFamily) {
+        if (!shouldApply()) return;
+        setPets([]);
+        setTodayTasks([]);
+        setLoading(false);
+        setError('');
+        return;
+      }
       setLoading(true);
       setError('');
-      void Promise.all([
-        authApi.listPets(session.accessToken, activeFamily.id),
-        authApi.listTasks(session.accessToken, activeFamily.id, 'today'),
-      ])
-        .then(([nextPets, nextTasks]) => {
-          if (!active) return;
-          setPets(nextPets);
-          setTodayTasks(nextTasks.items);
-        })
-        .catch(() => active && setError('猫咪档案加载失败'))
-        .finally(() => active && setLoading(false));
+      try {
+        const [nextPets, nextTasks] = await Promise.all([
+          authApi.listPets(session.accessToken, activeFamily.id),
+          authApi.listTasks(session.accessToken, activeFamily.id, 'today'),
+        ]);
+        if (!shouldApply()) return;
+        setPets(nextPets);
+        setTodayTasks(nextTasks.items);
+      } catch {
+        if (!shouldApply()) return;
+        setPets([]);
+        setTodayTasks([]);
+        setError('首页数据加载失败');
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [activeFamily, restoring, session],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void load(() => active);
       return () => {
         active = false;
       };
-    }, [activeFamily, session]),
+    }, [load]),
   );
 
   return (
@@ -76,19 +101,29 @@ export default function HomeTab() {
               <View>
                 <Text style={styles.taskPanelEyebrow}>今日照顾</Text>
                 <Text style={styles.taskPanelTitle}>
-                  {loading
-                    ? '正在整理今天的安排'
-                    : todayTasks.length
-                      ? `有 ${todayTasks.length} 项需要留意`
-                      : '今天没有待办任务'}
+                  {contextUnavailable
+                    ? '需要先完成家庭设置'
+                    : error
+                      ? '今天安排暂时无法加载'
+                      : loading
+                        ? '正在整理今天的安排'
+                        : todayTasks.length
+                          ? `有 ${todayTasks.length} 项需要留意`
+                          : '今天没有待办任务'}
                 </Text>
               </View>
             </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="查看今日任务"
+              accessibilityState={{ disabled: interactionLocked }}
+              disabled={interactionLocked}
               onPress={() => router.push('/(tabs)/tasks')}
-              style={({ pressed }) => [styles.taskPanelAction, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.taskPanelAction,
+                interactionLocked && styles.disabled,
+                pressed && styles.pressed,
+              ]}
             >
               <Text style={styles.taskPanelActionText}>查看任务</Text>
               <Ionicons name="arrow-forward" size={15} color={colors.warningDark} />
@@ -125,24 +160,28 @@ export default function HomeTab() {
               icon="restaurant-outline"
               label="饮食"
               detail="记录吃了什么"
+              disabled={interactionLocked}
               onPress={() => router.push({ pathname: '/records/new', params: { type: 'FOOD' } })}
             />
             <QuickAction
               icon="scale-outline"
               label="体重"
               detail="记录 kg 和时间"
+              disabled={interactionLocked}
               onPress={() => router.push({ pathname: '/records/new', params: { type: 'WEIGHT' } })}
             />
             <QuickAction
               icon="sparkles-outline"
               label="铲屎"
               detail="公共猫砂盆也可记"
+              disabled={interactionLocked}
               onPress={() => router.push({ pathname: '/records/new', params: { type: 'LITTER' } })}
             />
             <QuickAction
               icon="camera-outline"
               label="照片"
               detail="上传并备注"
+              disabled={interactionLocked}
               onPress={() => router.push('/photos/new')}
             />
           </View>
@@ -154,8 +193,14 @@ export default function HomeTab() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="管理猫咪档案"
+                accessibilityState={{ disabled: interactionLocked }}
+                disabled={interactionLocked}
                 onPress={() => router.push('/pets')}
-                style={({ pressed }) => [styles.managePets, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.managePets,
+                  interactionLocked && styles.disabled,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={styles.managePetsText}>管理</Text>
                 <Ionicons name="chevron-forward" size={14} color={colors.brand} />
@@ -163,9 +208,30 @@ export default function HomeTab() {
             ) : null}
           </View>
           {loading ? (
-            <ActivityIndicator color={colors.brand} />
+            <View testID="home.loading.card" style={styles.inlineState}>
+              <ActivityIndicator color={colors.brand} />
+              <Body>正在加载首页数据…</Body>
+            </View>
+          ) : contextUnavailable ? (
+            <View testID="home.context-empty.card" style={styles.inlineState}>
+              <Title>需要先完成家庭设置</Title>
+              <Body>登录并选择家庭后，首页会显示今日任务、快捷记录和猫咪档案。</Body>
+              <TextButton
+                label="去我的页面检查家庭"
+                onPress={() => router.push('/(tabs)/me')}
+                testID="home.context-empty.action"
+              />
+            </View>
           ) : error ? (
-            <ErrorText>{error}</ErrorText>
+            <View testID="home.error.card" style={styles.inlineState}>
+              <Title>首页数据加载失败</Title>
+              <ErrorText testID="home.error.text">{error}</ErrorText>
+              <TextButton
+                label="重新加载"
+                onPress={() => void load()}
+                testID="home.reload.button"
+              />
+            </View>
           ) : pets.length ? (
             <View style={styles.petList}>
               {pets.map((pet) => (
@@ -173,8 +239,14 @@ export default function HomeTab() {
                   key={pet.id}
                   accessibilityRole="button"
                   accessibilityLabel={`查看${pet.name}的档案`}
+                  accessibilityState={{ disabled: interactionLocked }}
+                  disabled={interactionLocked}
                   onPress={() => router.push({ pathname: '/pets/[id]', params: { id: pet.id } })}
-                  style={({ pressed }) => [styles.petChip, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.petChip,
+                    interactionLocked && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   {pet.avatarUrl && session && activeFamily ? (
                     <AuthenticatedImage
@@ -214,19 +286,27 @@ function QuickAction({
   icon,
   label,
   detail,
+  disabled,
   onPress,
 }: {
   icon: ComponentProps<typeof Ionicons>['name'];
   label: string;
   detail: string;
+  disabled?: boolean;
   onPress(): void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${label}快捷记录`}
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.quickAction,
+        disabled && styles.disabled,
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.quickIcon}>
         <Ionicons name={icon} size={20} color={colors.brand} />
@@ -304,6 +384,7 @@ const styles = StyleSheet.create({
   quickLabel: { ...typography.h3, color: colors.ink },
   quickDetail: { ...typography.caption, color: colors.textSecondary },
   profileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  inlineState: { gap: spacing.md, alignItems: 'flex-start' },
   managePets: {
     minHeight: 44,
     flexDirection: 'row',
@@ -325,6 +406,7 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 18, fontWeight: '700', color: colors.brand },
   avatarImage: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandSoft },
   petName: { ...typography.secondary, color: colors.ink, fontWeight: '600' },
+  disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
 });
 
