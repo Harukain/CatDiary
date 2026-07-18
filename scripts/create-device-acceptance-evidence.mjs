@@ -180,6 +180,8 @@ function evidenceHintForFlow(id) {
 
 function evidenceHintForDeviceCheck(id) {
   const hints = {
+    'first-use-chain-regression':
+      '待填写：同一台真机连续完成启动恢复态、手机号登录、创建家庭、创建第一只猫和家庭邀请 Deep Link，记录脱敏截图/录屏编号',
     'push-test-notification': '待填写：记录收到系统通知的时间、设备和脱敏截图编号',
     'push-privacy-lockscreen': '待填写：记录锁屏文案检查结果，不写猫名、药名或品牌',
     'release-cold-start': '待填写：记录目标真机、构建类型和冷启动耗时',

@@ -153,7 +153,7 @@ pnpm acceptance:ios-preflight-evidence -- \
 
 ## 真机验收证据
 
-真机回归不能只口头记录“已跑过”。仓库提供证据模板 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json)，覆盖 14 条 App E2E 主流程、双平台设备信息、预检结果、权限、推送、离线、照片队列、小屏布局和冷启动专项检查。
+真机回归不能只口头记录“已跑过”。仓库提供证据模板 [DEVICE_ACCEPTANCE_EVIDENCE.example.json](./DEVICE_ACCEPTANCE_EVIDENCE.example.json)，覆盖 14 条 App E2E 主流程、双平台设备信息、预检结果、首次使用连续链路、权限、推送、离线、照片队列、小屏布局和冷启动专项检查。
 
 建议每轮真机回归开始前先生成当前 Git HEAD 的草稿，避免复用旧提交模板：
 

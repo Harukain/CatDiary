@@ -153,6 +153,12 @@
   ],
   "deviceChecks": [
     {
+      "id": "first-use-chain-regression",
+      "title": "首次使用链路：登录、创建家庭、创建第一只猫和邀请 Deep Link 连续跑通",
+      "status": "pending",
+      "evidence": "待填写：记录同一台真机从冷启动/恢复态进入登录、验证码、创建家庭、创建第一只猫、打开家庭邀请 Deep Link 的连续操作结果，附脱敏截图或录屏编号"
+    },
+    {
       "id": "camera-permission-denied-recovery",
       "title": "相机权限首次拒绝与再次开启路径正确",
       "status": "pending",

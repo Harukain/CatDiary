@@ -32,7 +32,7 @@ try {
     jsonShape: hasExpectedJson(json.stdout),
     markdownPasses: markdown.status === 0,
     markdownIncludesSummary:
-      markdown.stdout.includes('完成度：5/57') &&
+      markdown.stdout.includes('完成度：5/58') &&
       markdown.stdout.includes('发布状态：不能进入 Production 发布') &&
       markdown.stdout.includes('## 下一步建议'),
     outputFileWritten: output.status === 0 && existsSync(outputFile),
@@ -67,12 +67,12 @@ function hasExpectedJson(stdout) {
   try {
     const parsed = JSON.parse(stdout);
     return (
-      parsed.summary.totalItems === 57 &&
+      parsed.summary.totalItems === 58 &&
       parsed.summary.checkedItems === 5 &&
-      parsed.summary.pendingItems === 52 &&
+      parsed.summary.pendingItems === 53 &&
       parsed.summary.readyForProduction === false &&
       parsed.sections.some(
-        (section) => section.name === 'EAS Development Build' && section.pendingItems === 14,
+        (section) => section.name === 'EAS Development Build' && section.pendingItems === 15,
       ) &&
       parsed.nextActions.some((action) => action.includes('真机回归'))
     );

@@ -56,7 +56,7 @@ pnpm cos:probe -- --target preview --env-file ../.env.preview
 
 该探针会通过和业务上传一致的短期签名 PUT 上传一张 1×1 PNG，随后校验 HeadObject 元数据、短期签名下载、匿名读取拒绝、DeleteObject 清理和删除后不可读。输出会脱敏，不打印 COS Secret 或签名 URL。它能证明 Bucket、Region、CAM Put/Get/Delete 权限和私有读配置可用，但不替代 App 端照片选择器、弱网队列恢复、跨家庭访问控制和 30 天清理的真机/集成验收。
 
-双平台真机回归开始前，先运行 `pnpm acceptance:evidence-draft -- --output docs/device-acceptance/实际证据文件.json` 生成绑定当前 Git HEAD 的草稿；该命令默认要求工作区干净，避免证据指向无法复现的 dirty 代码。回归完成后填写脱敏结果，再运行 `pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed`。严格校验会要求 `sourceCommit` 等于当前 Git HEAD，iOS/Android 设备记录、14 条 MVP 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查全部通过，并阻止把 Token、密码、私钥、完整 Webhook 或未脱敏设备标识写入证据。
+双平台真机回归开始前，先运行 `pnpm acceptance:evidence-draft -- --output docs/device-acceptance/实际证据文件.json` 生成绑定当前 Git HEAD 的草稿；该命令默认要求工作区干净，避免证据指向无法复现的 dirty 代码。回归完成后填写脱敏结果，再运行 `pnpm acceptance:evidence -- --file docs/device-acceptance/实际证据文件.json --require-passed`。严格校验会要求 `sourceCommit` 等于当前 Git HEAD，iOS/Android 设备记录、14 条 MVP 主流程、首次使用连续链路、权限/推送/离线/照片队列/小屏/冷启动专项检查全部通过，并阻止把 Token、密码、私钥、完整 Webhook 或未脱敏设备标识写入证据。
 
 当前依赖审计无高危或严重漏洞。Expo 构建工具链间接依赖的 `uuid@7` 有 1 个中危公告；它位于本地原生工程配置生成链路，不进入业务 API 运行时，待 Expo 上游升级后移除。禁止用跨大版本强制 override 破坏 Expo 工具链。
 

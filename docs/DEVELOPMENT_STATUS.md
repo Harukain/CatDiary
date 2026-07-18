@@ -78,6 +78,7 @@
 - Android 真机轻量冒烟：新增 `pnpm android:smoke`，在无 Maestro 或正式 E2E 前快速执行预检、发送 Development Client 深链、检查 App 进程存活并拦截 logcat 中的 Android/RN 启动崩溃；脚本自检已纳入 `pnpm verify`，真实设备运行仍作为本地真机验收步骤。
 - Android 真机冒烟证据闭环：`pnpm android:smoke -- --evidence-file <path>` 可输出脱敏 JSON，`pnpm acceptance:android-smoke-evidence` 可把结果合并到真机验收草稿的 Android 设备信息、App 版本、预检与崩溃日志字段；合并脚本自检已纳入 `pnpm verify`，且不会把 14 条 MVP 主流程或权限、照片、推送、飞书、离线专项误标为通过。
 - iOS 真机预检证据闭环：`pnpm ios:preflight -- --screen <size> --evidence-file <path>` 可输出脱敏 JSON，`pnpm acceptance:ios-preflight-evidence` 可把结果合并到真机验收草稿的 iOS 设备信息、App 版本和预检字段；合并脚本自检已纳入 `pnpm verify`，且不会把 iOS 崩溃日志、14 条 MVP 主流程或权限、照片、推送、飞书、离线专项误标为通过。
+- 首次使用连续链路验收门禁：真机验收模板新增 `first-use-chain-regression` 设备专项检查，要求同一台真机连续覆盖冷启动/恢复态、手机号验证码登录、创建家庭、创建第一只猫和家庭邀请 Deep Link，并提供脱敏截图或录屏编号，避免用分散页面检查替代真实首登链路。
 - M2 飞书通知：家庭管理员可配置、测试和移除飞书机器人；Webhook 使用 AES-GCM 加密保存，接口只返回脱敏信息。
 - M2 飞书测试限流：家庭级 Webhook 测试发送按 5 次/小时限流；第 6 次返回明确 429，不再触达外部飞书机器人，避免错误配置或真机验收中刷爆群机器人。
 - M2 多通道发送：Worker 支持 Expo Push、飞书和开发通道，按接收人生成确定性任务并统一记录发送结果与重试状态。
@@ -187,7 +188,7 @@
 - App E2E OEM 兼容记录：新增 `pnpm e2e:maestro:no-reinstall`，用于 OPPO/一加/ColorOS 这类会反复拦截 Maestro driver 安装页的设备；若仍出现 `DEADLINE_EXCEEDED` 或 `Couldn't close Maestro Android driver due to gRPC timeout`，runbook 要求切换到 Android Emulator/其它品牌设备跑 Maestro，或使用 adb/手工路径提交真机截图与 logcat 证据。
 - Development Build 真机视觉加固：Expo Dev Client 配置已显式关闭默认工具浮窗和启动自动菜单，避免 Android/iOS 真机验收时右上角工具按钮遮挡首页标题、设置入口或 Bottom Sheet；`pnpm test:mobile-config` 已加入该配置门禁。Android Development Build 已重新生成并真机确认生效；iOS 安装新版后仍需复验。
 - iOS Development Build 真机预检：新增 `pnpm ios:preflight`，只读检查 Xcode 命令行工具、已信任 iPhone/iPad、本机 Metro、局域网 Metro 和局域网 API `/health/live`，并在提供 `IOS_METRO_URL` 时输出 Development Client 深链；该工具用于降低 iPhone 真机连不上本地服务的排障成本，不代表 iPhone 真机回归已完成。
-- 真机验收证据门禁：新增 `docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json` 与 `pnpm acceptance:evidence`，要求双平台设备记录、14 条 App E2E 主流程、权限/推送/离线/照片队列/小屏/冷启动专项检查和崩溃日志均有脱敏证据；严格模式还要求 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。模板结构校验与证据门禁自检 `pnpm test:device-evidence` 已纳入 `pnpm verify` 与 CI，真实证据仍需在真机跑完后用 `--require-passed` 校验。E2E 静态门禁与真机证据校验已共用 `scripts/acceptance-definitions.mjs` 中的 App ID、主流程 ID 和标题，避免自动化脚本、证据模板与验收清单漂移。
+- 真机验收证据门禁：新增 `docs/DEVICE_ACCEPTANCE_EVIDENCE.example.json` 与 `pnpm acceptance:evidence`，要求双平台设备记录、14 条 App E2E 主流程、首次使用连续链路、权限/推送/离线/照片队列/小屏/冷启动专项检查和崩溃日志均有脱敏证据；严格模式还要求 `sourceCommit` 等于当前 Git HEAD，防止复用旧代码批次的真机结果。模板结构校验与证据门禁自检 `pnpm test:device-evidence` 已纳入 `pnpm verify` 与 CI，真实证据仍需在真机跑完后用 `--require-passed` 校验。E2E 静态门禁与真机证据校验已共用 `scripts/acceptance-definitions.mjs` 中的 App ID、主流程 ID 和标题，避免自动化脚本、证据模板与验收清单漂移。
 - 真机验收证据草稿生成器：新增 `pnpm acceptance:evidence-draft`，按当前 Git HEAD 自动生成 `docs/device-acceptance/` 下的脱敏草稿，并默认要求工作区干净，避免复用旧模板或 dirty worktree；自检 `pnpm test:device-evidence-draft` 已纳入 `pnpm verify` 与 CI。
 - App E2E 主流程 7 服务端门禁：新增 `scripts/verify-task-concurrency.mjs` 并纳入 `pnpm test:integration`，真实启动 API/Worker/PostgreSQL/Redis 后验证两个家庭成员基于同一任务版本并发完成时只有一个请求成功，失败方收到明确 409，最终任务与任务记录只写入一次，失败方刷新后能看到已完成状态；两台物理真机同时点击完成仍按真机手工回归验收。
 - 设备端敏感数据生命周期已补齐：加密会话快照支持断网重启但校验 Token 世代；记录/任务缓存分别保留 90/7 天，孤儿照片 24 小时回收；退出或会话撤销会清除缓存、待同步操作和待上传照片，Android 系统备份关闭。

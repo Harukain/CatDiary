@@ -18,6 +18,10 @@ export const REQUIRED_MVP_FLOWS = [
 ];
 
 export const REQUIRED_DEVICE_CHECKS = [
+  {
+    id: 'first-use-chain-regression',
+    title: '首次使用链路：登录、创建家庭、创建第一只猫和邀请 Deep Link 连续跑通',
+  },
   { id: 'camera-permission-denied-recovery', title: '相机权限首次拒绝与再次开启路径正确' },
   { id: 'photo-library-permission-denied-recovery', title: '相册权限首次拒绝与再次开启路径正确' },
   { id: 'notification-permission-denied-recovery', title: '通知权限首次拒绝与再次开启路径正确' },
