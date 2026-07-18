@@ -18,7 +18,7 @@ import {
   type TaskSummary,
 } from '../../src/features/auth/auth-api';
 import { useSession } from '../../src/features/auth/session-provider';
-import { Body, Card, ErrorText, Screen, Title } from '../../src/shared/ui/primitives';
+import { Body, Card, ErrorText, Screen, TextButton, Title } from '../../src/shared/ui/primitives';
 import {
   cacheTasks,
   enqueueOfflineOperation,
@@ -55,7 +55,7 @@ type CompletionFeedback = {
 export default function TasksTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session, activeFamily } = useSession();
+  const { restoring, session, activeFamily } = useSession();
   const [scope, setScope] = useState<Scope>('today');
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +67,17 @@ export default function TasksTab() {
   const [completionError, setCompletionError] = useState('');
   const dismissCompletionFeedback = useCallback(() => setCompletionFeedback(undefined), []);
 
+  const contextUnavailable = !restoring && (!session || !activeFamily);
+  const interactionLocked = loading || Boolean(actionId) || Boolean(completingTask);
+
   const load = useCallback(async () => {
-    if (!session || !activeFamily) return;
+    if (restoring) return;
+    if (!session || !activeFamily) {
+      setTasks([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -87,7 +96,7 @@ export default function TasksTab() {
     } finally {
       setLoading(false);
     }
-  }, [activeFamily, scope, session]);
+  }, [activeFamily, restoring, scope, session]);
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -95,12 +104,13 @@ export default function TasksTab() {
   );
 
   function requestComplete(task: TaskSummary) {
+    if (interactionLocked) return;
     setCompletionError('');
     setError('');
     setCompletingTask(task);
   }
   async function complete(task: TaskSummary, input: CompleteTaskInput) {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily || actionId) return;
     setActionId(task.id);
     setError('');
     setCompletionError('');
@@ -138,13 +148,14 @@ export default function TasksTab() {
     }
   }
   function requestSkip(task: TaskSummary) {
+    if (interactionLocked) return;
     Alert.alert('跳过这次任务', '只会跳过本次任务，不会暂停长期计划。', [
       { text: '取消', style: 'cancel' },
       { text: '确认跳过', onPress: () => void skip(task) },
     ]);
   }
   async function skip(task: TaskSummary) {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily || actionId) return;
     setActionId(task.id);
     setError('');
     const operation = authApi.createSkipOperation(activeFamily.id, task);
@@ -163,7 +174,7 @@ export default function TasksTab() {
     }
   }
   async function undo(task: TaskSummary, quickUndo = false) {
-    if (!session || !activeFamily) return;
+    if (!session || !activeFamily || actionId) return;
     setActionId(task.id);
     setError('');
     const operation = authApi.createUndoOperation(activeFamily.id, task);
@@ -191,6 +202,7 @@ export default function TasksTab() {
   }
 
   const canManagePlans = activeFamily?.role === 'OWNER' || activeFamily?.role === 'ADMIN';
+  const canOpenPlanActions = canManagePlans && !interactionLocked && !contextUnavailable;
   return (
     <Screen>
       <ScrollView
@@ -212,6 +224,8 @@ export default function TasksTab() {
               <Pressable
                 testID="tasks.manage-plans.button"
                 accessibilityRole="button"
+                accessibilityState={{ disabled: !canOpenPlanActions }}
+                disabled={!canOpenPlanActions}
                 onPress={() => router.push('/plans')}
                 style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
               >
@@ -220,6 +234,8 @@ export default function TasksTab() {
               <Pressable
                 testID="tasks.create-plan.button"
                 accessibilityRole="button"
+                accessibilityState={{ disabled: !canOpenPlanActions }}
+                disabled={!canOpenPlanActions}
                 onPress={() => router.push('/plans/new')}
                 style={({ pressed }) => [
                   styles.headerButton,
@@ -238,7 +254,8 @@ export default function TasksTab() {
               key={item.value}
               testID={`tasks.scope.${item.value}`}
               accessibilityRole="button"
-              accessibilityState={{ selected: scope === item.value }}
+              accessibilityState={{ selected: scope === item.value, disabled: interactionLocked }}
+              disabled={interactionLocked}
               onPress={() => setScope(item.value)}
               style={[styles.segmentItem, scope === item.value && styles.active]}
             >
@@ -251,7 +268,8 @@ export default function TasksTab() {
         {offlineNotice ? (
           <Pressable
             accessibilityRole="button"
-            disabled={!offlineNotice.includes('冲突')}
+            disabled={!offlineNotice.includes('冲突') || interactionLocked}
+            accessibilityState={{ disabled: !offlineNotice.includes('冲突') || interactionLocked }}
             onPress={() => router.push('/sync-conflicts')}
             style={styles.offlineNotice}
           >
@@ -277,9 +295,23 @@ export default function TasksTab() {
             }
           />
         ) : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
         {loading ? (
-          <ActivityIndicator color={colors.brand} />
+          <View testID="tasks.loading.card" style={styles.stateCard}>
+            <ActivityIndicator color={colors.brand} />
+            <Text style={styles.stateText}>正在加载照顾任务…</Text>
+          </View>
+        ) : contextUnavailable ? (
+          <Card testID="tasks.context-empty.card">
+            <Title>需要先完成家庭设置</Title>
+            <Body>登录并选择家庭后，才能查看照顾任务和生成提醒。</Body>
+            <TextButton label="去我的页面检查家庭" onPress={() => router.push('/(tabs)/me')} />
+          </Card>
+        ) : error ? (
+          <Card testID="tasks.error.card">
+            <Title>任务加载失败</Title>
+            <ErrorText testID="tasks.error.text">{error}</ErrorText>
+            <TextButton testID="tasks.reload.button" label="重新加载" onPress={() => void load()} />
+          </Card>
         ) : tasks.length ? (
           <Card>
             {tasks.map((task) => (
@@ -308,6 +340,8 @@ export default function TasksTab() {
                   testID="tasks.item.detail"
                   accessibilityRole="button"
                   accessibilityLabel={`查看${task.title}详情`}
+                  accessibilityState={{ disabled: Boolean(actionId) }}
+                  disabled={Boolean(actionId)}
                   onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}
                   style={({ pressed }) => [styles.taskBody, pressed && styles.taskBodyPressed]}
                 >
@@ -329,6 +363,8 @@ export default function TasksTab() {
                   <Pressable
                     testID="tasks.item.undo"
                     accessibilityRole="button"
+                    accessibilityState={{ disabled: Boolean(actionId) }}
+                    disabled={Boolean(actionId)}
                     onPress={() => void undo(task)}
                     style={styles.action}
                   >
@@ -339,6 +375,8 @@ export default function TasksTab() {
                     <Pressable
                       testID="tasks.item.skip"
                       accessibilityRole="button"
+                      accessibilityState={{ disabled: Boolean(actionId) }}
+                      disabled={Boolean(actionId)}
                       onPress={() => requestSkip(task)}
                       style={styles.smallAction}
                     >
@@ -347,6 +385,8 @@ export default function TasksTab() {
                     <Pressable
                       testID="tasks.item.complete"
                       accessibilityRole="button"
+                      accessibilityState={{ disabled: Boolean(actionId) }}
+                      disabled={Boolean(actionId)}
                       onPress={() => requestComplete(task)}
                       style={styles.complete}
                     >
@@ -367,6 +407,8 @@ export default function TasksTab() {
               <Pressable
                 testID="tasks.empty.create-plan.button"
                 accessibilityRole="button"
+                accessibilityState={{ disabled: !canOpenPlanActions }}
+                disabled={!canOpenPlanActions}
                 onPress={() => router.push('/plans/new')}
                 style={styles.emptyAction}
               >
@@ -477,6 +519,16 @@ const styles = StyleSheet.create({
   danger: { color: colors.dangerDark },
   taskBody: { flex: 1, minHeight: 44, justifyContent: 'center' },
   taskBodyPressed: { opacity: 0.72 },
+  stateCard: {
+    minHeight: 120,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  stateText: { ...typography.caption, color: colors.textSecondary },
   taskTitle: { ...typography.h3, color: colors.ink },
   strike: { textDecorationLine: 'line-through' },
   meta: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
