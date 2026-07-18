@@ -58,6 +58,7 @@ export default function TasksTab() {
   const { restoring, session, activeFamily } = useSession();
   const [scope, setScope] = useState<Scope>('today');
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [enabledPlanCount, setEnabledPlanCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState('');
   const [error, setError] = useState('');
@@ -74,6 +75,7 @@ export default function TasksTab() {
     if (restoring) return;
     if (!session || !activeFamily) {
       setTasks([]);
+      setEnabledPlanCount(null);
       setLoading(false);
       setError('');
       return;
@@ -85,14 +87,25 @@ export default function TasksTab() {
       if (sync.synced) setOfflineNotice(`已同步 ${sync.synced} 条离线操作`);
       const conflicts = await getOfflineConflicts(activeFamily.id);
       if (conflicts.length) setOfflineNotice(`${conflicts.length} 条离线操作需要处理冲突`);
-      const result = await authApi.listTasks(session.accessToken, activeFamily.id, scope);
+      const [result, nextEnabledPlanCount] = await Promise.all([
+        authApi.listTasks(session.accessToken, activeFamily.id, scope),
+        authApi
+          .listPlans(session.accessToken, activeFamily.id, true)
+          .then((plans) => plans.length)
+          .catch(() => null),
+      ]);
       setTasks(result.items);
+      setEnabledPlanCount(nextEnabledPlanCount);
       await cacheTasks(activeFamily.id, scope, result.items);
     } catch (cause) {
       if (isNetworkFailure(cause)) {
         setTasks(await getCachedTasks(activeFamily.id, scope));
+        setEnabledPlanCount(null);
         setOfflineNotice('当前离线，展示本机最近任务');
-      } else setError(cause instanceof AuthApiError ? cause.message : '任务加载失败');
+      } else {
+        setEnabledPlanCount(null);
+        setError(cause instanceof AuthApiError ? cause.message : '任务加载失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -400,9 +413,9 @@ export default function TasksTab() {
             ))}
           </Card>
         ) : (
-          <Card>
-            <Title>{emptyTitle(scope)}</Title>
-            <Body>{emptyBody(scope)}</Body>
+          <Card testID="tasks.empty.card">
+            <Title>{emptyTitle(scope, enabledPlanCount)}</Title>
+            <Body>{emptyBody(scope, enabledPlanCount, canManagePlans)}</Body>
             {canManagePlans && scope !== 'completed' ? (
               <Pressable
                 testID="tasks.empty.create-plan.button"
@@ -412,7 +425,9 @@ export default function TasksTab() {
                 onPress={() => router.push('/plans/new')}
                 style={styles.emptyAction}
               >
-                <Text style={styles.emptyActionText}>创建照顾计划</Text>
+                <Text style={styles.emptyActionText}>
+                  {enabledPlanCount === 0 ? '创建第一个照顾计划' : '创建照顾计划'}
+                </Text>
               </Pressable>
             ) : null}
           </Card>
@@ -450,7 +465,8 @@ function typeLabel(type: string) {
     )[type] ?? '照顾'
   );
 }
-function emptyTitle(scope: Scope) {
+function emptyTitle(scope: Scope, enabledPlanCount: number | null) {
+  if (scope !== 'completed' && enabledPlanCount === 0) return '还没有照顾计划';
   return scope === 'today'
     ? '今天暂无任务'
     : scope === 'upcoming'
@@ -459,7 +475,11 @@ function emptyTitle(scope: Scope) {
         ? '没有逾期任务'
         : '还没有完成记录';
 }
-function emptyBody(scope: Scope) {
+function emptyBody(scope: Scope, enabledPlanCount: number | null, canManagePlans: boolean) {
+  if (scope !== 'completed' && enabledPlanCount === 0)
+    return canManagePlans
+      ? '先创建疫苗、驱虫、用药或铲屎计划，系统会按规则生成未来 7 天任务。'
+      : '当前家庭还没有启用照顾计划，请让家庭管理员先创建疫苗、驱虫、用药或铲屎提醒。';
   return scope === 'completed'
     ? '完成任务后，对应结果会同时进入记录时间线。'
     : '创建疫苗、驱虫、用药或铲屎计划后，系统会生成未来 7 天任务。';

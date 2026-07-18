@@ -9,6 +9,7 @@ describe('tasks tab state handling', () => {
     );
     expect(tasksTabSource).toContain('if (restoring) return;');
     expect(tasksTabSource).toContain('setTasks([]);');
+    expect(tasksTabSource).toContain('setEnabledPlanCount(null);');
     expect(tasksTabSource).toContain('setLoading(false);');
     expect(tasksTabSource).toContain('testID="tasks.context-empty.card"');
   });
@@ -38,5 +39,20 @@ describe('tasks tab state handling', () => {
     expect(
       tasksTabSource.match(/disabled=\{!canOpenPlanActions\}/g)?.length ?? 0,
     ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('distinguishes empty task lists from families without enabled care plans', () => {
+    expect(tasksTabSource).toContain(
+      'const [enabledPlanCount, setEnabledPlanCount] = useState<number | null>(null);',
+    );
+    expect(tasksTabSource).toContain('.listPlans(session.accessToken, activeFamily.id, true)');
+    expect(tasksTabSource).toContain('.then((plans) => plans.length)');
+    expect(tasksTabSource).toContain('.catch(() => null)');
+    expect(tasksTabSource).toContain('setEnabledPlanCount(nextEnabledPlanCount);');
+    expect(tasksTabSource).toContain('testID="tasks.empty.card"');
+    expect(tasksTabSource).toContain("if (scope !== 'completed' && enabledPlanCount === 0)");
+    expect(tasksTabSource).toContain('还没有照顾计划');
+    expect(tasksTabSource).toContain('创建第一个照顾计划');
+    expect(tasksTabSource).toContain('请让家庭管理员先创建疫苗、驱虫、用药或铲屎提醒');
   });
 });
