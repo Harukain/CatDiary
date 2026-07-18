@@ -45,6 +45,40 @@ pnpm e2e:maestro:no-reinstall
 - 本地 API、Worker、PostgreSQL、Redis 和 Metro 已启动；Android USB 调试可先运行 `pnpm android:preflight -- --fix --launch`，让脚本检查 USB reverse 后直接打开 Development Build 并加载当前 Metro 项目；iPhone 真机可先运行 `pnpm ios:preflight`，确认 Xcode 命令行工具、已信任设备、局域网 API 和 Metro 连通。
 - API 处于开发或测试环境，验证码为 `123456`。
 
+## 本地开发依赖冷启动
+
+如果 Docker Desktop、PostgreSQL、API 或 Metro 尚未启动，先在仓库根目录执行：
+
+```bash
+pnpm dev:deps
+```
+
+该命令会检查 Docker daemon，按端口只启动缺失的 `postgres` / `redis` compose 服务，避免和本机已有 Redis 冲突，并执行 `prisma migrate deploy`。如果提示 Docker daemon 未运行，先打开 Docker Desktop，或执行：
+
+```bash
+open -a Docker
+pnpm dev:deps
+```
+
+依赖就绪后，保持两个长运行终端：
+
+```bash
+# 终端一：API
+pnpm --filter @cat-diary/api dev
+
+# 终端二：Metro，Android USB reverse 推荐使用 --lan 并确保 127.0.0.1 可访问
+EXPO_PUBLIC_API_URL='http://127.0.0.1:3000/api/v1' \
+  pnpm --dir apps/mobile exec expo start --dev-client --lan --port 8081
+```
+
+再连接 Android 真机、开启 USB 调试并允许当前电脑，然后执行：
+
+```bash
+pnpm android:preflight -- --fix --launch
+```
+
+如果 `pnpm android:preflight -- --fix` 只提示“未发现 Android 设备”，但 `curl http://127.0.0.1:3000/api/v1/health/live` 和 `curl http://127.0.0.1:8081/status` 都正常，说明本机服务已就绪，剩余动作是重新插线、解锁手机、打开 USB 调试授权，或检查 `adb devices`。
+
 Android 调试机如果遇到 3000 或 8081 端口被其它项目占用，可以用备用端口启动 API/Metro，并在预检时传入 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`。这两个值必须和 `PORT`、`EXPO_PUBLIC_API_URL` 以及 Expo `--port` 保持一致。
 
 Android 真机通过 USB reverse 加载 Metro 时，Expo 建议使用 `--lan` 或确保 Metro 同时响应 `http://127.0.0.1:<port>/status`。如果只用 `--localhost`，部分 macOS/Node 组合可能只监听 IPv6 `localhost`，导致本机 `curl http://localhost:<port>/status` 正常，但 `curl http://127.0.0.1:<port>/status` 和 Android reverse 失败。此时重启 Metro，例如：

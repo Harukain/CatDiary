@@ -1,6 +1,6 @@
 # 开发状态
 
-更新时间：2026-07-17
+更新时间：2026-07-18
 
 当前阶段：M0～M4 的核心纵向切片已实现，正在进行 MVP 完成度审计、关键交互补齐、发布加固与双平台真机验收。项目尚未达到“完整 MVP 可发布”定义。
 
@@ -67,6 +67,7 @@
 - Android 真机调试启动：`pnpm android:preflight -- --fix --launch` 可在预检通过后自动发送 Expo Development Client 深链，直接请求 Android Development Build 加载当前 Metro 项目，减少手工选择项目导致的长期 reloading。
 - Android 真机调试端口加固：预检脚本支持 `ANDROID_API_PORT` 与 `ANDROID_METRO_PORT`，当本机 3000/8081 被其它项目占用时，可用备用端口配置 ADB reverse 和 Development Client 深链，避免误杀无关进程或继续卡在 reloading。
 - Android Metro host 加固：OPPO/一加真机通过 USB reverse 加载 Development Build 时，已确认 Metro 需响应 `127.0.0.1:<port>/status`；如果 `expo start --localhost` 仅监听 IPv6 `localhost`，会导致真机仍停在 DevLauncher。Runbook 已明确推荐备用端口配合 `expo start --dev-client --lan --port <port>`。
+- 本地开发依赖启动加固：新增 `pnpm dev:deps`，检查 Docker daemon，按端口只启动缺失的 PostgreSQL/Redis compose 服务，执行 Prisma 迁移，并打印 API、Metro 与 Android 预检后续命令；当前本机已确认 Docker Desktop、PostgreSQL 5433、Redis 6379、API 3000 和 Metro 8081 可启动，Android 预检剩余阻塞为当前未发现已授权设备。
 - Android 真机轻量冒烟：新增 `pnpm android:smoke`，在无 Maestro 或正式 E2E 前快速执行预检、发送 Development Client 深链、检查 App 进程存活并拦截 logcat 中的 Android/RN 启动崩溃；脚本自检已纳入 `pnpm verify`，真实设备运行仍作为本地真机验收步骤。
 - Android 真机冒烟证据闭环：`pnpm android:smoke -- --evidence-file <path>` 可输出脱敏 JSON，`pnpm acceptance:android-smoke-evidence` 可把结果合并到真机验收草稿的 Android 设备信息、App 版本、预检与崩溃日志字段；合并脚本自检已纳入 `pnpm verify`，且不会把 14 条 MVP 主流程或权限、照片、推送、飞书、离线专项误标为通过。
 - iOS 真机预检证据闭环：`pnpm ios:preflight -- --screen <size> --evidence-file <path>` 可输出脱敏 JSON，`pnpm acceptance:ios-preflight-evidence` 可把结果合并到真机验收草稿的 iOS 设备信息、App 版本和预检字段；合并脚本自检已纳入 `pnpm verify`，且不会把 iOS 崩溃日志、14 条 MVP 主流程或权限、照片、推送、飞书、离线专项误标为通过。
